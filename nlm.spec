@@ -64,3 +64,12 @@ coll = COLLECT(
     strip=False, upx=False, upx_exclude=[],
     name='NonLinearMapper',
 )
+
+# 案内文はexeと同じ階層（_internalの外）に置きたいが、COLLECT()へのTOC追加は
+# PyInstaller(6.x系)ではonedirでも_internal配下にまとめられてしまうため、
+# ビルド後に直接コピーする（COLLECT完了後のこの位置なら毎回確実に反映される）。
+import shutil
+_readme_src = os.path.join(HERE, 'はじめにお読みください.txt')
+_readme_dst = os.path.join(DISTPATH, 'NonLinearMapper', 'はじめにお読みください.txt')
+if os.path.isfile(_readme_src):
+    shutil.copy2(_readme_src, _readme_dst)
