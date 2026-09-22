@@ -1,0 +1,15 @@
+{
+ "bsnm_lang": "ja",
+ "bsnm_uiscale": "1",
+ "bsnm_vol": "{\"m\":50,\"mu\":50,\"n\":50,\"mt\":50}",
+ "bsnm_pv4": "{\"str\":100,\"rad\":100,\"thr\":100,\"amb\":100,\"ems\":100,\"refl\":100}",
+ "bsnm_laneratio": "3",
+ "bsnm_chroma": "0",
+ "bsnm_libsz": "5",
+ "bsnm_cpt": "hsv",
+ "bsnm_kc": "1",
+ "bsnm_kn": "1",
+ "bsnm_knt": "1",
+ "bsnm_kl": "1",
+ "bsnm_ki": "1"
+}

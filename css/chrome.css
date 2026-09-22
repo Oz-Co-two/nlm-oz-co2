@@ -1,0 +1,206 @@
+/* Non-Linear Mapper — chrome.css */
+
+
+  #cpanel{position:fixed;z-index:120;background:#1a1a1c;border:1px solid #3a3a40;border-radius:11px;
+    padding:9px;width:189px;box-shadow:0 10px 34px rgba(0,0,0,.65);user-select:none;font-size:11px;color:#d8d8dc;
+    display:flex;flex-direction:column;gap:5px;}   /* 幅固定=ホイール列(148+7+16)＋padding＝全要素の右端を揃える（ヘルバ様指定 2026-07-13） */
+  #cpanel .cpMain{width:100%;}
+  #cpanel .cpSide{display:flex;flex-direction:column;gap:5px;width:58px;flex:0 0 auto;}
+  #cpanel .cpHdr{display:flex;align-items:center;justify-content:center;height:18px;opacity:.9;}
+  #cpanel .cpHdr svg{width:18px;height:18px;display:block;}
+  #cpanel .cpSide .cpNoteCols{display:flex;gap:5px;margin:0;}
+  #cpanel .cpSide .cpNoteBar{flex:1;height:22px;border-radius:5px;cursor:pointer;border:1px solid rgba(0,0,0,.45);}
+  #cpanel .cpNoteBar.drop{outline:2px solid #56ffc1;outline-offset:-1px;}
+  /* 現在色チップ（RGB/HSVの上）。パレット保存 or ノーツ色へドラッグ */
+  #cpanel .cpCur{width:100%;height:20px;border-radius:6px;border:1px solid rgba(0,0,0,.5);cursor:grab;margin-top:9px;}
+  #cpanel .cpCur:active{cursor:grabbing;}
+  #cpanel .cpLightHdr{display:flex;align-items:center;gap:6px;color:#9a9aa2;font-size:10px;
+    border-top:1px solid #33333a;padding-top:7px;}
+  #cpanel .cpLightHdr svg{width:16px;height:16px;display:block;flex:0 0 auto;}
+  #cpanel .cpLightHdr span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* 削除方法の案内（title属性はホバーしないと出ず気づけないため常時表示・ヘルバ様報告 2026-07-18）。
+     パネル幅189pxでは見出しと横並びにすると「Chroma パ…」と省略されるので、行を折り返して下段に置く */
+  #cpanel .cpLightHdr{flex-wrap:wrap;}
+  #cpanel .cpLightHdr .cpHint{flex:0 0 100%;margin-left:22px;color:#6f6f78;font-size:9px;white-space:nowrap;}
+  /* 保存パレット=横10列固定グリッド（現在色チップをドラッグで保存・ヘルバ様指定） */
+  /* 6列＝1個あたり約23px。10列だと12.7pxしかなく右クリック(削除)で狙いづらかった（ヘルバ様報告 2026-07-18） */
+  #cpanel .cpSaved{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;min-height:26px;
+    padding:6px;background:#141416;border:1px dashed #3a3a40;border-radius:6px;}
+  #cpanel .cpSaved.drop{border-color:#4772b3;background:#1b2230;}
+  #cpanel .cpSavedSw{width:100%;aspect-ratio:1/1;border-radius:4px;cursor:pointer;border:1px solid rgba(0,0,0,.45);}
+  #cpanel .cpSavedSw:hover{outline:2px solid #fff;outline-offset:-1px;}
+  /* ノーツ色行（左=ノーツアイコン / 色1 / 色2）＝ヘルバ様指定 2026-07-13。上に区切り線 */
+  /* 色ペア行（ノーツ/ライト/ライトブースト）＝アイコン＋2スウォッチ（ヘルバ様指定 2026-07-13） */
+  #cpanel .cpColRow{display:flex;align-items:center;gap:7px;}
+  #cpanel .cpMain + .cpColRow{border-top:1px solid #33333a;padding-top:6px;}
+  #cpanel .cpColRow .cpRowIco{flex:0 0 auto;display:flex;opacity:.9;}
+  #cpanel .cpColRow .cpRowIco svg{width:18px;height:18px;display:block;}
+  #cpanel .cpCols{display:flex;flex:1;gap:6px;}
+  /* 選択中の編集ターゲット（ノーツ色スウォッチ / 現在色チップ）＝緑枠。円で直接編集できる */
+  #cpanel .cpNoteBar.sel, #cpanel .cpCur.sel{outline:2px solid #56ffc1;outline-offset:1px;}
+
+  #cpanel .cpTop{display:flex;gap:7px;align-items:flex-start;}
+
+  #cpanel canvas{border-radius:6px;display:block;}
+
+  #cpanel .cpSeg{display:flex;gap:2px;margin-top:9px;}
+
+  #cpanel .cpSeg div{flex:1;text-align:center;padding:5px 0;background:#4a4a4e;cursor:pointer;}
+
+  #cpanel .cpSeg div:first-child{border-radius:6px 0 0 6px;}
+
+  #cpanel .cpSeg div:last-child{border-radius:0 6px 6px 0;}
+
+  #cpanel .cpSeg div.on{background:#4772b3;color:#fff;}
+
+  #cpanel .cpRows{margin-top:9px;border-radius:6px;overflow:hidden;}
+
+  #cpanel .cpSl{position:relative;height:22px;background:#515156;margin-top:1px;cursor:ew-resize;}
+
+  #cpanel .cpSl .fill{position:absolute;left:0;top:0;bottom:0;background:#4772b3;}
+
+  #cpanel .cpSl .lb{position:absolute;left:9px;top:0;bottom:0;display:flex;align-items:center;pointer-events:none;text-shadow:0 1px 2px #000;}
+
+  #cpanel .cpSl .vl{position:absolute;right:9px;top:0;bottom:0;display:flex;align-items:center;pointer-events:none;
+    font-variant-numeric:tabular-nums;text-shadow:0 1px 2px #000;}
+
+  #cpanel .cpHex{display:flex;gap:7px;align-items:center;margin-top:10px;}
+
+  #cpanel .cpHex input{flex:1;background:#2a2a2e;border:1px solid #3a3a40;border-radius:6px;color:#e8e8ec;
+    padding:5px 8px;font-size:12px;outline:none;min-width:0;}
+
+  #cpanel .cpHex button{background:#4a4a4e;border:none;border-radius:6px;color:#ddd;width:32px;height:28px;cursor:pointer;}
+
+  /* 現在のノーツ2色（赤/青）横長バー（Hexの下・履歴の上） */
+  #cpanel .cpNoteCols{display:flex;gap:6px;margin-top:9px;}
+  #cpanel .cpNoteBar{flex:1;height:20px;border-radius:5px;cursor:pointer;border:1px solid rgba(0,0,0,.45);}
+  #cpanel .cpNoteBar:hover{outline:2px solid #fff;outline-offset:-1px;}
+
+  #cpanel .cpHist{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin-top:10px;padding-top:10px;border-top:1px solid #33333a;}
+
+   /* 履歴カラーパレット（最近使った色） */
+  #cpanel .cpHsw{width:100%;aspect-ratio:1/1;border-radius:4px;cursor:pointer;border:1px solid rgba(0,0,0,.45);}
+
+  #cpanel .cpHsw:hover{outline:2px solid #fff;outline-offset:-1px;}
+
+  #ctxmenu{position:fixed;display:none;z-index:40;background:#202020;border:1px solid var(--outline);
+    border-radius:6px;padding:4px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.6);}
+  /* カラーピッカー(#cpanel z-index:120)の上から開くメニューは、その手前に出す＝背面に潜らない（ヘルバ様報告 2026-07-18） */
+  #ctxmenu.overPanel{z-index:130;}
+
+  #ctxmenu button{display:block;width:100%;text-align:left;border:none;background:none;padding:7px 10px;border-radius:4px;white-space:nowrap;}
+
+  #ctxmenu button:hover{background:var(--accent);color:#fff;}
+
+  #ctxmenu button.hasSub::after{content:'▸';float:right;font-size:11px;color:#8a8a8a;margin:1px 0 0 16px;}
+
+   /* Recentsフライアウトの▸と同サイズ */
+  #ctxmenu button.hasSub:hover::after,#ctxmenu button.subOpen::after{color:#fff;}
+
+  #ctxmenu button.subOpen{background:var(--accent);color:#fff;}
+
+   /* サブメニュー展開中は親項目をハイライト維持 */
+  #ctxmenu .ctxsub{position:absolute;left:calc(100% - 3px);background:#202020;border:1px solid var(--outline);
+    border-radius:6px;padding:4px;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,.6);}
+
+  #ctxmenu .ctxdiv{height:1px;background:#3a3a3a;margin:4px 6px;}
+
+  /* メニューバー */
+  #menubar{height:30px;display:flex;align-items:center;gap:9px;padding:0 10px;background:#191919;}
+
+  #menubar img{width:18px;height:18px;}
+
+  #mbTitle{font-size:12px;font-weight:700;color:#eee;letter-spacing:.5px;}
+
+  .mbtn{background:none;border:none;padding:4px 10px;border-radius:4px;font-size:12px;color:#c5c5c5;}
+
+  .mbtn:hover{background:#2d2d2d;color:#fff;}
+
+  #mFileWrap{position:relative;}
+
+  #mFileMenu{position:absolute;top:26px;left:0;display:none;background:#202020;border:1px solid #2a2a2a;
+    border-radius:8px;padding:4px;min-width:238px;z-index:150;box-shadow:0 8px 24px rgba(0,0,0,.6);}
+
+  #mFileMenu button{display:flex;justify-content:space-between;align-items:center;gap:18px;width:100%;
+    text-align:left;background:none;border:none;padding:7px 10px;border-radius:4px;font-size:12.5px;color:#ddd;}
+
+  #mFileMenu button:hover{background:var(--accent);color:#fff;}
+
+  #mFileMenu hr{border:none;border-top:1px solid #2a2a2a;margin:4px 2px;}
+
+  .tbg{position:relative;display:flex;align-items:center;gap:2px;background:rgba(25,25,25,.92);border:1px solid #2a2a2a;border-radius:8px;padding:3px;}
+
+  /* 配置/カメラ固定モード表示（Qで切替・ツールバー左端）: 編集=緑 / 配置=紫（ヘルバ様指定） */
+  #camModeInd{padding:0 24px;height:34px;font-size:11.5px;font-weight:700;letter-spacing:.3px;white-space:nowrap;user-select:none;justify-content:center;background:var(--green);border-color:var(--green);color:#0e1a16;}
+  #camModeInd.placeon{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+  .tbi{width:28px;height:28px;padding:3px;background:none;border:none;border-radius:5px;display:flex;align-items:center;justify-content:center;color:#c5c5c5;}
+
+  .tbi:hover{background:#3d3d3d;color:#fff;}
+  /* ノーツ色=赤/青を左右に並べた色スウォッチ。選択中は白枠（ヘルバ様指定 2026-07-13） */
+  .tbi.tbcolsw{width:26px;height:26px;padding:0;border:2px solid transparent;border-radius:5px;box-shadow:0 1px 1px #0007;}
+  .tbi.tbcolsw:hover{background:none;filter:brightness(1.15);}
+  .tbi.tbcolsw.on{border-color:#fff;}
+
+ .tbi.on{background:var(--accent);color:#fff;}
+
+  /* 配置モードボタン(セレクト/ノーツ/ボム/壁)のアクティブ表示: 紫点灯＋アイコンの紫部分を白へ（ヘルバ様指定）。
+     .on とは別クラス＝togglePanel が #maintb .tbi.on を一括解除してもモード表示は消えない */
+  .tbi.modeon{background:var(--accent);color:#fff;}
+  #tbgNote .tbi.modeon svg [fill="#8160e3"]{fill:#fff;}
+  #tbgNote .tbi.modeon svg [stroke="#8160e3"]{stroke:#fff;}
+  /* ノーツ=アイコン＋▾の一体型プルダウンボタン（クリックで向き選択が開く） */
+  .tbi.tbnotedrop{width:auto;padding:3px 5px 3px 4px;gap:1px;}
+  .tbnotedrop .tbdrop{font-size:8px;color:#9a9a9a;line-height:1;align-self:center;}
+  .tbnotedrop:hover .tbdrop{color:#fff;}
+  .tbnotedrop.modeon .tbdrop{color:#fff;}
+
+  /* LIGHTING横並びツールバー（NOTES側と同じ様式・ヘルバ様指定） */
+  .tbgLightGrp .tbi.modeon{background:var(--accent);color:#fff;}
+  /* 選択中は紫背景に埋もれるのでアイコンを白へ（ライトアイコンは緑/灰ストローク中心＝色指定を問わず白化。ヘルバ様指定 2026-07-13） */
+  .tbgLightGrp .tbi.modeon svg *{stroke:#fff!important;}
+  .tbgLightGrp .tbi.modeon svg [fill]:not([fill="none"]){fill:#fff!important;}
+  .lcolSw{width:22px;height:22px;border-radius:4px;cursor:pointer;border:2px solid transparent;flex:0 0 auto;}
+  .lcolSw.on{border-color:#fff;}
+  .tbi.lcChromaBtn{width:auto;flex:0 0 auto;white-space:nowrap;padding:0 8px;font-size:11px;font-weight:600;}
+  .lbMini{margin:0;font-size:10px;color:#9a9a9a;white-space:nowrap;flex:0 0 auto;}
+  .tbi.lpDrop{width:auto;padding:3px 4px 3px 4px;gap:1px;}
+
+  .tbi svg{width:20px;height:20px;display:block;}
+
+  .tbpanel{position:absolute;top:36px;left:0;display:none;background:#202020;border:1px solid #2a2a2a;border-radius:8px;padding:6px;min-width:120px;box-shadow:0 8px 24px rgba(0,0,0,.6);z-index:30;}
+
+  .tbpanel .row{margin:4px 4px 8px;}
+
+  /* ステータスチップ */
+  #statChip{display:none;}
+
+  #volTip{position:fixed;transform:translateY(-50%);display:none;z-index:120;pointer-events:none;
+    background:rgba(25,25,25,.95);border:1px solid #3a3a3a;border-radius:6px;padding:2px 7px;
+    font-size:11px;font-weight:700;color:#eee;white-space:nowrap;font-variant-numeric:tabular-nums;}
+
+  /* 設定モーダル */
+  #settingsBg{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:100;}
+
+  #settingsBox{width:880px;max-width:94vw;max-height:82vh;overflow-y:auto;background:#1d1d1d;border:1px solid #2a2a2a;border-radius:10px;padding:20px 24px 16px;}
+
+  .setTabs{display:flex;gap:4px;margin:4px 0 18px;border-bottom:1px solid #ffffff14;flex-wrap:wrap;}
+
+  .setTab{background:none;border:none;border-bottom:2px solid transparent;color:#9a9aa6;padding:8px 15px;cursor:pointer;font-size:12.5px;border-radius:6px 6px 0 0;margin-bottom:-1px;white-space:nowrap;}
+
+  .setTab:hover{color:#d8d8de;background:#ffffff08;}
+
+  .setTab.on{color:#fff;border-bottom-color:var(--accent);}
+
+  #settingsBox .setPanel{display:none;}
+
+  #settingsBox .setPanel.on{display:block;height:330px;overflow-y:auto;padding:4px 18px 10px 2px;line-height:1.55;}
+  /* 環境設定: 全体的にゆとりを持たせる（詰め詰め解消・ヘルバ様指定 2026-07-15） */
+  #settingsBox .setPanel .slRow{margin-top:16px;}
+  #settingsBox .setPanel .row{margin-top:16px !important;}
+  #settingsBox .setPanel label{margin-top:8px !important;}
+  #settingsBox .setPanel .t{line-height:1.55;}
+  #settingsBox .setPanel > .t:first-child{margin-bottom:12px !important;}
+
+  #settingsBox h2{font-size:14px;margin:0 0 16px;}
+

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Non-Linear Mapper</title>
+<link rel="icon" href="icons/app_icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/media.css">
+<link rel="stylesheet" href="css/nle.css">
+<link rel="stylesheet" href="css/info.css">
+<link rel="stylesheet" href="css/editor3d.css">
+<link rel="stylesheet" href="css/chrome.css">
+</head>
+<body>
+<div id="bootCover"></div>
+<div id="menubar">
+  <img src="icons/app_icon.svg" alt="">
+  <span id="mbTitle">Non-Linear Mapper</span>
+  <div id="mFileWrap">
+    <button class="mbtn" id="mFileBtn" data-i18n="menu.file">ファイル</button>
+    <div id="mFileMenu">
+      <button data-act="new"><span data-i18n="menu.new">新規</span><span class="mkey"></span></button>
+      <button data-act="open"><span data-i18n="menu.open">開く…</span><span class="mkey">Ctrl O</span></button>
+      <hr>
+      <button data-act="save"><span data-i18n="menu.save">保存</span><span class="mkey">Ctrl S</span></button>
+      <button data-act="saveas"><span data-i18n="menu.saveAs">名前を付けて保存…</span><span class="mkey">Shift Ctrl S</span></button>
+      <button data-act="savecopy"><span data-i18n="menu.saveCopy">コピーを保存…</span><span class="mkey"></span></button>
+      <hr>
+      <button data-act="loadsong"><span data-i18n="menu.loadSong">音楽ファイルを読み込む…</span><span class="mkey"></span></button>
+      <button data-act="addfolder"><span data-i18n="menu.addFolder">MEDIAにフォルダを追加…</span><span class="mkey"></span></button>
+    </div>
+  </div>
+  <button class="mbtn" id="mbSettings" data-i18n="menu.settings">環境設定</button>
+  <span style="flex:1"></span>
+</div>
+<div id="wrap">
+
+<div id="right">
+    <div id="toprow">
+      <div id="pvpane">
+        <div class="modeLabel" id="pvModeLabel">Preview Mode</div>
+        <div class="pvbody on" id="bodyPv">
+          <div id="pv4host" style="position:absolute;inset:0;display:none;z-index:2;"></div>
+          <select id="pvEnvSel" data-i18n-t="ui.stageEnv" title="ステージ（環境）" style="position:absolute;top:8px;left:12px;z-index:9;display:none;
+            background:#12141c;color:#c8d2e0;border:1px solid #2a2f3a;border-radius:6px;font:600 11px system-ui;padding:3px 6px;"></select>
+          <div id="pvVis">
+            <button id="pvVisNotes" class="tbi on" data-i18n-t="tb.visNotes" title="ノーツ表示"></button>
+            <button id="pvVisLights" class="tbi on" data-i18n-t="tb.visLights" title="ライト表示"></button>
+            <button id="pvVisStruct" class="tbi on" data-i18n-t="tb.visStruct" title="構造物表示"></button>
+            <button id="pvVisAmbient" class="tbi" data-i18n-t="tb.visAmbient" title="環境ライト（構造物を明るく＝動きを確認しやすく）"></button>
+          </div>
+        </div>
+        <div class="pvbody" id="tabFolder">
+          <div id="libTop">
+            <button id="loadBtn" style="display:none" data-i18n="ui.loadSongFolder">曲フォルダ読込</button>
+            <button id="libAddBtn"><svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:-3px;margin-right:6px"><path d="M2.5 6.6 a1.8 1.8 0 0 1 1.8-1.8 h4.3 a1 1 0 0 1 .8.4 l1 1.35 a1 1 0 0 0 .8.4 h8.5 a1.8 1.8 0 0 1 1.8 1.8 v8.2 a1.8 1.8 0 0 1 -1.8 1.8 H4.3 a1.8 1.8 0 0 1 -1.8-1.8 z" fill="#e3b34e"/></svg><span data-i18n="ui.addFolder">フォルダを追加</span></button>
+            <input id="folder" type="file" webkitdirectory directory multiple style="display:none">
+            <span id="libTitle" style="display:none"></span>
+            <input id="libSize" type="range" min="4" max="8" step="1" value="5" data-i18n-t="ui.thumbSize" title="サムネイルの大きさ"
+              style="width:96px;accent-color:#56ffc1;margin-left:auto;flex:0 0 auto;">
+          </div>
+          <div id="libBody">
+            <div id="libSide">
+              <div id="libList"></div>
+            </div>
+            <div id="libMain"><div id="libGrid"></div></div>
+          </div>
+          <div class="row" style="display:none"><button id="saveBtn"></button><button id="exportBtn"></button>
+            <button id="saveAsBtn"></button><button id="openProjBtn"></button></div>
+          <div class="row" style="display:none"><div class="t" data-i18n="ui.sectionList">セクション一覧</div>
+            <div class="metaList" id="metaList"></div></div>
+        </div>
+      </div>
+      <div id="splitV" class="splitv"></div>
+<div id="nodecol">
+        <div id="nodeColBar"><div id="nodeColModeLabel" class="ncLabel" data-i18n-t="ui.tabNleInfo" title="Tabで NLE ⇄ INFO 切替"></div></div>
+        <div id="diffTools">
+          <div id="setQuick" data-i18n-t="ui.envStage" title="環境（ステージ）">
+            <button id="sqEnvBtn" data-i18n-t="ui.envStage" title="環境（ステージ）"><span id="sqEnvName">Default</span><span class="sqCaret">▼</span></button>
+            <div id="sqEnvPanel" class="tbpanel"></div>
+          </div>
+          <div id="noteCols" data-i18n-t="ui.noteColors" title="ノーツ色（左＝赤／右＝青）">
+            <button id="sqRed" class="noteColSw" data-i18n-t="ui.leftRedNote" title="左（赤）ノーツの色"></button>
+            <button id="sqBlue" class="noteColSw" data-i18n-t="ui.rightBlueNote" title="右（青）ノーツの色"></button>
+          </div>
+          <div id="bpmField" class="bfField" data-i18n-t="ui.bpmField" title="BPM（‹›=±1・Shift+‹›=±0.1・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl">BPM</span><span class="bfV">120.00</span><span class="bfA" data-k="up">›</span></div>
+          <button id="vmMetroBtn" class="dtBtn" data-i18n-t="ui.metroToggle" title="メトロノーム ON/OFF（再生中に拍ごとにクリック音）"></button>
+          <button id="vmBpmBtn" class="dtBtn" data-i18n-t="ui.bpmDetect" title="BPM測定（曲からテンポを推定）"></button>
+          <span class="mbSep"></span>
+          <div id="pvStart" class="bfField" data-i18n-t="ui.pvStart" title="試聴プレビューの開始秒（‹›=±1・Shift+‹›=±0.1・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.pvStartL">プレビュー開始</span><span class="bfV">12.00 秒</span><span class="bfA" data-k="up">›</span></div>
+          <div id="pvDur" class="bfField" data-i18n-t="ui.pvDur" title="試聴プレビューの長さ秒（‹›=±1・Shift+‹›=±0.1・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.pvDurL">プレビュー長</span><span class="bfV">10 秒</span><span class="bfA" data-k="up">›</span></div>
+        </div>
+        <div id="musicBar">
+          <div id="diffBar" data-i18n-t="ui.diffBar" title="難易度（クリック=切替・選択中をもう一度クリック=メニュー。1〜5キーでも切替）"></div>
+          <div id="njsField" class="bfField" data-i18n-t="ui.njs" title="ノーツ飛来速度 NJS（難易度別・‹›=±1・Shift+‹›=±0.1・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.njsL">飛来速度</span><span class="bfV">16</span><span class="bfA" data-k="up">›</span></div>
+          <div id="offField" class="bfField" data-i18n-t="ui.offset" title="飛来オフセット（難易度別・‹›=±0.01・Shift+‹›=±0.001・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.offsetL">オフセット</span><span class="bfV">0.000</span><span class="bfA" data-k="up">›</span></div>
+          <div id="leadInField" class="bfField" data-i18n-t="ui.leadIn" title="曲の先頭に無音を追加（ms・書き出し時にsong.eggへ実際に反映されます）。‹›=±10ms・Shift+‹›=±1ms・値クリック=手打ち"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.leadInL">無音追加</span><span class="bfV">0 ms</span><span class="bfA" data-k="up">›</span></div>
+          <button id="tempoDetectAllBtn" class="bfField" style="cursor:pointer" title="拍番号の下のテンポパート帯（紫の◆）にある全パートのBPMを、区間ごとの音声解析で一括推定します。境界の追加/削除・BPM手入力は帯を右クリック/ダブルクリック">🎯 <span data-i18n="ui.tempoDetectAll">全パート自動判定</span></button>
+        </div>
+        <div id="inspcol">
+        <div id="infoWorld"><div id="infoGrid"></div><svg id="infoEdgeSvg" width="4000" height="3000"></svg><svg id="infoPortSvg" width="4000" height="3000"></svg>
+        </div>
+        <div id="chartInfo"></div>
+        <button class="iBtn" id="iExport"><span data-i18n="ui.exportCustomSong">▶ カスタム曲書き出し</span></button>
+      </div>
+        <div id="nodepane">
+        <div class="laneSb" id="sbN" data-i18n-t="ui.notesLaneScroll" title="Notesレーンのスクロール"><div class="sbA sbUp">▲</div><div class="sbTr"><div class="sbTh"></div></div><div class="sbA sbDn">▼</div></div>
+        <div class="laneSb" id="sbL" data-i18n-t="ui.lightLaneScroll" title="Lightレーンのスクロール"><div class="sbA sbUp">▲</div><div class="sbTr"><div class="sbTh"></div></div><div class="sbA sbDn">▼</div></div>
+        <canvas id="ndcv"></canvas>
+        </div>
+        <div id="proll"><canvas id="prcv"></canvas></div>
+        <div id="overview"><canvas id="ovcv"></canvas></div>
+        <div id="specPane"><canvas id="speccv"></canvas></div>
+        <div id="nodeKeys"><!-- NLE用ショートカット表示（新体系・右端） -->
+          <div class="mkrow"><span class="mkd" data-i18n="ui.cut">カット</span><span class="mk">C</span></div>
+          <div class="mkrow"><span class="mkd" data-i18n="ui.razor">分割モード（クリックで分割）</span><span class="mk">R</span></div>
+          <div class="mkrow"><span class="mkd" data-i18n="ui.merge">マージ</span><span class="mk">Ctrl+G</span></div>
+          <div class="mkrow"><span class="mkd" data-i18n="ui.laneLSM">ロック/ソロ/ミュート</span><span class="mk">L / S / M</span></div>
+        </div>
+        <div id="infoPanel" style="display:none"></div>
+      </div>
+      <div id="vmcol">
+        <div id="vmTop">
+          <div id="vmFader"><div id="vmDb">-6.0</div><input id="vol" type="range" min="0" max="100" value="50"><div id="volTip"></div></div>
+          <canvas id="vmcv"></canvas>
+        </div>
+      </div>
+    </div>
+    <div id="splitH" class="splith"></div>
+<div id="main"><canvas id="cv"></canvas>
+      <div class="modeLabel" id="mainModeLabel">Note Mode</div>
+      <div id="modeKeys"></div>
+      <div id="commonKeys"></div>
+      <!-- 再生系＝画面中央下（ヘルバ様指定）。編集系ツールは上の#maintbへ -->
+      <div id="transportBar">
+        <div class="tbg" id="tbTransport"></div>
+        <div class="tbg" id="tbgTime" style="padding:3px 10px"><span id="time" style="display:inline-block;min-width:290px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap;">0:00 / 0:00 ・ beat 0 ・ ♪ 0</span></div>
+      </div>
+      <div id="maintb">
+        <div id="tbgDiff" style="display:none"><select id="diff"></select></div><!-- 内部状態のみ（表示は#diffBarの5ボタン） -->
+        <div class="tbg" id="camModeInd" title="Q=配置/カメラ固定モード切替"><span id="camModeLbl">配置モード</span></div>
+        <div class="tbg"><span id="tbSnapIcon" class="tbi" style="pointer-events:none"></span><button id="tbSnapBtn" class="tbi snapNum" data-i18n-t="tb.snap" title="スナップ"><span id="tbSnapLabel">1/2</span><span class="snapCaret">▼</span></button>
+          <div class="tbpanel" id="tbSnapPanel"><div id="snaps"></div></div></div>
+        <div class="tbg tbgNoteGrp" id="tbgNote">
+          <!-- セレクトツールは廃止（ヘルバ様指定）: 配置済みノーツをクリック=選択・空きをクリック=配置・Shiftドラッグ=範囲選択 -->
+          <div id="tbNoteWrap" style="position:relative;display:flex;align-items:center;">
+            <button id="tbModeNote" class="tbi tbmode tbnotedrop" data-i18n-t="tb.mNote" title="ノーツ（クリックで向き選択）"></button>
+            <div class="tbpanel" id="tbDirPanel"></div>
+          </div>
+          <button id="tbModeBomb" class="tbi tbmode" data-i18n-t="tb.mBomb" title="ボム"></button>
+          <button id="tbModeWall" class="tbi tbmode" data-i18n-t="tb.mWall" title="壁"></button>
+        </div>
+        <div class="tbg tbgNoteGrp" id="tbgColor">
+          <button id="tbColSw" class="colSw" title="現在の配置色（クリックでカラーパレット）"></button>
+        </div>
+        <div class="tbg tbgNoteGrp" id="tbgArcChain">
+          <button id="tbArcBtn" class="tbi" data-i18n-t="tb.arc" title="アーク（A）"></button>
+          <button id="tbChainBtn" class="tbi" data-i18n-t="tb.chain" title="チェーン（C）"></button>
+        </div>
+        <!-- LIGHTING: NOTES側と同じ横並びボックス（ヘルバ様指定・旧・縦ドロップダウン廃止） -->
+        <div class="tbg tbgLightGrp" id="tbgLBehav" style="display:none">
+          <!-- セレクトツールは廃止（ヘルバ様指定）: 配置済みライトをクリック=選択・空きをクリック=配置・Shiftドラッグ=範囲選択 -->
+          <!-- ON/OFFのドロップダウン一体化を廃止＝オフ/ライトを独立ボタンに分割（ヘルバ様指定 2026-07-18）。順=オフ・ライト・フラッシュ・フェード・トランジション -->
+          <button class="tbi lbBehavItem" data-b="0" title="オフ"><span class="lbIco"></span></button>
+          <button class="tbi lbBehavItem" data-b="1" title="ライト"><span class="lbIco"></span></button>
+          <button class="tbi lbBehavItem" data-b="2" title="フラッシュ"><span class="lbIco"></span></button>
+          <button class="tbi lbBehavItem" data-b="3" title="フェード"><span class="lbIco"></span></button>
+          <button class="tbi lbBehavItem" data-b="4" title="トランジション"><span class="lbIco"></span></button>
+        </div>
+        <div class="tbg tbgLightGrp" id="tbgLColor" style="display:none">
+          <button id="lcChromaSw" class="colSw" data-i18n-t="ui.chromaSwTip" title="現在のクロマ色（クリックでピッカー）"></button>
+          <span id="lcColsHost" style="display:inline-flex;align-items:center;gap:4px;"></span>
+        </div>
+      </div>
+      <div id="statChip">
+    <div class="legend" id="stat" style="margin-top:8px;color:var(--accent)">フォルダ未読込</div>
+      </div>
+      <div id="selrect"></div>
+      <div id="chainCpSlide" style="position:absolute;display:none;z-index:9;flex-direction:column;gap:4px;
+        background:rgba(20,20,26,.88);border:1px solid #3a3a46;border-radius:8px;padding:5px 10px;font:11px sans-serif;color:#cfd6de;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span data-i18n="ui.chainScL" style="min-width:26px;">分割</span>
+          <input class="scR" type="range" min="3" max="12" step="1" style="width:120px;accent-color:#56ffc1;">
+          <span class="scV" style="min-width:30px;text-align:right;color:#8fffd8">5</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span data-i18n="ui.chainSquishL" style="min-width:26px;">詰め</span>
+          <input class="sqR" type="range" min="0.1" max="2" step="0.01" style="width:120px;accent-color:#ffb84d;">
+          <span class="sqV" style="min-width:30px;text-align:right;color:#ffd9a0">1.00</span>
+        </div>
+
+      </div>
+      <div id="arcEditSlide" style="position:absolute;display:none;z-index:9;flex-direction:column;gap:4px;
+        background:rgba(20,20,26,.88);border:1px solid #3a3a46;border-radius:8px;padding:5px 10px;font:11px sans-serif;color:#cfd6de;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span data-i18n="ui.arcMuL" style="min-width:32px;">mu</span>
+          <input class="muR" type="range" min="0.1" max="3" step="0.01" style="width:120px;accent-color:#56ffc1;">
+          <span class="muV" style="min-width:30px;text-align:right;color:#8fffd8">1.00</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span data-i18n="ui.arcTmuL" style="min-width:32px;">tmu</span>
+          <input class="tmuR" type="range" min="0.1" max="3" step="0.01" style="width:120px;accent-color:#ffb84d;">
+          <span class="tmuV" style="min-width:30px;text-align:right;color:#ffd9a0">1.00</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span data-i18n="ui.arcWrapL" style="min-width:32px;">巻き</span>
+          <button class="mBtn" type="button" style="flex:1;background:#2a2f3a;border:1px solid #3a3a46;border-radius:5px;color:#cfd6de;padding:3px 6px;cursor:pointer;font:11px sans-serif;">自動</button>
+        </div>
+      </div>
+      <div id="pie"><div id="piecenter"></div></div>
+      <div id="trans" style="display:none"><button id="play">▶</button></div>
+      <div id="dupChip"></div>
+      <div id="songInfo" style="position:absolute;right:14px;bottom:14px;pointer-events:none;display:none;
+        align-items:center;gap:12px;">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <div id="siTitle" style="font-size:37px;font-weight:800;color:#e8ecf2;letter-spacing:.5px;
+            text-shadow:0 2px 8px rgba(0,0,0,.85);"></div>
+          <div id="siArtist" style="font-size:22px;font-weight:800;color:#e8ecf2;letter-spacing:2px;
+            text-shadow:0 2px 8px rgba(0,0,0,.85);"></div>
+        </div>
+        <img id="siCover" style="width:96px;height:96px;object-fit:cover;border-radius:6px;display:none;
+          box-shadow:0 3px 12px rgba(0,0,0,.55)">
+      </div>
+      <div id="perf" style="position:absolute;right:10px;bottom:10px;font-size:11px;color:#9a9a9a;
+        background:rgba(25,25,25,.88);border:1px solid #2a2a2a;border-radius:6px;padding:4px 8px;
+        font-variant-numeric:tabular-nums"></div>
+    </div>
+  </div>
+</div>
+<div id="ctxmenu"></div>
+<div id="errToast" style="position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:none;z-index:200;
+  background:#3a1216;border:1px solid #ff4d5e;border-radius:8px;padding:9px 14px;color:#ffb3bb;font-size:13px;max-width:70%"></div>
+<div id="uiStash" style="display:none">
+    <div class="row"><div class="t" data-i18n="ui.brush">ブラシ（N/B/W）</div><div class="types">
+      <button id="tNote" class="on" data-i18n="ui.note">ノーツ</button><button id="tBomb" data-i18n="ui.bomb">ボム</button><button id="tWall" data-i18n="ui.wall">壁</button></div></div>
+    <div class="row"><div class="t" data-i18n="tb.color">色（F=切替）</div><div class="colbtns"><div id="cRed" class="on" style="background:var(--red)" data-i18n="ui.colRed">赤</div><div id="cBlue" style="background:var(--blue)" data-i18n="ui.colBlue">青</div></div></div>
+    <div class="row"><div class="t" data-i18n="tb.dir">切る向き</div><div class="palette" id="pal"></div></div>
+</div>
+<div id="neBg" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:120"
+  onpointerdown="if(event.target.id==='neBg')this.style.display='none'">
+  <div style="width:400px;background:#1d1d1d;border:1px solid #2a2a2a;border-radius:10px;padding:16px 18px">
+    <h2 id="neTitle" style="font-size:14px;margin:0 0 12px">NODE</h2>
+    <div id="neFields"></div>
+    <div style="text-align:right;margin-top:10px"><button onclick="document.getElementById('neBg').style.display='none'" data-i18n="ui.close">閉じる</button></div>
+  </div>
+</div>
+<div id="settingsBg"><div id="settingsBox">
+  <h2 data-i18n="menu.settings">環境設定</h2>
+  <div class="setTabs">
+    <button class="setTab on" data-tab="app" data-i18n="set.tabApp">アプリケーション設定</button>
+    <button class="setTab" data-tab="vol" data-i18n="set.tabVol">音量設定</button>
+    <button class="setTab" data-tab="preview" data-i18n="set.tabPreview">Preview設定</button>
+    <button class="setTab" data-tab="cam" data-i18n="set.tabCam">カメラ設定</button>
+    <button class="setTab" data-tab="keys" data-i18n="set.tabKeys">ショートカット編集</button>
+  </div>
+  <div class="t" style="color:#c9a24a;margin:2px 0 14px;font-size:12.5px" data-i18n="set.applyOnRestart">※ スライダーの変更は再起動（リロード）後に反映されます</div>
+  <div class="setPanel on" data-panel="app">
+    <div class="slRow"><div class="t" data-i18n="set.lang">言語 / Language</div>
+      <select id="langSel"><option value="ja">日本語</option><option value="en">English</option></select></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.fontsize">文字サイズ</span> <span id="uiVal">100</span>%</div>
+      <input id="uiSpd" type="range" min="80" max="120" value="100"></div>
+    <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.showkeys">ショートカット表示</div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:5px"><input id="keysCommon" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.k.common">標準操作</span></label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:3px"><input id="keysNotes" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.k.notes">NOTES</span></label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:3px"><input id="keysLight" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.k.light">LIGHTING</span></label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:3px"><input id="keysNode" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.k.node">NLE</span></label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:3px"><input id="keysInfo" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.k.info">INFO</span></label></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.laneRatio">レーン構成（ノーツ : ライト＝計6）</span> <span id="laneRatioVal">4 : 2</span></div>
+      <input id="laneRatio" type="range" min="1" max="5" value="4"></div>
+    <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.chromaMode">ライト配色モード</div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="chromaMode" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.chromaOn">Chroma（各ライト自由色・要Mod）</span><span class="t" style="color:#8a8a92;font-size:11px" data-i18n="set.chromaHint">OFF＝バニラ配色（Mod無しでも全員に見える）</span></label></div>
+  </div>
+  <div class="setPanel" data-panel="vol">
+    <div class="slRow"><div class="t"><span data-i18n="set.volMaster">マスター音量</span> <span id="volMVal">50</span>%</div>
+      <input id="volM" type="range" min="0" max="100" value="50"></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.volMusic">ミュージック音量</span> <span id="volMuVal">50</span>%</div>
+      <input id="volMu" type="range" min="0" max="100" value="50"></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.volNotes">ノーツ音音量</span> <span id="volNVal">50</span>%</div>
+      <input id="volN" type="range" min="0" max="100" value="50"></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.volMetro">メトロノーム音量</span> <span id="volMtVal">50</span>%</div>
+      <input id="volMt" type="range" min="0" max="100" value="50"></div>
+  </div>
+  <div class="setPanel" data-panel="preview">
+    <div class="t" style="color:#8a8a92;font-size:11px;margin-bottom:6px" data-i18n="set.pvHint">previewの見た目を微調整（100%＝既定値）。Previewを開くと反映されます</div>
+    <div class="slRow"><div class="t"><span data-i18n="set.pvBloomStr">Bloom 強度</span> <span id="pvBloomStrVal">100</span>%</div>
+      <input id="pvBloomStr" type="range" min="0" max="200" value="100"></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.pvBloomRad">Bloom 半径</span> <span id="pvBloomRadVal">100</span>%</div>
+      <input id="pvBloomRad" type="range" min="0" max="200" value="100"></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.pvBloomThr">Bloom 閾値</span> <span id="pvBloomThrVal">100</span>%</div>
+      <input id="pvBloomThr" type="range" min="0" max="200" value="100"></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.pvAmb">環境光の明るさ</span> <span id="pvAmbVal">100</span>%</div>
+      <input id="pvAmb" type="range" min="0" max="200" value="100"></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.pvEms">発光の強さ</span> <span id="pvEmsVal">100</span>%</div>
+      <input id="pvEms" type="range" min="0" max="200" value="100"></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.pvRefl">反射の強さ</span> <span id="pvReflVal">100</span>%</div>
+      <input id="pvRefl" type="range" min="0" max="200" value="100"></div>
+  </div>
+  <div class="setPanel" data-panel="cam">
+    <div class="t" data-i18n="set.cam" style="margin-bottom:2px">カメラ速度（現在の速度=100%）</div>
+    <div class="slRow"><div class="t"><span data-i18n="set.rot">回転</span> <span id="rotVal">100</span>%</div>
+      <input id="rotSpd" type="range" min="50" max="150" value="100"></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.zoom">ズーム</span> <span id="zoomVal">100</span>%</div>
+      <input id="zoomSpd" type="range" min="50" max="150" value="100"></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.pan">パン</span> <span id="panVal">100</span>%</div>
+      <input id="panSpd" type="range" min="50" max="150" value="100"></div>
+    <label class="slRow" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="invert3DScroll" type="checkbox"><span data-i18n="set.invertScroll">3Dビューのホイール操作（時間移動）を反転</span></label>
+  </div>
+  <div class="setPanel" data-panel="keys">
+    <div class="t" style="color:#c9a24a;margin-bottom:8px">キーの割り当てを変更できます。「変更」を押して、割り当てたいキー（修飾キー可）を押してください。マウス/ホイール操作は変更できません（参考表示）。</div>
+    <div id="keyEditBody"></div>
+    <div style="margin-top:10px"><button id="keysResetAll" style="background:#3a2226;border:1px solid #5a3038;color:#ff8a94">全て既定に戻す</button></div>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;border-top:1px solid #ffffff14;padding-top:12px">
+    <button id="settingsReset" style="background:#3a2226;border:1px solid #5a3038;color:#ff8a94" data-i18n-t="set.resetTip" title="画面比率・音量・カメラ速度など全ての環境設定を初回起動時の状態に戻します"><span data-i18n="set.reset">初期設定に戻す</span></button>
+    <button id="settingsClose" data-i18n="ui.close">閉じる</button>
+  </div>
+</div></div>
+
+<script>
+// 個人の環境設定(bsnm_*)を config/settings.json にミラー保存＝localStorage喪失(サイトデータ削除/別オリジン)対策。
+// localStorage は従来どおり作業キャッシュとして使い、起動時にファイル→localStorage、変更時にlocalStorage→ファイル。
+// ※UIレイアウト系(パネル位置/画面比率/色履歴)は高頻度・マシン依存のためファイル対象外＝localStorage専用。
+// ※フォルダ/音源のFileHandle(IndexedDB)はJSON化不可なので対象外（従来どおりIndexedDB保持）。
+(function(){
+  // ファイルにミラーしない=localStorage専用（Tauri住み分け: UIレイアウト/高頻度/マシン依存）
+  var LOCAL_ONLY={bsnm_keypos:1,bsnm_keyfold:1,bsnm_split:1};
+  // ① 起動時: config/settings.json を読み、bsnm_* を localStorage へ流し込む（モジュールがlocalStorageを同期読みする前に確定させる）
+  try{
+    var xhr=new XMLHttpRequest();
+    xhr.open('GET','config/settings.json?v='+Date.now(),false);   // 同期: モジュール実行前に確定が必要
+    xhr.send();
+    if(xhr.status>=200&&xhr.status<300&&xhr.responseText){
+      var o=JSON.parse(xhr.responseText);
+      for(var k in o){ if(k.indexOf('bsnm_')===0&&!LOCAL_ONLY[k]){ try{ localStorage.setItem(k,o[k]); }catch(_){} } }
+    }
+  }catch(_){}
+  // ② 変更時: bsnm_* の set/remove を捕捉し、デバウンスで config/settings.json へ書き戻す（LOCAL_ONLYは除外）
+  var _set=localStorage.setItem.bind(localStorage), _rm=localStorage.removeItem.bind(localStorage), _t=null;
+  function schedule(){ if(_t) clearTimeout(_t); _t=setTimeout(function(){
+    var data={}; for(var i=0;i<localStorage.length;i++){ var key=localStorage.key(i); if(key&&key.indexOf('bsnm_')===0&&!LOCAL_ONLY[key]) data[key]=localStorage.getItem(key); }
+    try{ fetch('__settings/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:data})}); }catch(_){}
+  },400); }
+  localStorage.setItem=function(k,v){ _set(k,v); if((''+k).indexOf('bsnm_')===0) schedule(); };
+  localStorage.removeItem=function(k){ _rm(k); if((''+k).indexOf('bsnm_')===0) schedule(); };
+  // ③ 廃止済みキーの掃除: 誰も読まなくなった旧キーを localStorage / settings.json から除去（ミラーが全bsnm_*を書き戻すため放置すると永続する）。監査 2026-07-14
+  ['bsnm_cpal','bsnm_cphist'].forEach(function(k){ try{ if(localStorage.getItem(k)!=null) localStorage.removeItem(k); }catch(_){} });   // bsnm_cpal=クロマパレットはper-project化 / bsnm_cphist=色履歴パレット廃止
+})();
+</script>
+<script type="importmap">
+{ "imports": { "three":"./js/vendor/three/three.module.js",
+  "three/addons/":"./js/vendor/three/addons/" }}
+</script>
+<script type="module" src="./js/main.js?v=chain-head-center-arrow"></script>
+
+</body>
+</html>

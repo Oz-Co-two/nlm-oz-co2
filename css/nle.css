@@ -1,0 +1,116 @@
+/* Non-Linear Mapper — nle.css */
+
+
+  #nodecol{flex:1;display:flex;flex-direction:column;min-width:0;margin:3px 3px 0 0;position:relative;}
+
+  #nodeColBar{position:absolute;top:6px;left:11px;z-index:9;display:flex;align-items:center;}
+
+  #nodeColModeLabel{display:flex;align-items:center;gap:8px;user-select:none;font-weight:700;color:#dfe3e8;opacity:.92;text-shadow:0 1px 3px #000;pointer-events:none;}
+
+  #nodeColModeLabel svg{width:24px;height:24px;flex:0 0 auto;}
+
+  #nodepane{flex:1;position:relative;background:#191919;min-width:0;min-height:0;border-radius:10px 10px 0 0;overflow:hidden;padding-top:78px;padding-right:16px;}
+
+   /* ラベル(NLE)とルーラーが接触しない余白。下のMusicと1枚のパネルに結合 */   /* 箱は上端まで／中身はラベルぶん下げて現状維持（canvasは content-box を全面充填） */
+  #ndcv{display:block;width:100%;height:100%;}
+
+  #proll{display:none;height:66px;margin-top:3px;border-radius:10px;overflow:hidden;background:#161616;}
+
+  #prcv{display:block;width:100%;height:100%;cursor:crosshair;}
+
+  #overview{height:64px;margin-top:0;border-radius:0 0 10px 10px;overflow:hidden;background:#191919;position:relative;padding-right:16px;}
+
+   /* 右16px=スクロールバー列ぶんの空白。ndcvと密着（Light/Musicの継ぎ目はndcv最下部に描画＝再生ヘッドが一本につながる） */
+  #ovcv{display:block;width:100%;height:100%;}
+
+  #specPane{height:96px;margin-top:3px;border-radius:10px;overflow:hidden;background:#0c0c0e;position:relative;padding-right:16px;}
+   /* スペクトログラム表示帯。Musicの波形(#overview=64px)の1.5倍の高さを確保（ヘルバ様指定）。独立した箱として下に追加 */
+  #speccv{display:block;width:100%;height:100%;}
+
+  #nodeKeys{position:absolute;top:102px;right:14px;z-index:15;pointer-events:none;   /* 拍数ルーラー下端(50+LRULER38)から右余白と同じ14px。ツールバー(z14)より前 */
+    display:flex;flex-direction:column;gap:0px;
+    background:rgba(14,14,18,.66);border:1px solid rgba(255,255,255,.05);border-radius:9px;padding:8px 12px;}
+
+  #nodeKeys:has(.mkbody:empty){display:none;}
+
+   /* 中身が無い間は出さない */
+  /* NLE右端のスクロールバー列（常設の隙間16px・Musicの行は空白のまま=拍座標のズレ防止） */
+  .laneSb{position:absolute;right:2px;width:12px;display:none;flex-direction:column;z-index:8;
+    background:#1d1d1d;border:1px solid #161616;border-radius:6px;overflow:hidden;}
+
+  .laneSb .sbA{flex:0 0 12px;display:flex;align-items:center;justify-content:center;font-size:7px;color:#8a8a8a;cursor:pointer;user-select:none;}
+
+  .laneSb .sbA:hover{color:#fff;background:#2d2d2d;}
+
+  .laneSb .sbTr{flex:1;position:relative;margin:1px 0;}
+
+  .laneSb .sbTh{position:absolute;left:1px;right:1px;border-radius:5px;background:#6a6a6a;cursor:grab;}
+
+  .laneSb .sbTh:hover{background:#8a8a8a;}
+
+   /* 1/16でも幅が変わらない4文字分 */
+  /* 難易度バー: 5ボタン均等・ON=難易度色（Easy緑→Expert+赤）。▾=難易度間のデータ操作メニュー */
+  #diffTools{position:absolute;top:10px;right:8px;z-index:9;display:flex;gap:6px;align-items:stretch;height:24px;max-width:calc(100% - 250px);}
+
+   /* 難易度バー+BPM+メトロノーム/BPM測定。上端=NLEラベルのアイコン描画に一致 */
+  #diffBar{display:none;flex:0 1 auto;min-width:0;height:24px;box-sizing:border-box;background:#2d2d2d;border:1px solid #1d1d1d;border-radius:8px;overflow:hidden;}
+
+  #bpmField .bfV{min-width:84px;}
+
+  /* 難易度バーと拍ルーラーの間の帯: BPM・メトロ・プレビュー秒を横並びで集約（ヘルバ様指示・2026-07-08） */
+  #musicBar{position:absolute;top:44px;left:11px;right:16px;height:26px;z-index:8;display:flex;align-items:center;justify-content:flex-end;gap:7px;}
+
+  #musicBar .mbLabel{font-weight:700;font-size:11px;color:#9a9a9a;letter-spacing:.3px;white-space:nowrap;}
+
+  #musicBar .bfField{height:24px;font-size:11.5px;}
+
+  #musicBar #pvStart .bfV,#musicBar #pvDur .bfV{min-width:64px;}
+
+  #musicBar .mbSep{width:1px;height:16px;background:#ffffff1f;margin:0 3px;flex:0 0 auto;}
+
+  #musicBar .mbPv{display:flex;align-items:center;gap:5px;color:#b8b8c0;font-size:11px;white-space:nowrap;}
+
+  #musicBar .mbPv .mbUnit{color:#8a8a8a;}
+
+  .dfSeg{display:flex;align-items:stretch;flex:1 1 150px;width:150px;min-width:74px;border-left:1px solid #202020;}
+
+   /* 基本150px（幅を短く・ヘルバ様指示）・狭い画面では均等に縮む */
+  .dfSeg:first-child{border-left:none;}
+
+  .dfName{flex:1;display:flex;align-items:center;padding:5px 0 5px 10px;font-size:12.5px;font-weight:700;color:#9a9aa2;cursor:pointer;letter-spacing:.3px;white-space:nowrap;}
+
+   /* ▼は選択中のボタンだけに出す（=押すとプルダウン） */
+  .dfSeg.on .dfArr{display:flex;}
+
+  .dfSeg:not(.on):hover{background:#3a3a3a;}
+
+  .dfSeg .dfName:hover,.dfSeg .dfArr:hover{color:#fff;}
+
+  .dfSeg.on{background:var(--dfc);}
+
+  .dfSeg.on .dfName,.dfSeg.on .dfArr{color:#141414;}
+
+  .dfSeg.on .dfName:hover,.dfSeg.on .dfArr:hover{color:#000;}
+
+  .dfSeg.dis{opacity:.35;}
+
+  .dfSeg.dis .dfName{cursor:default;}
+
+   /* ステータス表示は廃止（要素はJS参照のため温存） */
+  /* 簡易レベルメーター */
+  #vmcol{width:78px;flex:0 0 auto;margin:3px 3px 0 3px;border-radius:8px;overflow:hidden;background:#191919;
+    display:flex;flex-direction:column;padding:5px 3px;gap:4px;}
+
+  #sqEnvBtn{display:flex;align-items:center;gap:7px;height:24px;background:none;border:none;color:#9a9aa2;font:700 12.5px system-ui;letter-spacing:.3px;padding:0 4px 0 9px;cursor:pointer;white-space:nowrap;}
+
+   /* 難易度セグメント(.dfName)と同じフラットな見た目 */
+  #sqEnvBtn:hover,#sqEnvBtn.on{color:#fff;}
+
+  #sqEnvName{width:104px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+   /* 最長ステージ(Kaleidoscope)+3文字ぶんで固定幅→ボタン幅もキャレット位置も一定 */
+  #sqEnvBtn .sqCaret{font-size:8px;color:#7a7a7a;}
+
+   /* ▼は.dfArrと同じ控えめ */
+  #sqEnvPanel{top:30px;min-width:150px;max-height:340px;overflow-y:auto;}
+

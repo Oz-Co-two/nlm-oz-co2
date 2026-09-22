@@ -1,0 +1,81 @@
+/* Non-Linear Mapper — editor3d.css */
+
+
+  #main{flex:1;position:relative;min-height:0;margin:0 3px 3px 0;border-radius:10px;overflow:hidden;background:#141414;}
+
+ #cv{display:block;width:100%;height:100%;}
+
+  #trans{position:absolute;left:10px;bottom:10px;display:flex;gap:10px;align-items:center;background:rgba(25,25,25,.92);
+    border:1px solid var(--outline);border-radius:6px;padding:7px 12px;}
+
+  #selrect{position:absolute;border:1px dashed var(--accent);background:rgba(129,96,227,.12);display:none;pointer-events:none;z-index:8;}
+
+  #pie{position:fixed;display:none;z-index:1000;pointer-events:none;}
+
+   /* fixed=NLE等どのペイン上でも開ける（#mainのoverflow:hiddenに切られない） */
+  .pieitem{position:absolute;width:58px;height:40px;margin:-20px 0 0 -29px;border-radius:6px;
+    background:rgba(32,32,32,.96);border:1px solid var(--outline);display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:700;color:var(--text);pointer-events:none;}
+
+  .pieitem.hot{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+  /* アイコン付きパイ（W長押しの配置モード等）: アイコン＋小ラベルを縦積み */
+  .pieitem.pieicon{flex-direction:column;gap:2px;width:60px;height:52px;margin:-26px 0 0 -30px;font-size:9.5px;font-weight:600;}
+  .pieitem.pieicon svg{width:22px;height:22px;display:block;}
+  .pieitem.pieicon span{line-height:1;}
+
+  /* 色スウォッチのパイ（ライトCカラーパイ）: 背景がそのままクロマ色（ヘルバ様指定 2026-07-13） */
+  .pieitem.piecolor{width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:9px;border:2px solid rgba(255,255,255,.25);}
+  .pieitem.piecolor span{font-size:10px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000,0 0 3px #000;}
+  .pieitem.piecolor.hot{border-color:#fff;box-shadow:0 0 0 3px var(--accent);}
+
+  #mFileMenu .mkey{color:#8a8a8a;font-size:11px;}
+
+  #mFileMenu button:hover .mkey{color:#eee;}
+
+  #modeKeys{position:absolute;top:44px;left:14px;z-index:15;pointer-events:none;   /* ツールバー(z14)より前=どこへ動かしても持ち手が埋もれない */
+    display:flex;flex-direction:column;gap:1px;
+    background:rgba(14,14,18,.66);border:1px solid rgba(255,255,255,.05);border-radius:9px;padding:9px 13px;}
+
+  #commonKeys{position:absolute;top:14px;right:14px;z-index:15;pointer-events:none;   /* 継ぎ目から右余白と同じ14px。ツールバー(z14)より前 */
+    display:flex;flex-direction:column;gap:1px;
+    background:rgba(14,14,18,.66);border:1px solid rgba(255,255,255,.05);border-radius:9px;padding:9px 13px;}
+
+  .mkhead{display:flex;align-items:center;justify-content:flex-end;gap:2px;pointer-events:auto;cursor:grab;
+    margin:-5px -9px 3px;padding:1px 3px;min-height:15px;border-bottom:1px solid rgba(255,255,255,.06);}
+
+   /* ショートカット表示の持ち手（上部ドラッグで移動） */
+  .mkhead:active{cursor:grabbing;}
+
+  .mkbtn{background:none;border:none;color:#8a8a8a;font-size:11px;line-height:1;padding:2px 5px;cursor:pointer;border-radius:4px;}
+
+  .mkbtn:hover{color:#fff;background:rgba(255,255,255,.1);}
+
+  .keysFolded .mkbody{height:0;overflow:hidden;visibility:hidden;}
+
+   /* たたんでも幅は本文基準のまま=ヘッダーの長さが変わらない */
+  .mkrow{display:flex;align-items:baseline;gap:8px;}
+
+  .mkd{font-size:10px;color:#7d7d7d;min-width:92px;}
+
+  .mk{font-size:12px;font-weight:400;color:#e8e8e8;}
+
+   /* 太字なし・影なし（ヘルバ様指定。影が太字に見えていた） */
+  .mksep{height:1px;background:rgba(255,255,255,.09);margin:5px 0;}
+
+   /* 標準ショートカットの項目区切り */
+  /* フローティングツールバー */
+  #maintb{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:14;}
+  /* 再生系ツールバー＝画面中央下（ヘルバ様指定） */
+  #transportBar{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:14;}
+
+  /* 重複チェックの件数チップ（時間表示の直下・重複が無い時は非表示） */
+  #dupChip{position:absolute;display:none;z-index:13;background:rgba(25,25,25,.92);border:1px solid #2e5f52;
+    border-radius:8px;padding:4px 10px;font-size:12px;color:#ddd;align-items:center;gap:6px;white-space:nowrap;}
+
+  #dupChip b{color:var(--green);font-weight:700;padding:0 2px;}
+
+  #dupChip .dj{cursor:pointer;color:#c5c5c5;padding:0 7px;border-radius:4px;user-select:none;}
+
+  #dupChip .dj:hover{background:var(--accent);color:#fff;}
+

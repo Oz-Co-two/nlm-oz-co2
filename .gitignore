@@ -1,0 +1,23 @@
+# PyInstallerのビルド成果物（再ビルドで丸ごと変わるためソース管理外）
+/NLM-app/
+build/
+dist/
+*.bak-before-fix
+
+# Python仮想環境（pip installで再構築可能なためソース管理外）
+.venv/
+.venv-build/
+__pycache__/
+*.pyc
+
+# 解析・試験用の音源(著作物・大容量のため管理外)
+/test-audio/
+*.mp3
+
+# Claude Code のローカル設定・作業メモ（個人環境の情報を含むため公開しない）
+.claude/
+
+# ビルド・配布スクリプトが作る退避フォルダ
+_backup_*/
+_backup_before_update_*/
+*.bak*

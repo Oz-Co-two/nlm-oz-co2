@@ -1,0 +1,98 @@
+/* Non-Linear Mapper — media.css */
+
+  /* MEDIA ペイン（#tabFolder）— モードラベル下からコンテンツ開始 */
+  #tabFolder{
+    padding:46px 12px 12px;
+    font-size:12px;
+    color:var(--textdim);
+    overflow:hidden;
+    flex-direction:column;
+    min-height:0;
+  }
+
+  /* .pvbody.on の display:block を上書き（flex 縦積みで libBody を残り高さに伸ばす） */
+  #tabFolder.pvbody.on,
+  #tabFolder.on{display:flex;}
+
+  /* ---- MEDIA=Blenderアセットブラウザ風: 左カタログ列＋右カードグリッド ---- */
+  #libTop{display:flex;align-items:center;gap:8px;flex:0 0 auto;margin:0 0 2px;}
+
+   /* padding無し=MEDIAラベル左端(12px)に揃える */
+  #libTop #libAddBtn{margin:0;}
+
+  #libBody{display:flex;flex:1 1 0%;min-height:0;overflow:hidden;}
+
+  #libSide{flex:0 0 176px;display:flex;flex-direction:column;min-height:0;border-right:1px solid #2a2a2e;overflow-y:auto;padding:6px 0;}
+
+  .libCat{display:flex;align-items:center;gap:7px;padding:4px 8px;font-size:12px;color:#c5c5c5;cursor:pointer;border-radius:4px;margin:1px 6px 1px 0;}
+
+   /* 左margin=0：MEDIAラベル左端に揃える */
+  .libCat:hover{background:#2e2e33;}
+
+  .libCat.on{background:var(--accent);color:#fff;}
+
+  .libCat .libCatIco{flex:0 0 auto;font-size:11px;opacity:.85;}
+
+  .libCat .libCatName{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  #libMain{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;}
+
+  #libGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;padding:8px;overflow-y:auto;align-content:start;flex:1;}
+
+  .libItem{cursor:grab;user-select:none;min-width:0;background:transparent;border:1px solid transparent;border-radius:7px;padding:5px;position:relative;}
+
+   /* 静止時は灰色カードで囲わない（ヘルバ様指示）。ホバー/選択時のみハイライト */
+  .libItem:hover{background:#323238;}
+
+  .libItem.sel{background:#3a2f52;border-color:var(--accent);}
+
+  .libRow{display:flex;align-items:center;gap:8px;font-size:11px;color:#8a95a5;margin:3px 0;}
+
+  .libRow .libPath{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  .libDel{background:#3a2226;border:1px solid #5a3038;color:#ff8a94;border-radius:4px;
+    width:17px;height:15px;padding:0;cursor:pointer;font-weight:700;font-size:12px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;line-height:0;}
+
+   /* カタログ(.libCat)にも適用・小さめ */
+  .libItem:active{cursor:grabbing;}
+
+  .libThumb{width:100%;aspect-ratio:1/1;background:#1d1d20;border:1px solid #333;border-radius:5px;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;color:#5a5a64;font-size:20px;position:relative;}
+
+  .libThumb img{width:100%;height:100%;object-fit:cover;pointer-events:none;display:block;}
+
+  .libThumb.libWave{border-color:#56ffc1;}
+
+   /* アートワーク無し音楽=緑枠(単線)+波形 */
+  .libThumb.libWave svg{width:78%;height:78%;pointer-events:none;}
+
+  .libThumb.libClipN{border-color:var(--accent);}
+
+   /* NOTESクリップ=紫枠 */
+  .libThumb.libClipL{border-color:#ffd82d;}
+
+   /* LIGHTクリップ=黄枠 */
+  .libThumb.libClip svg{width:80%;height:80%;pointer-events:none;}
+
+  .libMark{position:absolute;left:3px;bottom:4px;display:flex;gap:2px;}
+
+   /* 保有データ種別の色チップ（左から: 音楽=緑 曲情報=ピンク NOTES=紫 ライト=黄 画像=青） */
+  .libMarkSeg{width:12px;height:12px;border-radius:2.5px;}
+
+   /* 枠なし（ヘルバ様指示） */
+  .libName{font-size:10.5px;color:#c2c2c8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    margin-top:4px;text-align:center;}
+
+  #pvVis{position:absolute;top:6px;right:8px;display:flex;gap:2px;z-index:8;
+    background:rgba(25,25,25,.85);border:1px solid #2a2a2a;border-radius:8px;padding:2px;}
+
+  /* ON時: アイコン内のアクセント紫がONの紫背景と相殺されて■に見えるため緑に。OFF時は逆に緑→紫（状態の色分け） */
+  #pvVis .tbi.on svg [fill="#8160e3"]{fill:var(--green);}
+
+  #pvVis .tbi.on svg [stroke="#8160e3"]{stroke:var(--green);}
+
+  #pvVis .tbi:not(.on) svg [fill="#56ffc1"]{fill:var(--accent);}
+
+  #pvVis .tbi:not(.on) svg [stroke="#56ffc1"]{stroke:var(--accent);}
+

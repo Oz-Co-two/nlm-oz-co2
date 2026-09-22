@@ -1,0 +1,240 @@
+/* Non-Linear Mapper — base.css */
+
+  /* 内蔵フォント: M PLUS Rounded 1c（SIL OFL） */
+  @font-face{ font-family:"M PLUS Rounded 1c"; font-weight:400; src:url("../fonts/MPLUSRounded1c-Regular.ttf") format("truetype"); font-display:swap; }
+  @font-face{ font-family:"M PLUS Rounded 1c"; font-weight:500; src:url("../fonts/MPLUSRounded1c-Medium.ttf") format("truetype"); font-display:swap; }
+  @font-face{ font-family:"M PLUS Rounded 1c"; font-weight:700; src:url("../fonts/MPLUSRounded1c-Bold.ttf") format("truetype"); font-display:swap; }
+  @font-face{ font-family:"M PLUS Rounded 1c"; font-weight:800; src:url("../fonts/MPLUSRounded1c-ExtraBold.ttf") format("truetype"); font-display:swap; }
+
+  :root{ --accent:#8160e3; --green:#56ffc1; --red:#ff274d; --blue:#3092ff;
+    --bg:#121212; --panel:#191919; --panel2:#242424; --widget:#2d2d2d; --widget2:#3d3d3d;
+    --outline:#2a2a2a; --text:#eeeeee; --textdim:#c5c5c5; --textmute:#8a8a8a; }
+
+  :root{color-scheme:dark;}
+
+  /* 起動時のちらつき(FOUC)防止カバー */
+  #bootCover{position:fixed;inset:0;background:#161616;z-index:100000;transition:opacity .2s ease;}
+
+  *{box-sizing:border-box;}
+
+ html,body{margin:0;height:100%;background:#0e0e0e;color:var(--text);
+    font-family:"M PLUS Rounded 1c","Segoe UI","Hiragino Sans","Yu Gothic",sans-serif;overflow:hidden;user-select:none;}
+
+  #wrap{display:flex;height:calc(100% - 30px);}
+
+  .row{margin-bottom:11px;}
+
+ .t{font-size:11px;color:var(--textmute);margin-bottom:4px;}
+
+  label.filebtn,button,select{background:var(--widget);color:var(--text);border:1px solid #1d1d1d;
+    border-radius:4px;padding:6px 10px;font-size:12px;cursor:pointer;outline:none;}
+
+  select{background:var(--widget);width:100%;}
+
+  option{background:#242424;color:#eee;}
+
+  label.filebtn:hover,button:hover{background:var(--widget2);}
+
+  .palette{display:grid;grid-template-columns:repeat(3,30px);gap:3px;}
+
+  .palette div{width:30px;height:30px;border:1px solid var(--outline);border-radius:4px;display:flex;
+    align-items:center;justify-content:center;cursor:pointer;font-size:14px;background:var(--widget);}
+
+  .palette div:hover{background:var(--widget2);}
+
+  .palette div.on{border-color:var(--accent);background:var(--accent);color:#fff;}
+
+  .colbtns{display:flex;gap:6px;}
+
+ .colbtns div{flex:1;height:26px;border-radius:4px;cursor:pointer;border:2px solid transparent;
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 2px #0009;}
+
+  .colbtns div.on{border-color:#fff;}
+
+  .types{display:flex;gap:4px;}
+
+ .types button{flex:1;padding:5px 4px;}
+
+ .types button.on{background:var(--accent);color:#fff;font-weight:700;}
+
+  .snaps{display:flex;gap:4px;flex-wrap:wrap;}
+
+ .snaps button{padding:4px 8px;}
+
+ .snaps button.on{background:var(--accent);color:#fff;font-weight:700;}
+
+  .legend{font-size:11px;line-height:1.8;color:var(--textdim);}
+
+ .legend b{color:var(--green);}
+
+  #right{flex:1;display:flex;flex-direction:column;min-width:0;}
+
+  #toprow{height:50%;min-height:120px;flex:0 0 auto;display:flex;}
+
+   /* 既定は上下5:5（ヘルバ様指定） */
+  #pvpane{width:30%;min-width:240px;flex:0 0 auto;position:relative;display:flex;flex-direction:column;margin-top:3px;border-radius:10px;overflow:hidden;background:var(--panel);}
+
+  .pvbody{flex:1;position:relative;min-height:0;display:none;overflow-y:auto;}
+
+  /* #tabFolder は MEDIA 用 flex 縦積み（media.css で display:flex） */
+  .pvbody.on:not(#tabFolder){display:block;}
+
+ #time{font-size:12px;color:var(--textdim);font-variant-numeric:tabular-nums;}
+
+   /* 白枠は廃止（bgと同色） */
+  #piecenter{position:absolute;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:rgba(129,96,227,.6);}
+
+  .metaList div{padding:3px 6px;border-radius:4px;margin-bottom:2px;display:flex;justify-content:space-between;cursor:pointer;}
+
+  .metaList div:hover{background:rgba(129,96,227,.18);}
+
+   /* 関連項目の区切り線（ファイルメニューと同じ流儀） */
+  input[type=range]{accent-color:var(--accent);}
+
+  /* ペインのモードラベル（Tabで切替） */
+  .modeLabel{position:absolute;top:7px;left:12px;z-index:8;display:flex;align-items:center;gap:8px;
+    font-weight:700;color:#dfe3e8;opacity:.92;pointer-events:none;text-shadow:0 1px 3px #000;}
+
+  .modeLabel svg{width:24px;height:24px;flex:0 0 auto;}
+
+  .mlMain{font-size:22px;letter-spacing:.7px;}
+
+  .mlNext{display:flex;align-items:center;gap:11px;margin-left:14px;font-size:13px;font-weight:600;
+    color:#7a7a7a;text-shadow:none;}
+
+  .mlNext svg{width:33px;height:33px;color:#8a8a8a;}
+
+  /* .tbi.snapNum で .tbi{width:28px}(chrome.css・後読み)に勝つ＝スナップボタンが28pxに潰れて「1/2 ▼」がはみ出す崩れを解消 */
+  .tbi.snapNum{width:auto;padding:0 7px;gap:6px;font-size:12.5px;font-weight:600;}
+
+  #tbSnapLabel{min-width:38px;text-align:center;display:inline-block;}
+
+   /* flex:0=伸びずにコンテンツ幅（幅を短く・ヘルバ様指示） */
+  .bfField{display:flex;align-items:center;flex:0 0 auto;box-sizing:border-box;background:#2b2b2b;border:1px solid #1d1d1d;border-radius:8px;padding:0 3px;
+    font-size:11.5px;font-weight:400;color:#eee;}
+
+  .bfField .bfA{width:15px;text-align:center;color:#9a9a9a;cursor:pointer;opacity:0;user-select:none;}
+
+  .bfField:hover .bfA{opacity:1;}
+
+  .bfField .bfA:hover{color:#fff;}
+
+  .bfField .bfV{min-width:56px;text-align:center;cursor:text;font-variant-numeric:tabular-nums;}
+
+  .dtBtn{width:30px;height:24px;flex:0 0 auto;background:#2d2d2d;border:1px solid #1d1d1d;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
+
+  .dtBtn:hover{background:#3d3d3d;}
+
+  .dtBtn.on{background:#1d3a30;border-color:var(--green);}
+
+   /* メトロノームON=アクセント緑 */
+  .dtBtn svg{width:16px;height:16px;display:block;}
+
+  .dfArr{display:none;align-items:center;padding:0 8px;color:#7a7a7a;cursor:pointer;font-size:8px;}
+
+  .snapCaret{font-size:8px;color:#9a9a9a;}
+
+  /* 方向プルダウン（Blender風リスト） */
+  #tbDirPanel{min-width:172px;padding:5px;}
+
+  .dirRow{display:flex;align-items:center;gap:11px;padding:5px 9px;border-radius:5px;cursor:pointer;
+    font-size:12px;color:#dfe3e8;}
+
+  .dirRow:hover{background:var(--accent);color:#fff;}
+
+   /* 選んでる最中（ホバー）も紫に統一（灰色廃止） */
+  .dirRow.on{background:rgba(129,96,227,.45);}
+
+   /* 選択中=少し暗い紫（ホバーの明るい紫と区別・ヘルバ様指定） */
+  .dirRow svg{width:20px;height:20px;flex:0 0 auto;}
+
+  .dirRow span{white-space:nowrap;}
+
+  #tbLightPanel{min-width:196px;}
+  /* ライトパネルのセクション区切り線（ON/OFFプルダウン｜クロマ｜フラッシュ/フェード/トランジション ＝ヘルバ様指定） */
+  .lpDiv{height:1px;background:#3a3a3a;margin:6px 1px;}
+  /* ON/OFFプルダウンのボタン（アイコン＋ラベル＋右端キャレット）と展開パネル */
+
+  #vmTop{flex:1;display:flex;gap:2px;min-height:0;}
+
+  #vmFader{width:30px;flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;}
+
+   /* 音量調整中の%表示（つまみ高さに追従）。fixed=vmcolのoverflow:hiddenにクリップされない */
+  #vmDb{font-size:9px;color:#c5c5c5;font-variant-numeric:tabular-nums;min-height:11px;}
+
+  #vmFader input{-webkit-appearance:slider-vertical;writing-mode:vertical-lr;direction:rtl;width:22px;flex:1;accent-color:#9a9a9a;}
+
+  #vmcv{display:block;flex:1;height:100%;min-width:0;}
+
+  /* プレビューの表示トグル */
+  @keyframes arcspin{to{transform:rotate(360deg);}}
+
+   /* 縦幅固定=タブ切替でダイアログが伸縮しない */
+  .slRow{display:flex;align-items:center;gap:14px;margin-top:9px;}
+
+   /* スライダー行: 左タイトル40% / 右スライダー60%。値(100%等)は行内でバー寄り(右端)へ＝バーの左側に整列（ヘルバ様指定 2026-07-14） */
+  .slRow>.t{flex:0 0 40%;margin:0;display:flex;align-items:baseline;gap:6px;white-space:nowrap;}
+  .slRow>.t>span:first-child{flex:1;overflow:hidden;text-overflow:ellipsis;}
+
+  .slRow>input[type=range]{flex:1;width:auto;margin:0;min-width:0;}
+
+  /* Blender風スプリッタ: ペイン境界をドラッグでリサイズ */
+  .splitv{width:5px;cursor:col-resize;background:#0e0e0e;flex:0 0 auto;touch-action:none;}
+
+  .splith{height:5px;cursor:row-resize;background:#0e0e0e;flex:0 0 auto;touch-action:none;}
+
+  .splitv:hover,.splith:hover,.splitv.drag,.splith.drag{background:var(--accent);}
+
+  #infoEdgeSvg{position:absolute;left:0;top:0;pointer-events:none;overflow:visible;}
+
+   /* 配線=カードの下層 */
+  #infoPortSvg{position:absolute;left:0;top:0;pointer-events:none;overflow:visible;z-index:99999;}
+
+  /* ポート=カードの子要素（ノードの前後関係に正しく従う。透けない・隠れたら押せない=自然な挙動） */
+  .nPort,.oPort{position:absolute;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:crosshair;z-index:5;}
+
+  .nPort{right:-15px;top:50%;transform:translateY(-50%);}
+
+  .oPort{left:-15px;}
+
+  .nPort i,.oPort i{width:14px;height:14px;border-radius:50%;display:block;box-sizing:border-box;}
+
+   /* アクティブ書き出しへ接続中=確定情報。ラベルはloadLangが--srconに翻訳文字列を設定 */
+  .iSub{padding:5px 11px 0;color:#9a9a9a;font-size:11px;font-weight:700;letter-spacing:.6px;border-top:1px solid #ffffff11;margin-top:2px;}
+
+  input[type=checkbox]{accent-color:var(--accent);}
+
+  .iBpm{display:flex;align-items:center;gap:4px;flex:1 1 auto;}
+
+  .iBpm button{width:24px;height:24px;background:#2d2d2d;border:1px solid #1d1d1d;border-radius:5px;color:#ddd;cursor:pointer;flex:0 0 auto;}
+
+  .iBpm button:hover{background:#3d3d3d;}
+
+  .iBpm span{flex:1;text-align:center;font-variant-numeric:tabular-nums;font-weight:700;}
+
+  .colSw{width:28px;height:28px;padding:0;border:none;border-radius:5px;background:transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
+
+   /* 外枠なし・ノーツ色ボタン(.tbi=28px)と同じ大きさ（ヘルバ様指定 2026-07-13） */
+  .colSw:hover{filter:brightness(1.2);}
+
+  .colSw svg{width:28px;height:28px;display:block;filter:drop-shadow(0 1px 1px #0007);}
+
+  /* 難易度バー左の設定クイック（環境＋ノーツ色）。設定ノードの env/red/blue を直接編集 */
+  #setQuick{position:relative;display:flex;gap:5px;align-items:center;height:24px;box-sizing:border-box;background:#2d2d2d;border:1px solid #1d1d1d;border-radius:8px;padding:0 7px;flex:0 0 auto;}
+
+  #noteCols{display:flex;gap:5px;align-items:center;height:24px;flex:0 0 auto;}
+
+   /* 箱なし（ヘルバ様指定②）。スウォッチは3D NOTE編集(.colbtns)と同じ無地色矩形 */
+  .noteColSw{width:26px;height:20px;padding:0;border:2px solid transparent;border-radius:4px;box-sizing:border-box;cursor:pointer;background:#555;}
+
+   /* 3D NOTE編集の色ボタン(.colbtns div)と同じ様式：無地の色矩形 */
+  .noteColSw:hover{filter:brightness(1.15);}
+
+  .colSw.sqSw{width:20px;height:20px;}
+
+  .colSw.sqSw svg{width:20px;height:20px;}
+
+  .iDiff{display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;font-size:12px;white-space:nowrap;color:#c5c5c5;}
+
+  .iDiff:hover{color:#fff;}
+

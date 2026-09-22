@@ -1,0 +1,95 @@
+/* Non-Linear Mapper — info.css */
+
+
+  /* Infoモード（Info.dat編集） */
+  #infoPanel{position:absolute;inset:0;overflow-y:auto;background:#161616;z-index:6;padding:32px 14px 14px;border-radius:10px;}
+
+  #infoPanel .irow,#neFields .irow{margin-bottom:9px;max-width:430px;}
+
+  #infoPanel label,#neFields label{display:block;font-size:11px;color:#8a8a8a;margin-bottom:3px;}
+
+  #infoPanel input,#neFields input{width:100%;background:#242424;border:1px solid #1d1d1d;border-radius:4px;color:#eee;padding:6px 8px;font-size:12px;outline:none;}
+
+  #infoPanel input:focus{border-color:var(--accent);}
+
+  /* 曲情報（INFO）: Blenderプロパティ風パネルカード（テーマDarkPurpleGreen準拠: header#212121/panel#1b1b1b/outline#ffffff11） */
+  #inspcol{flex:1 1 auto;background:#1a1a1c;border:1px solid #161616;border-radius:10px;margin:0;   /* 下の隙間=MEDIA(pvpane)と同じ（余白なし=スプリッターのみ） */
+    font-size:11.5px;color:#e5e5e5;position:relative;overflow:hidden;}
+
+   /* INFOノードエディタのキャンバス */
+  #infoWorld{position:absolute;left:0;top:0;width:0;height:0;transform-origin:0 0;}
+
+  #infoGrid{position:absolute;left:-6000px;top:-6000px;width:14000px;height:14000px;pointer-events:none;   /* Blenderノードエディタ風グリッド（旧ノード画面と同じ28px+5マス） */
+    background-image:
+      linear-gradient(rgba(255,255,255,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.10) 1px,transparent 1px),
+      linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);
+    background-size:140px 140px,140px 140px,28px 28px,28px 28px;}
+
+   /* 配線とゴースト線=常に全カードの前面（クリックは透過）。カード重なりで線が潜って前後がぐちゃぐちゃに見える問題の対策 */
+  .iGrp{display:flex;flex-direction:column;gap:6px;width:280px;padding:0 0 10px;position:absolute;z-index:1;
+    background:rgba(34,34,36,.97);border:1.6px solid var(--nc,#8a8a8a);border-radius:8px;}
+
+   /* 選択中=白の太枠（旧ノードのselHLと同じ様式） */
+  #inspcol .iGrp h3{cursor:grab;background:color-mix(in srgb,var(--nc) 24%,transparent);   /* 旧ヘッダー=アクセント23%帯 */
+    border-bottom:none;color:#eeeeee;font-size:10.5px;}
+
+   /* 接続=塗り／未接続=色リング（常に不透明） */
+  .iGrp[data-t="meta"]{--nc:#e36ea8;}
+
+ .iGrp[data-t="set"]{--nc:#9a9aa6;}
+
+   /* 曲情報=ピンク / 設定=灰 */
+  .iGrp[data-t="cover"]{--nc:#4dc8ff;}
+
+   /* カバー画像=青 */
+  /* 譜面データ: Blender風の背景直書きオーバーレイ（表示専用・パン/ズーム非依存） */
+  #chartInfo{position:absolute;left:14px;bottom:12px;z-index:4;pointer-events:none;
+    font-size:15px;color:#9a9aa2;line-height:1.8;text-shadow:0 1px 3px rgba(0,0,0,.8);}
+
+   /* 譜面データ=重要情報なので大きめ（ヘルバ様指定） */
+  #chartInfo b{color:#dfe3ea;font-weight:700;font-variant-numeric:tabular-nums;padding-left:10px;}
+
+  #chartInfo .dim,#chartInfo .dim b{color:#55555c;}
+
+  .iGrp[data-out]{--nc:#ff3b52;}
+
+   /* OUTPUT=赤（旧ノードのBeat Saber基調を踏襲・複数可） */
+  .iGrp.outInactive{--nc:#5a3038;filter:grayscale(.65);opacity:.6;}
+
+   /* 休止中の書き出しノード（旧ノードの休止ラインと同じくすみ様式） */
+  .iGrp.srcOn h3::after{content:var(--srcon,'● 出力中');color:var(--green);font-size:9px;margin-left:8px;letter-spacing:0;}
+
+  .iGrp[data-out] .iRow>label{width:auto;min-width:70px;}
+
+   /* 「出力フォルダ名」が収まる可変幅 */
+  .iGrp.sel{border-color:#ffffff;box-shadow:0 0 0 1px #ffffff;}
+
+  #inspcol .iGrp h3:active{cursor:grabbing;}
+
+  #inspcol h3{font-size:10.5px;color:#e6e6e6;margin:0 0 2px;font-weight:700;letter-spacing:.8px;
+    background:#212121;padding:6px 10px;border-bottom:1px solid #161616;}
+
+  .iRow{display:flex;align-items:center;gap:8px;margin:0;padding:0 11px;}
+
+  .iRow>label{width:62px;color:#9a9a9a;font-size:10.5px;flex:0 0 auto;text-align:right;white-space:nowrap;}
+
+  .iRow input[type=text]{flex:1 1 auto;width:120px;min-width:0;background:#2b2b2b;border:1px solid #1d1d1d;border-radius:5px;color:#eee;padding:4px 7px;font:inherit;font-size:11.5px;outline:none;}
+
+  .iRow input[type=text]:focus{border-color:var(--accent);}
+
+  .iRow select{flex:1 1 auto;min-width:0;background:#2b2b2b;border:1px solid #1d1d1d;border-radius:5px;color:#eee;padding:4px 7px;font:inherit;font-size:11.5px;outline:none;}
+
+  .iRow select:focus{border-color:var(--accent);}
+
+  .iBtn{width:auto;background:#2d2d2d;border:1px solid #1d1d1d;border-radius:6px;color:#e5e5e5;padding:6px 10px;cursor:pointer;font:inherit;font-size:12px;margin:0 11px;text-align:center;white-space:nowrap;}
+
+  .iBtn:hover{background:#3d3d3d;}
+
+  .iBtn.folder{text-align:left;color:#e5e5e5;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+
+  #iExport{background:#ff3b52;color:#fff;font-weight:700;border:none;padding:6px 14px;font-size:11.5px;letter-spacing:.5px;
+    margin:4px 11px 0;}
+
+   /* アクティブな書き出しノードの最下段に置かれる（赤=OUTPUT基調） */
+  #iExport:hover{background:#ff5a6e;}
+
