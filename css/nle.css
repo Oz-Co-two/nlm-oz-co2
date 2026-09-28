@@ -64,7 +64,7 @@
 
   #musicBar .bfField{height:24px;font-size:11.5px;}
 
-  #musicBar #pvStart .bfV,#musicBar #pvDur .bfV{min-width:64px;}
+  .pvF .bfV{min-width:64px;text-align:center;}   /* INFO画面の試聴ノード（旧: ヘッダーのプレビュー開始/長さ） */
 
   #musicBar .mbSep{width:1px;height:16px;background:#ffffff1f;margin:0 3px;flex:0 0 auto;}
 

@@ -119,6 +119,23 @@
 
   .bfField .bfA:hover{color:#fff;}
 
+  /* 未保存ランプ（ON AIR風・表示のみ）。消灯時も枠と薄い文字を残して「そこにある」ことが分かるように */
+  .dirtyLamp{flex:0 0 auto;align-self:center;box-sizing:border-box;padding:2px 9px;border-radius:5px;border:1px solid #3a3a3a;
+    background:#1c1c1c;color:#4a4a4a;font-size:11px;font-weight:700;letter-spacing:.06em;white-space:nowrap;user-select:none;cursor:default;
+    transition:background .15s,color .15s,box-shadow .15s;}
+  .dirtyLamp.on{background:#d8262f;border-color:#ff5a60;color:#fff;box-shadow:0 0 8px rgba(255,60,70,.65);}
+
+  /* 未保存の確認ダイアログ（保存して続行／保存せずに続行／キャンセル） */
+  #dirtyDlgBg{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;}
+  #dirtyDlg{background:#26262b;border:1px solid #44444c;border-radius:10px;padding:18px 20px 16px;min-width:340px;max-width:480px;color:#eee;
+    font-size:13px;box-shadow:0 10px 40px rgba(0,0,0,.6);}
+  #dirtyDlg .ddMsg{margin-bottom:16px;line-height:1.6;white-space:pre-line;}
+  #dirtyDlg .ddBtns{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
+  #dirtyDlg button{padding:6px 14px;border-radius:6px;border:1px solid #55555e;background:#34343b;color:#eee;font-size:12.5px;cursor:pointer;}
+  #dirtyDlg button:hover{background:#40404a;}
+  #dirtyDlg button.pri{background:#3d6ee0;border-color:#5a86ec;color:#fff;}
+  #dirtyDlg button.pri:hover{background:#4a7af0;}
+
   .bfField .bfV{min-width:56px;text-align:center;cursor:text;font-variant-numeric:tabular-nums;}
 
   .dtBtn{width:30px;height:24px;flex:0 0 auto;background:#2d2d2d;border:1px solid #1d1d1d;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}

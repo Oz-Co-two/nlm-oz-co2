@@ -20,6 +20,16 @@ def _app_root():
         return sys._MEIPASS
     return os.path.dirname(os.path.abspath(__file__))
 
+def _app_version(app_root):
+    # 版番号の定義元は js/constants.js の APP_VERSION（アプリ内表示と共通）。読めなければ空＝タイトルは名前だけ
+    try:
+        import re
+        with open(os.path.join(app_root, 'js', 'constants.js'), encoding='utf-8') as f:
+            m = re.search(r"APP_VERSION\s*=\s*'([^']+)'", f.read())
+        return m.group(1) if m else ''
+    except Exception:
+        return ''
+
 def _unblock_dist_folder():
     # 配布zipをダウンロードすると、Windowsが「インターネットからのファイル」の印
     # (Mark of the Web、NTFSの代替データストリーム "Zone.Identifier") を付与し、
@@ -214,7 +224,20 @@ def main():
 
     import webview
 
+    # 閉じる時の確認（2026-09-27）: pywebview標準の confirm_close は英語固定の確認を毎回出すため廃止。
+    # JSが未保存の有無を set_dirty で知らせ、未保存がある時だけ閉じるのを止めてアプリ内の3択ダイアログ
+    # （保存して終了／保存せずに終了／キャンセル＝言語設定に追従）を出す。終了が決まったら quit_app で閉じる。
+    close_state = {'dirty': False, 'force': False}
+
     class Api:
+        def set_dirty(self, on):
+            close_state['dirty'] = bool(on)
+
+        def quit_app(self):
+            close_state['force'] = True
+            threading.Thread(target=lambda: webview.windows[0].destroy(), daemon=True).start()
+
+
         # ブラウザのFile System Access APIは絶対パスを一切JSへ渡さないため、再オープン時の
         # 自動読込ができない（handleをIndexedDBに保存する手も別問題でWebView2をクラッシュさせる）。
         # pywebviewのネイティブダイアログは実パスを返すので、音源だけこちら経由にして
@@ -307,12 +330,30 @@ def main():
 
     url = 'http://127.0.0.1:%d/editor.html' % port
     win = webview.create_window(
-        'Non-Linear Mapper',
+        ('Non-Linear Mapper ' + _app_version(app_root)).strip(),   # 例: Non-Linear Mapper v1.1.0-oz（スクリーンショットで版が分かるように）
         url,
         width=1600, height=980, min_size=(1100, 720),
-        confirm_close=True,
         js_api=api,
     )
+
+    def _on_closing():
+        # UIスレッドで同期実行される＝ここでJSの結果を待つとデッドロックするので、止めてから別スレッドでJSへ依頼する
+        if close_state['force'] or not close_state['dirty']:
+            return True
+        def ask():
+            res = {}
+            def ev():
+                try:
+                    res['v'] = win.evaluate_js("window.__nlmAskQuit?window.__nlmAskQuit():'none'")
+                except Exception:
+                    res['v'] = None
+            t = threading.Thread(target=ev, daemon=True); t.start(); t.join(5)
+            if res.get('v') != 'ok':   # JSが応答しない/壊れている＝ダイアログを出せない→閉じられなくなるのを防ぐため終了させる
+                close_state['force'] = True
+                win.destroy()
+        threading.Thread(target=ask, daemon=True).start()
+        return False
+    win.events.closing += _on_closing
     try:
         webview.start()   # WebView2 (Edge Chromium) を使用。既定でメインスレッドをブロック。
     finally:

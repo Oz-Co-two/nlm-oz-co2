@@ -125,10 +125,11 @@ function clampCamera(){
   t.z=Math.max(zLo,Math.min(zHi,t.z));
 }
 controls.addEventListener('change',clampCamera);   // 操作時にも即時クランプ（毎フレームのtick側と二重で確実）
-window._cam=camera; window._ctl=controls;   // 開発用: コンソールから視点を確認・調整できるように公開
-window._dbg={ get state(){ return {musicBeat,musicSegs:structuredClone(musicSegs),markers:structuredClone(markers),notesLanes,lightLanes,cur,BPM,audio:!!audioBuf,songDur,sections:sections.length}; },
-  set musicBeat(v){ musicBeat=v; }, save(){ return buildProjectText(); }, apply(pj){ return applyProject(pj); },
-  exportJson(k){ return buildDiffJsonFor(projDiffs[k]); },
+// 開発用の窓口は「pywebview外（ブラウザ）かつURLに ?dev=1」の時だけ（配布版exe・通常利用には置かない。2026-09-28）
+const NLM_DEV=(()=>{ try{ return !window.pywebview&&new URLSearchParams(location.search).get('dev')==='1'; }catch(_){ return false; } })();
+if(NLM_DEV){ window._cam=camera; window._ctl=controls; }   // 開発用: コンソールから視点を確認・調整できるように公開
+if(NLM_DEV) window._dbg={ get state(){ return {musicBeat,musicSegs:structuredClone(musicSegs),markers:structuredClone(markers),notesLanes,lightLanes,cur,BPM,audio:!!audioBuf,songDur,sections:sections.length}; },
+  set musicBeat(v){ musicBeat=v; }, save(){ return buildProjectText(); }, apply(pj){ return applyProject(pj); },  exportJson(k){ return buildDiffJsonFor(projDiffs[k]); },
   dropInfo(item,x,y){ return dropInfoNodesFromItem(item,x,y); }, setDragMedia(it){ _dragMedia=it; },   // 診断用（MEDIA→INFOドロップの機械検証）
   extractArtwork(fh){ return extractArtwork(fh); },   // 診断用（埋め込みアートワーク抽出の検証）
   scanLibrary(dh){ return scanLibrary(dh); },
@@ -258,6 +259,7 @@ const KEYS_NOTE=[
   ['アーク','Alt + 🖱️ ホイール = mu（頭曲率）／ Ctrl + Alt + 🖱️ ホイール = tmu（尾曲率）'],
   ['チェーン','Ctrl + 🖱️ ホイール = 分割数 ／ Ctrl + Alt + 🖱️ ホイール = squish（詰め）'],
   ['壁のサイズ','S'],
+  ['直前ノーツ表示 切替','H'],
 ];
 const KEYS_LIGHT=[
   ['配置モード / カメラ固定モード切替','Q'],
@@ -302,6 +304,7 @@ const ACTIONS=[
   {id:'noteChain',   cat:'notes',  label:'チェーン作成',          def:{k:'t', c:true}},
   {id:'noteWall',    cat:'notes',  label:'壁のサイズ',            def:{k:'s'}},
   {id:'notePie',     cat:'notes',  label:'配置パイ',              def:{k:'w'}},
+  {id:'auxPrev',     cat:'notes',  label:'直前ノーツ表示 切替',   def:{k:'h'}},
   // LIGHTING
   {id:'lightCycle',  cat:'light',  label:'色を回転',              def:{k:'f'}},
   {id:'lightPie',    cat:'light',  label:'ライト動作パイ',        def:{k:'w'}},
@@ -489,6 +492,33 @@ playFloorLine.position.set(-3.5,0.014,0); playFloorLine.renderOrder=8; playFrame
 const playDiamond=new THREE.Mesh(new THREE.BoxGeometry(0.17,0.012,0.17),
   new THREE.MeshBasicMaterial({color:0xff3344,depthTest:false,depthWrite:false}));
 playDiamond.rotation.y=Math.PI/4; playDiamond.position.set(-NUMX,0.014,0); playDiamond.renderOrder=9; playFrame.add(playDiamond);   // 地面に接地（浮きを解消・ヘルバ様指定 2026-07-14）。最前面描画でマーカー等に埋もれない
+// ---- 直前ノーツ表示（補助グリッド・2026-09-27） ----
+// 基準拍より前にある赤/青それぞれの最後のノーツを、枠の左右外に置いた「半分グリッド(2×3)」へ位置・向きごと表示する。
+// 4×3を真ん中で割り、ワールド+x側の2列(lineIndex 0,1)は+x外側へ、-x側(2,3)は-x外側へずらす＝画面上の左右がそのまま対応
+// （赤用/青用ではない。クロス配置なら交差した側に出る）。基準: 配置モード=赤の再生ヘッド / カメラ固定モード=黄色の配置枠。
+// 再生中は非表示。直前がドットならドットのみ（それ以上は遡らない）。チェーンは尾の拍・尾のマスを終点とし頭の向きで扱う。
+const AUX_S=1.0, AUX_GAP=0.3, AUX_COLOR=0xc040ff;   // 色は再生ヘッド(赤)・カーソル(黄)と区別できる赤紫
+const auxGroup=new THREE.Group(); auxGroup.visible=false; noteRoot.add(auxGroup);
+let auxShow=localStorage.getItem('bsnm_auxprev')!=='0';   // 表示ON/OFF（設定のチェック＋Hキー。bsnm_*なので settings.json へ自動ミラー）
+function setAuxShow(on){ auxShow=!!on; try{ localStorage.setItem('bsnm_auxprev',auxShow?'1':'0'); }catch(_){}
+  const el=document.getElementById('auxPrevShow'); if(el) el.checked=auxShow;
+  if(typeof stat==='function') stat(auxShow?t('msg.auxPrevOn','直前ノーツ表示 ON'):t('msg.auxPrevOff','直前ノーツ表示 OFF')); }
+{ const el=document.getElementById('auxPrevShow');
+  if(el){ el.checked=auxShow; el.addEventListener('change',()=>setAuxShow(el.checked)); } }
+const auxNotes=new THREE.Group(); auxGroup.add(auxNotes);
+function auxHalfCenter(s){ return NOTE_DX+s*(2*LANE+0.05+AUX_GAP+AUX_S*LANE); }   // s=+1:+x側 / -1:-x側（赤枠の外端+隙間+半分グリッドの半幅）
+function auxCellPos(x,y){ const s=x<2?1:-1, wx=(1.5-x)*LANE+NOTE_DX;
+  return [auxHalfCenter(s)+(wx-(NOTE_DX+s*LANE))*AUX_S, BASE_Y+LAYER+(y-1)*LAYER*AUX_S]; }
+for(const s of [1,-1]){ const cx=auxHalfCenter(s), cy=BASE_Y+LAYER, w=2*LANE*AUX_S, h=3*LAYER*AUX_S;
+  const fr=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(w,h)),new THREE.LineBasicMaterial({color:AUX_COLOR}));
+  fr.position.set(cx,cy,0); auxGroup.add(fr);
+  const gp=[cx,cy-h/2,0, cx,cy+h/2,0];   // 縦の仕切り1本（2列）
+  for(const k of [-0.5,0.5]) gp.push(cx-w/2,cy+k*LAYER*AUX_S,0, cx+w/2,cy+k*LAYER*AUX_S,0);   // 横の仕切り2本（3行）
+  const gg=new THREE.BufferGeometry(); gg.setAttribute('position',new THREE.Float32BufferAttribute(gp,3));
+  auxGroup.add(new THREE.LineSegments(gg,new THREE.LineBasicMaterial({color:AUX_COLOR,transparent:true,opacity:0.35})));
+  const fill=new THREE.Mesh(new THREE.PlaneGeometry(w,h),
+    new THREE.MeshBasicMaterial({color:AUX_COLOR,transparent:true,opacity:0.08,side:THREE.DoubleSide,depthWrite:false}));
+  fill.position.set(cx,cy,0); auxGroup.add(fill); }
 let scrubDrag=false;   // シークの入口は拍番号レーンのみ（赤ライン掴みの旧ハンドルは廃止済み）
 
 // スナップ分割線
@@ -1063,7 +1093,7 @@ function deleteLightAt(){
     stat(tf('msg.lightDel','ライト削除: {lane} 拍{beat}',{lane:LIGHT_LANES[lightHover.lane].n,beat:best.beat})); return true; }
   return false;
 }
-[bgGrid,editGroup,mouseLine,playFrame,lightGroup,...subPool,...beatPool,...numPool,numStrip,specBand,...markerPool,...tmPool].forEach(tagHelper);
+[bgGrid,editGroup,auxGroup,mouseLine,playFrame,lightGroup,...subPool,...beatPool,...numPool,numStrip,specBand,...markerPool,...tmPool].forEach(tagHelper);
 
 // ---- 正面プレビュー用の様式化ライト器具（レイヤー2 = プレビューのみ表示） ----
 // モードごとに「編集していない側」を丸ごと隠す（ヘルバ様指定 2026-07-18）。
@@ -2992,9 +3022,10 @@ ndcv.addEventListener('contextmenu',e=>{ e.preventDefault();
         [t('ctx.rename','名前を変更…'),()=>{ const r2=_mkRects.find(q=>q.i===hit.i)||{x:sx,y:LRULER-MKRH+1,w:60};
           ndInlineEdit({x:r2.x-2,y:r2.y,w:Math.max(90,(r2.w||60)+24),h:MKRH-2},mk.name,v=>{ v=(v||'').trim();
             if(v){ mk.name=v; metaDirty=true; stat(tf('msg.markerName','マーカー名: {name}',{name:v})); } },false,ndcv); }],
-        [t('ctx.mkToPreview','▶ プレビュー開始に転送'),()=>{ const sec=Math.max(0,Math.round(beatToTimeTM(mk.beat)*100)/100);   // マーカー拍→秒（audio時間）をプレビュー開始へ
-          infoBase=infoBase||{}; infoBase._previewStartTime=sec; applyInfoChain(); metaDirty=true; if(typeof refreshMusicHdr==='function') refreshMusicHdr();
-          stat(tf('msg.mkToPreview','プレビュー開始を {sec}秒 に設定（マーカー「{name}」）',{sec,name:mk.name})); }],
+        [t('ctx.mkToPrev','▶ 試聴の開始に転送'),()=>{ const sec=audioPosAtBeat(mk.beat);   // マーカー拍→元の音源の秒を、アクティブ書き出しの試聴ノードの開始へ
+          if(sec==null){ showErr(t('msg.mkToPrevNoAudio','このマーカーの位置には音源がありません')); return; }
+          infoSnapshot(); setConnectedPrev(sec,null);
+          stat(tf('msg.mkToPrev','試聴の開始を {sec}秒 に設定しました（マーカー「{name}」）',{sec,name:mk.name})); }],
         [t('ctx.delMarker','マーカーを削除'),()=>{ snapshot('node'); markers.splice(hit.i,1); metaDirty=true; stat('マーカーを削除しました'); }],
       ]); }
     return; }
@@ -4279,6 +4310,44 @@ function attachNoteArrowMarks(grp, d, obj, markY=0){
   mb.rotation.set(0,0,THREE.MathUtils.degToRad(deg));
   mb.userData.obj=obj; grp.add(mb);
 }
+// ---- 直前ノーツ表示（補助グリッドへの描画。グリッド本体は playDiamond の直後で定義） ----
+/** 基準拍rbより前（rb自身は含まない）の赤/青それぞれ最後の拍のノーツ群。同じ拍に複数あれば全部 */
+function lastNotesBefore(rb){
+  const EPS=1e-6, best=[null,null];
+  const consider=(c,beat,x,y,d)=>{ if(!(beat<rb-EPS)) return;
+    const i=c===0?0:1, b=best[i];
+    if(!b||beat>b.beat+EPS) best[i]={beat,items:[{x,y,d}]};
+    else if(Math.abs(beat-b.beat)<=EPS) b.items.push({x,y,d}); };
+  for(const n of notes) consider(n.c,n.beat,n.x,n.y,n.d);
+  for(const ch of chains) consider(ch.c,ch.tb,ch.tx,ch.ty,ch.d);   // チェーン=尾が終点・向きは頭のd
+  return best;
+}
+let auxKey='', auxMats=null;
+const AUX_OPACITY=0.6;   // 実ノーツと見分けがつくよう半透明（ユーザー指定 2026-09-27。0.35ではスペクトル帯と重なると見えなかった）
+function updateAuxPrev(rb){
+  const best=lastNotesBefore(rb);
+  const key=mat(0).color.getHex()+'/'+mat(1).color.getHex()+'|'   // ノーツ色のカスタム変更にも追従
+    +best.map(b=>b?b.beat+':'+b.items.map(t=>t.x+','+t.y+','+t.d).join(';'):'-').join('|');
+  if(key===auxKey) return; auxKey=key;   // 変化した時だけ作り直す
+  if(!auxMats){ const tr=m=>{ const c=m.clone(); c.transparent=true; c.opacity=AUX_OPACITY; c.depthWrite=false; return c; };
+    auxMats={note:[tr(mat(0)),tr(mat(1))],arrow:tr(arrowMatS),dot:tr(dotMatS)}; }
+  for(const c of [0,1]){ auxMats.note[c].color.copy(mat(c).color); auxMats.note[c].emissive?.copy(mat(c).emissive); }
+  while(auxNotes.children.length) auxNotes.remove(auxNotes.children[0]);
+  const cl=(v,hi)=>Math.max(0,Math.min(hi,Math.round(v||0)));
+  best.forEach((b,c)=>{ if(!b) return;
+    for(const it of b.items){ const d=it.d??8;
+      const g=new THREE.Group();
+      const box=new THREE.Mesh(noteGeo,auxMats.note[c]);
+      if(d>=4&&d<=7) box.rotation.z=-Math.PI/4;   // buildNoteと同じ鏡映
+      g.add(box); attachNoteArrowMarks(g,d,null,0);
+      for(const m of g.children) if(m!==box) m.material=(d===8?auxMats.dot:auxMats.arrow);
+      box.renderOrder=6; for(const m of g.children) if(m!==box) m.renderOrder=7;   // スペクトル帯(renderOrder=5)より後に描く＝帯の向こうでも埋もれない
+      g.scale.set(AUX_S,AUX_S,AUX_S*NOTE_THIN);
+      const [px,py]=auxCellPos(cl(it.x,3),cl(it.y,2));
+      g.position.set(px,py,0);   // 全ノーツを補助グリッドの面上にそろえる（赤青が同じマスでも半透明なので両方見える）
+      auxNotes.add(g); } });
+  tagHelper(auxNotes);
+}
 /** チェーン親専用: 中央▲を箱中心に置く（通常ノーツの縁寄せ▲は半分箱で角に潰れる）。
     箱が向きに完全回転する（リファレンス図準拠）ため、マーク位置も回転後の箱中心へ追従させる */
 function attachChainHeadMarks(grp, d, obj){
@@ -5103,6 +5172,7 @@ const vmData=new Float32Array(analyser.fftSize);
 let audioBuf=null,srcNs=[],playing=false,startedAt=0,offset=0,playStartB=0;
 function aTime(){ return playing? offset+(actx.currentTime-startedAt): offset; }
 function play(){ if(!audioBuf)return;
+  stopPrevPlay();   // 試聴中なら止める（本編再生と排他）
   if(curAnim){ cur=curAnim.to; curAnim=null; }   // イージング中に再生したら着地点から
   if(camMode==='edit'&&vwB==null) vwB=viewBeat();   // 編集モードは再生開始時にビューアンカーを固定＝以後ヘッドだけが動きカメラ/ビューは非連動（2026-07-14改）
   // 再生中はvwBがヘッドに等速追走（両モード共通）: 画面上のヘッド位置は保ったまま世界がスクロールし、常に±24拍を描画キープ
@@ -5128,6 +5198,41 @@ function play(){ if(!audioBuf)return;
   }
   playing=true; document.getElementById('play').textContent='⏸'; }
 function stopS(){ for(const s of srcNs){ try{s.stop()}catch(e){} try{s.disconnect()}catch(e){} } srcNs=[]; }
+// ---- 試聴ノードの再生（Beat Saber選曲画面の近似: 区間の頭と終わりをフェードしてループ・2026-09-28）----
+// 音はMusicと同じ gain（Music音量・マスター音量に従う）へ流す。本編の再生(play)とは排他。
+// ※_pvPlay は var＝起動初期の refreshInfoCards から参照されても TDZ で落ちないように
+var _pvPlay=null;
+const PV_FADE=1.0;   // フェード秒（区間が短い時は長さの1/3まで縮める）
+function stopPrevPlay(){ if(!_pvPlay) return; const p=_pvPlay; _pvPlay=null; clearTimeout(p.timer);
+  for(const s of p.srcs){ try{s.stop()}catch(_){} try{s.disconnect()}catch(_){} }
+  try{ p.g.disconnect(); }catch(_){} try{ refreshInfoCards(); }catch(_){} }
+function startPrevPlay(id){
+  stopPrevPlay();
+  const n=infoGraph.nodes[id]; if(!n) return;
+  if(!audioBuf){ showErr(t('msg.pvNoAudio','音源が読み込まれていないため試聴できません')); return; }
+  if(playing) pause();
+  const st=Math.max(0,+n.data.start||0), du=Math.min(+n.data.dur||0,audioBuf.duration-st);
+  if(!(du>0.2)){ showErr(tf('msg.pvOutOfRange','試聴の開始 {sec}秒 が音源の長さ（{len}秒）を超えています',{sec:st,len:audioBuf.duration.toFixed(2)})); return; }
+  if(actx.state==='suspended') actx.resume();
+  const g=actx.createGain(); g.connect(gain);
+  const p=_pvPlay={id,g,srcs:[],timer:0}, fade=Math.min(PV_FADE,du/3);
+  const once=when=>{ if(_pvPlay!==p) return;
+    const s=actx.createBufferSource(); s.buffer=audioBuf;
+    const sg=actx.createGain(); s.connect(sg); sg.connect(g);
+    sg.gain.setValueAtTime(0,when); sg.gain.linearRampToValueAtTime(1,when+fade);
+    sg.gain.setValueAtTime(1,when+du-fade); sg.gain.linearRampToValueAtTime(0,when+du);
+    s.start(when,st,du); p.srcs.push(s); if(p.srcs.length>3) p.srcs.shift();
+    p.timer=setTimeout(()=>once(when+du),Math.max(0,(when+du-actx.currentTime-0.5)*1000)); };   // 次のループは終わる0.5秒前に予約＝継ぎ目なし
+  once(actx.currentTime+0.05);
+  try{ refreshInfoCards(); }catch(_){}
+}
+function togglePrevPlay(id){ if(_pvPlay&&_pvPlay.id===id) stopPrevPlay(); else startPrevPlay(id); }
+/** 拍位置→元の音源の秒（Musicの配置・カット・無音追加を考慮）。その拍に音が無ければ null */
+function audioPosAtBeat(beat){ if(!audioBuf) return null;
+  const tt=beatToTimeTM(beat), off0=getSongOff();
+  for(const sg of msegs()){ const rel=tt-beatToTimeTM(sg.beat);
+    if(rel>=0&&rel<sg.dur){ const p=off0+sg.off+rel; return (p>=0&&p<audioBuf.duration)?Math.round(p*100)/100:null; } }
+  return null; }
 function pause(){ offset=aTime(); stopS(); playing=false; vwPlayD=null; document.getElementById('play').textContent='▶'; }
 document.getElementById('vol').addEventListener('input',e=>{   // 右のフェーダー=マスター
   volCfg.m=+e.target.value; localStorage.setItem('bsnm_vol',JSON.stringify(volCfg));
@@ -5170,7 +5275,7 @@ applyShowKeys();
         if(chromaMode){ for(const ev of [...lightSelection]) if(lightHiddenEv(ev)) lightSelection.delete(ev); } }catch(_){}
       // 400msデバウンスを待たず settings.json へ即確定＝トグル直後にリロードしても保存が消えない（ヘルバ様報告の修正 2026-07-13）
       try{ const data={}; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.indexOf('bsnm_')===0) data[k]=localStorage.getItem(k); }
-        fetch('__settings/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data})}); }catch(_){}
+        fetch('__settings/save',{method:'POST',headers:{'Content-Type':'application/json','X-NLM-Request':'1'},body:JSON.stringify({data})}); }catch(_){}
       try{ updateChromaUI(); }catch(_){} stat(cm.checked?'Chromaモード ON（各ライト自由色・要Mod）':'バニラ配色モード（Mod無しでも全員に見える）'); }); } }
 // ---- ショートカット表示のフローティング化: 上部ドラッグで移動（親ペインの外へは出ない）・▾たたむ・✕閉じる=設定のチェックOFF（再表示は設定から） ----
 { const posSaved=JSON.parse(localStorage.getItem('bsnm_keypos')||'{}');
@@ -5476,7 +5581,7 @@ async function saveClipToAsset(sec){
   const data={nlmClip:1,type,name:sec.label||'clip',len:sec.len||8,
     content:{notes:c.notes||[],bombs:c.bombs||[],walls:c.walls||[],arcs:c.arcs||[],chains:c.chains||[],lights:c.lights||[]}};
   try{
-    const res=await fetch('__asset/save',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res=await fetch('__asset/save',{method:'POST',headers:{'Content-Type':'application/json','X-NLM-Request':'1'},
       body:JSON.stringify({name:data.name,data})});
     const j=await res.json();
     if(j&&j.ok){ await scanAssetLibrary(); showOk(tf('msg.assetSaved','アセットへ保存しました: {name}（{type}）',{name:(j.name||data.name+'.nlmclip').replace(/\.nlmclip$/i,''),type:type==='light'?'LIGHT':'NOTES'})); }
@@ -5494,14 +5599,14 @@ function renameAssetClip(item){
   const commit=async()=>{ if(done) return; const val=inp.value.trim(); done=true;
     const d=Object.assign(document.createElement('div'),{className:'libName'}); d.textContent=val||item.name; d.title=val||item.name; inp.replaceWith(d);
     if(val&&val!==item.name){
-      try{ const res=await fetch('__asset/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:item._fileName,to:val})});
+      try{ const res=await fetch('__asset/rename',{method:'POST',headers:{'Content-Type':'application/json','X-NLM-Request':'1'},body:JSON.stringify({from:item._fileName,to:val})});
         const j=await res.json(); if(j&&j.ok){ await scanAssetLibrary(); showOk(tf('msg.clipRenamed','クリップ名を変更しました: {name}',{name:val})); } else showErr(tf('msg.renameFail','改名に失敗: {err}',{err:(j&&j.error)||''})); }catch(e){ showErr(tf('msg.renameFail','改名に失敗: {err}',{err:e})); } } };
   nm.replaceWith(inp); inp.focus(); inp.select();
   inp.addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter') commit(); else if(e.key==='Escape') restore(); });
   inp.addEventListener('blur',commit);
 }
 async function deleteAssetClip(item){
-  try{ const res=await fetch('__asset/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:item._fileName})});
+  try{ const res=await fetch('__asset/delete',{method:'POST',headers:{'Content-Type':'application/json','X-NLM-Request':'1'},body:JSON.stringify({name:item._fileName})});
     const j=await res.json(); if(j&&j.ok){ await scanAssetLibrary(); showOk(tf('msg.clipDeleted','クリップを削除しました: {name}',{name:item.name})); } else showErr('削除に失敗'); }catch(e){ showErr(tf('msg.deleteFail','削除に失敗: {err}',{err:e})); }
 }
 function saveLibDirs(){ /* 無効化: FileSystemHandleのIndexedDB保存がWebView2でクラッシュするため */ }   // アセット(常時接続)は保存対象外
@@ -5683,8 +5788,9 @@ async function loadSongFromItem(item,beat){
     const inf=item.info||{};
     const bpm=+inf._beatsPerMinute;
     if(bpm>0){ infoBase=infoBase||{}; setBPMv(bpm); }   // カスタム曲=BPMを読み込み（infoBaseを用意して_beatsPerMinuteも保存）
-    if(inf._previewStartTime!=null&&inf._previewStartTime!==''){ infoBase=infoBase||{}; infoBase._previewStartTime=+inf._previewStartTime; }   // 試聴プレビュー区間も自動取り込み
-    if(inf._previewDuration!=null&&inf._previewDuration!==''){ infoBase=infoBase||{}; infoBase._previewDuration=+inf._previewDuration; }
+    { const has=v=>v!=null&&v!=='';   // 試聴区間も自動取り込み（アクティブ書き出しの試聴ノードへ）
+      if(has(inf._previewStartTime)||has(inf._previewDuration))
+        setConnectedPrev(has(inf._previewStartTime)?+inf._previewStartTime:null,has(inf._previewDuration)?+inf._previewDuration:null); }
     if(infoBase) applyInfoChain();
     buildWaveData();
     document.getElementById('tbgTime').style.display='';
@@ -5723,8 +5829,12 @@ async function dropInfoNodesFromItem(item,wx,wy){
   const hasArt=!!(item._coverBlob||item.coverURL);   // music アイテムの埋め込みアートワーク等（dirハンドル無し）
   if(info._coverImageFilename) infoGraph.nodes[cid].data.name=info._coverImageFilename;
   else if(hasArt) infoGraph.nodes[cid].data.name=(item.name||'artwork')+'.jpg';
+  let pid=null;   // Info.datに試聴区間があれば試聴ノードも（未接続で）配置
+  if(info._previewStartTime!=null&&info._previewStartTime!==''){ pid=addSrcNode('prev',wx,wy+460);
+    Object.assign(infoGraph.nodes[pid].data,{start:Math.max(0,+info._previewStartTime||0),
+      dur:(info._previewDuration!=null&&info._previewDuration!=='')?Math.max(0.5,+info._previewDuration):PREV_DEF.dur}); }
   _infoSnapSup=false;   // 抑制はawaitを跨がない（handle取得中のユーザー操作の履歴を飲み込まないため）
-  _inSel=new Set([mid,cid]); infoSelApply(); layoutInfoNodes(); metaDirty=true;   // 配置した2枚は選択済み=そのままドラッグでまとめて動かせる
+  _inSel=new Set([mid,cid,...(pid?[pid]:[])]); infoSelApply(); layoutInfoNodes(); metaDirty=true;   // 配置したノードは選択済み=そのままドラッグでまとめて動かせる
   if(info._coverImageFilename){
     try{ _coverHandles[cid]=await item.dir.getFileHandle(info._coverImageFilename); refreshInfoCards(); }catch(e){} }
   else if(hasArt){   // blob を疑似ハンドル({name,getFile})でカバーノードへ（_coverHandlesはランタイム専用なので安全）
@@ -5754,7 +5864,11 @@ async function dropInfoNodesFromItem(item,wx,wy){
         : ( mk(0,0,280,INFO_NODE_DEFS.meta[1],TL('node.meta','曲情報'),   // カスタム曲=曲情報＋カバー画像（設定は廃止・ヘルバ様指示）
              row(TL('f.name','曲名'),info._songName||_dragMedia.name)+row(TL('f.sub','サブ'),info._songSubName)
              +row(TL('f.artist','アーティスト'),info._songAuthorName)+row(TL('f.author','制作者'),info._levelAuthorName))
-          +mk(0,230,280,INFO_NODE_DEFS.cover[1],TL('node.cover','カバー画像'),coverBody) );
+          +mk(0,230,280,INFO_NODE_DEFS.cover[1],TL('node.cover','カバー画像'),coverBody)
+          +((info._previewStartTime!=null&&info._previewStartTime!=='')   // 試聴区間があれば試聴ノードも配置される
+            ?mk(0,460,280,INFO_NODE_DEFS.prev[1],TL('node.prev','試聴'),
+              row(TL('f.pvStart','開始'),(+info._previewStartTime).toFixed(2)+' '+t('ui.secUnit','秒'))
+              +row(TL('f.pvDur','長さ'),((info._previewDuration!=null&&info._previewDuration!=='')?+info._previewDuration:PREV_DEF.dur).toFixed(2)+' '+t('ui.secUnit','秒'))):'') );
       document.getElementById('infoWorld').appendChild(ghost); }
     const w=worldXY(e); ghost.style.left=w.x+'px'; ghost.style.top=w.y+'px'; };
   const hideGhost=()=>{ if(ghost){ ghost.remove(); ghost=null; } };
@@ -5953,6 +6067,7 @@ async function bulkLoadSongData(item){
   }catch(err){ showErr(tf('msg.bulkSongLoadFail','曲データの一括読込に失敗: {err}',{err})); }
 }
 document.getElementById('loadBtn').addEventListener('click', async ()=>{
+  if(!await confirmDiscard('switch')) return;   // 曲フォルダ読込もプロジェクトを置き換える
   if(window.showDirectoryPicker){
     try{ dirHandle=await showDirectoryPicker({mode:'readwrite'}); }catch{ return; }
     files={}; handles={};
@@ -5992,11 +6107,13 @@ async function afterFolder(){
   document.getElementById('saveAsBtn').style.display='';
   document.getElementById('openProjBtn').style.display='';
   document.getElementById('exportBtn').style.display='';
+  markSaved();
   if(pj) stat('プロジェクトを読み込みました（Ctrl+S=保存 / 書き出し=.dat生成）');
 }
 // プロジェクトデータの適用（pj=null なら .dat からの新規プロジェクト扱い）
 function resetAllState(){   // 新規/開く/最近使った の直前に全状態を初期化＝前ファイルの残留（特にフラット配列と_flatDirty）が新ファイルのクリップへ混入するのを防止（ヘルバ様報告のデータ混在バグ対策）
   if(playing) pause();
+  stopPrevPlay();
   notes=[]; bombs=[]; walls=[]; arcs=[]; chains=[]; lightEvents=[];   // フラット（譜面データ）を必ずクリア
   sections=[];                                                         // クリップ構成もクリア
   projDiffs={}; currentDiffName=''; rawDiff=null;
@@ -6069,7 +6186,9 @@ async function applyProject(pj){
     layerMuteS=new Set(ls.mute||[]); layerSoloS=new Set(ls.solo||[]); layerLockS=new Set(ls.lock||[]); }
   infoGraph=(pj&&pj.infoGraph)?Object.assign(defaultInfoGraph(),structuredClone(pj.infoGraph)):defaultInfoGraph();
   infoGraph.cam={x:0,y:0,s:1,auto:1};   // 保存済みカメラは使わない（起動時は常に全ノード中央=「.」と同じ状態から）
-  sanitizeInfoGraph(); layoutInfoNodes(); applyInfoGraph();   // INFOノード復元（旧形式は移行）→接続ノードを確定情報として反映
+  sanitizeInfoGraph();
+  if(!(pj&&pj.infoGraph&&pj.infoGraph.prevMig)) migratePrevNode();   // 試聴ノード導入前のプロジェクト/プロジェクト無しのInfo.dat読込=曲情報の試聴区間を試聴ノードへ
+  layoutInfoNodes(); applyInfoGraph();   // INFOノード復元（旧形式は移行）→接続ノードを確定情報として反映
   await restoreCoversFromB64(pj);   // 同梱base64からカバー画像を復元（再取得より優先＝確実）。全読込経路(_dbg.apply/recent含む)で有効
   if(!(pj&&+pj.version>=2)){   // v2はsectionsをloadDiffがdifficulties[current]から復元済み（トップレベル重複は廃止）。v1/旧形式のみここでsectionsを組む
     sections=[];
@@ -6196,10 +6315,12 @@ async function applyOpenedProject(pj,fh){
   document.getElementById('saveBtn').style.display='';
   document.getElementById('saveAsBtn').style.display='';
   document.getElementById('exportBtn').style.display='';
+  markSaved();
   if(audioBuf) showOk(tf('msg.projOpened','プロジェクトを開きました: {name}',{name:fh.name}));
   else showOk(tf('msg.projOpenedNoAudio','プロジェクトを開きました: {name}　※音源が未読込です — ファイル→音楽ファイルを読み込む…から開いてください',{name:fh.name}));
 }
 async function openProjectFile(){
+  if(!await confirmDiscard('switch')) return;
   let fh;
   try{ [fh]=await showOpenFilePicker({types:[{description:'Non-Linear Mapperプロジェクト',accept:{'application/octet-stream':['.nlmf','.bslm','.bsnm']}}]}); }
   catch(e){ return; }
@@ -6230,6 +6351,7 @@ async function openFromNativeArg(){
   document.getElementById('saveBtn').style.display='';
   document.getElementById('saveAsBtn').style.display='';
   document.getElementById('exportBtn').style.display='';
+  markSaved();
   if(audioBuf) showOk(tf('msg.projOpened','プロジェクトを開きました: {name}',{name:_nativeSaveName}));
   else showOk(tf('msg.projOpenedNoAudio','プロジェクトを開きました: {name}　※音源が未読込です — ファイル→音楽ファイルを読み込む…から開いてください',{name:_nativeSaveName}));
 }
@@ -6428,26 +6550,26 @@ async function rotateBakDisk(dir, baseName, oldText){ try{   // ディレクト�
     const w=await (await dir.getFileHandle(bn(i+1),{create:true})).createWritable(); await w.write(t); await w.close(); }catch(_){} }
   const w=await (await dir.getFileHandle(bn(1),{create:true})).createWritable(); await w.write(oldText); await w.close(); }catch(e){} }
 // 保存 = project.nlmf（元の .dat は変更しない）。saveAs=true で保存先を選択
-async function saveProject(saveAs=false){
-  if(!sections.length){ showErr('保存対象がありません'); return; }
+async function saveProject(saveAs=false){   // 戻り値: 保存できたら true（キャンセル/失敗は false）
+  if(!sections.length){ showErr('保存対象がありません'); return false; }
   await refreshCoverB64();   // カバー画像をbase64化してから同梱（保存で画像が消えない）
   const text=buildProjectText();
   // exe版でダブルクリック起動したファイルは、同じネイティブパスへ serve.py 経由で書き戻す（上書き保存）。
   // 「名前を付けて保存」時は下のピッカー経路へ（新しい保存先を選ぶ＝ネイティブ解除）。
   if(_nativeSavePath && !saveAs){
     try{
-      const r=await fetch('__openarg/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+      const r=await fetch('__openarg/save',{method:'POST',headers:{'Content-Type':'application/json','X-NLM-Request':'1'},body:JSON.stringify({text})});
       const j=await r.json();
-      if(j&&j.ok){ metaDirty=false; showOk(tf('msg.projSaved','プロジェクト保存: {name}',{name:_nativeSaveName})); }
+      if(j&&j.ok){ metaDirty=false; showOk(tf('msg.projSaved','プロジェクト保存: {name}',{name:_nativeSaveName})); markSaved(); return true; }
       else showErr(tf('msg.saveFail','保存失敗: {err}',{err:(j&&j.error)||'?'}));
     }catch(err){ showErr(tf('msg.saveFail','保存失敗: {err}',{err})); }
-    return;
+    return false;
   }
   if(saveAs) _nativeSavePath='';   // 名前を付けて保存＝以後は選んだ保存先へ
   if(saveAs||(!projFileHandle&&!dirHandle)){
     try{ projFileHandle=await showSaveFilePicker({suggestedName:'project.nlmf',
       types:[{description:'Non-Linear Mapperプロジェクト',accept:{'application/octet-stream':['.nlmf']}}]}); }
-    catch(e){ return; }                       // キャンセル
+    catch(e){ return false; }                 // キャンセル
   }
   try{
     if(projFileHandle){                       // 指定した保存先へ
@@ -6466,8 +6588,102 @@ async function saveProject(saveAs=false){
       metaDirty=false; projFileHandle=projFileHandle||fh;
       showOk('プロジェクト保存: 曲フォルダ/project.nlmf');
     }
-  }catch(err){ showErr(tf('msg.saveFail','保存失敗: {err}',{err})); }
+  }catch(err){ showErr(tf('msg.saveFail','保存失敗: {err}',{err})); return false; }
+  markSaved(); return true;
 }
+// ============ 未保存検知（ランプ＋終了/新規/開く時の確認・2026-09-27） ============
+// 判定は「保存時点のプロジェクト内容」との比較＝Ctrl+Zで保存時点まで戻せばランプは消える。
+// metaDirty は履歴に積まれる編集(snapshot)で立たない・Undoで戻らない等の穴があるため判定には使わない。
+// projSig は buildProjectText と同じ項目を副作用なしで直列化したもの（保存されない選択・カメラ・savedAt・カバー画像本体は除外）。
+// 難易度は「フラット配列＋クリップ構成(content除く)」で統一表現＝難易度を切り替えただけでは変化しない。
+let _savedSig=null, _dirtyNow=false, _dirtyT=0, _inputSinceBase=false;
+const _sigArr=(arr,tp)=>{ const d=_ENC[tp]; return (arr||[]).map(o=>{ const a=d.f.map(k2=>o[k2]??null); const x=_rawX(o.raw,tp); if(x) a.push(x); return a; }); };
+const _sigSec=s=>{ const {content,_diffName,...r}=s; return r; };
+function projSig(){
+  const dOut={};
+  const put=(k2,st)=>{ dOut[k2]={n:_sigArr(st.notes,'notes'),b:_sigArr(st.bombs,'bombs'),w:_sigArr(st.walls,'walls'),a:_sigArr(st.arcs,'arcs'),
+    c:_sigArr(st.chains,'chains'),l:_sigArr(st.lightEvents,'lights'),s:(st.sections||[]).map(_sigSec)}; };
+  for(const k2 in projDiffs) put(k2,projDiffs[k2]);
+  if(currentDiffName) put(currentDiffName.toLowerCase(),{notes,bombs,walls,arcs,chains,lightEvents,sections});   // 現難易度は退避前の生データが正
+  const noH=o=>o?(({handle,...r})=>r)(o):null;
+  // 書き出し先ミラー(graphIO.out)は INFOのUndo等で「値なし→空文字」に整えられる＝同じ意味なので揃えて比較（旧プロジェクトでの誤検知防止）
+  const gio=graphIO?{...graphIO,out:graphIO.out?{...graphIO.out,folderName:graphIO.out.folderName||'',outDirName:graphIO.out.outDirName||'',outDirPath:graphIO.out.outDirPath||''}:graphIO.out}:{};
+  const info=infoBase?{...infoBase,_beatsPerMinute:undefined}:null;   // BPMの写し（BPM変更で後から書き足される）はbpmで比較済み＝戻しても差分が残る誤検知を防ぐ
+  return JSON.stringify({bpm:BPM,tempoParts,musicBeat,musicSegs,songDeleted,col:[RED,BLUE,LRED,LBLUE],markers,notesLanes,lightLanes,info,
+    ig:{...infoGraph,cam:undefined},njsCfg,chainCurveGlobal,cpal:_cpal,lanes:[[...layerMuteS],[...layerSoloS],[...layerLockS]],
+    graph:{...gio,edges:graphEdges,song:noH(songNode),extra:extraNodes.map(noH),altIns,altOuts,altSongs:altSongs.map(noH),activeUids},d:dOut});
+}
+function setDirtyLamp(on){
+  on=!!on; if(on===_dirtyNow) return; _dirtyNow=on;
+  const el=document.getElementById('dirtyLamp'); if(el) el.classList.toggle('on',on);
+  try{ window.pywebview&&window.pywebview.api&&window.pywebview.api.set_dirty&&window.pywebview.api.set_dirty(on); }catch(_){}   // exe版: 閉じる時の確認要否をPython側へ
+}
+/** 今の内容を「保存済み」の基準にする（保存成功・新規・開いた直後） */
+function markSaved(){ try{ _savedSig=projSig(); }catch(e){ _savedSig=null; } _inputSinceBase=false; setDirtyLamp(false); }
+function checkDirty(){
+  let sig; try{ sig=projSig(); }catch(e){ return _dirtyNow; }
+  // 基準を取ってから利用者がまだ何も操作していない＝起動/読込直後の非同期な後処理（音源の自動接続等）による変化は基準へ吸収する
+  if(!_inputSinceBase||_savedSig==null){ _savedSig=sig; setDirtyLamp(false); return false; }
+  setDirtyLamp(sig!==_savedSig); return _dirtyNow;
+}
+setTimeout(markSaved,0);   // 起動直後の状態を基準に（モジュール初期化の完了後に実行される）// 操作の「開始」（編集ハンドラより先＝windowのcapture）で、基準取得後の初操作なら直前の状態を基準へ取り直す＝非同期の初期化完了分は吸収しつつ利用者の編集は漏らさない
+function dirtyInputStart(){ if(_inputSinceBase) return; try{ _savedSig=projSig(); }catch(_){} _inputSinceBase=true; }
+function checkDirtySoon(){ dirtyInputStart(); clearTimeout(_dirtyT); _dirtyT=setTimeout(checkDirty,500); }   // 操作が落ち着いてから比較（ドラッグ中などに重くしない）
+for(const ev of ['pointerdown','keydown','dragenter']) addEventListener(ev,dirtyInputStart,{capture:true,passive:true});
+for(const ev of ['pointerup','keyup','wheel','change','input','drop']) addEventListener(ev,checkDirtySoon,{capture:true,passive:true});
+setInterval(()=>{ if(!playing) checkDirty(); },4000);   // 操作後に非同期で反映される変更（BPM測定の結果など）の拾い漏れ対策／操作前は基準の追従
+addEventListener('beforeunload',e=>{ if(!window.pywebview&&checkDirty()){ e.preventDefault(); e.returnValue=''; } });   // ブラウザ版(serve.py)はブラウザ標準の確認で代用
+/** 未保存があれば3択で確認。続行してよければ true。kind='quit'=終了 / 'switch'=新規・開く */
+function confirmDiscard(kind){
+  if(!checkDirty()) return Promise.resolve(true);
+  const q=kind==='quit';
+  return new Promise(res=>{
+    const bg=document.createElement('div'); bg.id='dirtyDlgBg';
+    const dlg=document.createElement('div'); dlg.id='dirtyDlg'; bg.appendChild(dlg);
+    const msg=document.createElement('div'); msg.className='ddMsg';
+    msg.textContent=t('dlg.dirtyMsg','保存していない変更があります。\n保存しますか？'); dlg.appendChild(msg);
+    const row=document.createElement('div'); row.className='ddBtns'; dlg.appendChild(row);
+    const done=v=>{ removeEventListener('keydown',onKey,true); bg.remove(); res(v); };
+    const mk=(label,cls,fn)=>{ const b=document.createElement('button'); b.textContent=label; if(cls) b.className=cls; b.addEventListener('click',fn); row.appendChild(b); return b; };
+    const bSave=mk(q?t('dlg.saveQuit','保存して終了'):t('dlg.saveCont','保存して続行'),'pri',async()=>{
+      bg.style.display='none';   // 保存のファイル選択と重ならないように一旦隠す
+      const ok=await saveProject(false);
+      if(ok&&!checkDirty()) done(true); else bg.style.display='';   // 保存キャンセル/失敗＝続行しない（ダイアログに戻る）
+    });
+    mk(q?t('dlg.discardQuit','保存せずに終了'):t('dlg.discardCont','保存せずに続行'),'',()=>done(true));
+    mk(t('word.cancel','キャンセル'),'',()=>done(false));
+    const onKey=e=>{ if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); done(false); } else e.stopPropagation(); };   // 裏のショートカットを発火させない
+    addEventListener('keydown',onKey,true);
+    document.body.appendChild(bg); bSave.focus();
+  });
+}
+// exe版: ウィンドウの×（Python側の closing で未保存時だけ止めてここを呼ぶ）
+// ---- 開発用の読み取り専用窓口（?dev=1 のブラウザ時のみ。tools/cdp.py の検証用）----
+// 状態を「複製して返す」だけで、書き換え・保存・読込の機能は持たない。操作は本物のマウス/キー入力で行う。
+if(NLM_DEV) window._dbgApp=Object.freeze({
+  state:()=>({cur,BPM,lightMode,camMode,placeMode,playing,diff:currentDiffName,brush:{...brush},
+    counts:{notes:notes.length,bombs:bombs.length,walls:walls.length,arcs:arcs.length,chains:chains.length,lights:lightEvents.length},
+    sel:selection.size,undo:undoStack.length,redo:redoStack.length}),
+  notes:()=>structuredClone({notes:notes.map(({raw,...r})=>r),chains:chains.map(({raw,...r})=>r)}),
+  infoGraph:()=>structuredClone(infoGraph),
+  dirty:()=>{ let same=null; try{ same=projSig()===_savedSig; }catch(_){} return {lamp:_dirtyNow,same,inputSinceBase:_inputSinceBase}; },
+  sigPair:()=>({now:projSig(),saved:_savedSig}),   // 未保存判定の比較対象（誤検知の調査用。差分は呼び出し側で取る）
+  aux:()=>({visible:auxGroup.visible,key:auxKey,show:auxShow}),
+  prev:()=>({playing:!!_pvPlay,id:_pvPlay?_pvPlay.id:null,connected:connectedNodeId('prev'),
+    infoStart:infoBase?infoBase._previewStartTime:null,infoDur:infoBase?infoBase._previewDuration:null,leadInMs:getLeadInMs()}),
+  audioPosAtBeat:b=>audioPosAtBeat(b),
+  view:()=>nodeColMode,
+  /** 3Dビューのマス(x=lineIndex,y=lineLayer)の画面座標（ページ座標px）。配置グリッドが出ている時のクリック位置に使う */
+  cellScreen:(x,y)=>{ const p=cellPlanes.find(c=>c.userData.x===x&&c.userData.y===y); if(!p) return null;
+    const v=p.getWorldPosition(new THREE.Vector3()).project(camera), r=cv.getBoundingClientRect();
+    return {x:r.left+(v.x+1)/2*r.width, y:r.top+(1-v.y)/2*r.height, onScreen:Math.abs(v.x)<=1&&Math.abs(v.y)<=1}; },
+});
+// 同期で 'ok' を返す＝Python側はJSが生きていることだけ確認して待たない（結果はquit_appで伝える）
+window.__nlmAskQuit=()=>{
+  if(document.getElementById('dirtyDlgBg')) return 'ok';   // 既にダイアログ表示中（×の連打）
+  confirmDiscard('quit').then(ok=>{ if(ok){ try{ window.pywebview.api.quit_app(); }catch(_){} } });
+  return 'ok';
+};
 // 書き出し = Info.dat + 各難易度 .dat を実ファイルとして生成（初回のみ .bsnm.bak バックアップ）
 let njsCfg={};   // 難易度キー(小文字 例:hardstandard.dat) → {njs, offset} ユーザー編集値。未設定は元曲(srcNjsOf)→ランク既定へフォールバック
 const _DIFF_RANK={Easy:1,Normal:3,Hard:5,Expert:7,ExpertPlus:9};
@@ -6562,7 +6778,7 @@ async function exportMap(forceEgg=false){
             stat(t('m:song.eggへ変換中…（ffmpeg）','song.eggへ変換中…（ffmpeg）'));
             const ext=(f.name.match(/\.([^.]+)$/)||[,'bin'])[1].toLowerCase();
             let qs='ext='+encodeURIComponent(ext); if(leadInMs>0) qs+='&leadInMs='+leadInMs;
-            let r; try{ r=await fetch('__convert/toOgg?'+qs,{method:'POST',body:buf}); }catch(e){ r=null; }
+            let r; try{ r=await fetch('__convert/toOgg?'+qs,{method:'POST',headers:{'X-NLM-Request':'1'},body:buf}); }catch(e){ r=null; }
             if(r&&r.ok&&(r.headers.get('content-type')||'').includes('audio')){
               outBuf=await r.arrayBuffer();
             } else {
@@ -6587,7 +6803,8 @@ async function exportMap(forceEgg=false){
   const info={ _version:'2.1.0',
     _songName:b._songName||'', _songSubName:b._songSubName||'', _songAuthorName:b._songAuthorName||'', _levelAuthorName:b._levelAuthorName||'',
     _beatsPerMinute:BPM, _songTimeOffset:numv(b._songTimeOffset,0), _shuffle:numv(b._shuffle,0), _shufflePeriod:numv(b._shufflePeriod,0.5),
-    _previewStartTime:numv(b._previewStartTime,12), _previewDuration:numv(b._previewDuration,10),
+    _previewStartTime:Math.round((numv(b._previewStartTime,PREV_DEF.start)+getLeadInMs()/1000)*1000)/1000,   // 試聴ノードは元音源の秒＝song.eggに焼き込む無音ぶんを足す
+    _previewDuration:numv(b._previewDuration,PREV_DEF.dur),
     _songFilename:'song.egg', _coverImageFilename:coverName||b._coverImageFilename||'',
     _environmentName:b._environmentName||(srcInfo()||{})._environmentName||'DefaultEnvironment', _allDirectionsEnvironmentName:b._allDirectionsEnvironmentName||(srcInfo()||{})._allDirectionsEnvironmentName||'GlassDesertEnvironment',
     _difficultyBeatmapSets:[{ _beatmapCharacteristicName:'Standard',
@@ -8137,6 +8354,10 @@ addEventListener('keydown', e=>{
         stat('ノーツの色を反転しました'+(targets.length>1?` ×${targets.length}`:'')); }
       else if(o&&o.c==null) stat('F: このオブジェクトに色はありません');
       else setColor(brush.c===0?1:0,false); } return; }
+  // 直前ノーツ表示の切替（どのペインでも効く・設定のチェックと連動）。
+  // 旧版で他の操作をHへ割り当て済みの利用者の設定を壊さないよう、ユーザーが明示的に同じキーへ割り当てた操作があればそちらを優先
+  if(!lightMode&&hit(e,'auxPrev')&&!ACTIONS.some(a=>a.id!=='auxPrev'&&_keymap[a.id]&&sameBind(_keymap[a.id],effBind('auxPrev')))){
+    if(!e.repeat) setAuxShow(!auxShow); return; }
   if(hoverPane==='node'){                                                 // NODEペイン専用キー（NOTES系はここで遮断）
     if(nodeColMode==='info'){                                             // INFOノード画面のキー（NLEのクリップ操作はここで遮断）
       { const _sa=hit(e,'saveAs'),_sv=hit(e,'save'); if(_sa||_sv){ e.preventDefault(); saveProject(_sa); return; } }
@@ -8356,17 +8577,33 @@ function sanitizeFolderName(v){ return v.replace(/[^A-Za-z0-9 \-_.()\[\]&'!+,]/g
 // ---- INFO画面のノード化（Phase1・ヘルバ様指示）: 既存カード=ノード（フィールドの配線は無変更）。ドラッグ/パン/ズーム/右クリック追加削除＋OUTPUTへの配線表示 ----
 // 各ノード=独立したデータ箱。書き出しノードに接続されている箱だけが「確定情報」としてアプリへ反映される
 // （未接続=保管のみ・切断=右下表示等からも消える・繋ぎ替え=即差し替え。旧ノードシステムのaltIns/activeUidsと同じ思想）
-const INFO_NODE_DEFS={meta:['曲情報','#e36ea8'],set:['設定','#9a9aa6'],cover:['カバー画像','#4dc8ff']};   // 曲情報=ピンク/設定=灰/カバー=青（ヘルバ様指示）
-const INFO_SRCS=['meta','cover','set'];   // 書き出しノードの入力ポート順＝ピンク(曲情報)→青(カバー)→灰(設定)
+const INFO_NODE_DEFS={meta:['曲情報','#e36ea8'],set:['設定','#9a9aa6'],cover:['カバー画像','#4dc8ff'],prev:['試聴','#5fcf7a']};   // 曲情報=ピンク/設定=灰/カバー=青（ヘルバ様指示）/試聴=緑（2026-09-28）
+const INFO_SRCS=['meta','cover','set','prev'];   // 書き出しノードの入力ポート順＝ピンク(曲情報)→青(カバー)→灰(設定)→緑(試聴)
+// 試聴=Beat Saberの選曲画面で流れる区間（Info.datの_previewStartTime/_previewDuration）。
+// start/durは「元の音源」の秒。書き出し時に無音追加(leadIn)ぶんを足す（song.eggの先頭に無音が焼き込まれるため）
+const PREV_DEF={start:12,dur:10};   // 未接続時もこの値で書き出す（Beat Saber/旧版の既定と同じ）
 function defInfoData(t){ return t==='meta'?{name:'',sub:'',artist:'',author:''}
   :t==='set'?{red:0xff274d,blue:0x3092ff,lred:0xff274d,lblue:0x3092ff,lredB:0xff6f9f,lblueB:0x6fdcff,env:'',diffs:{}}
+  :t==='prev'?{...PREV_DEF}
   :{name:''}; }
 function defaultInfoGraph(){ return {
   nodes:{m1:{t:'meta',x:24,y:16,data:defInfoData('meta')},
          s1:{t:'set',x:336,y:16,data:defInfoData('set')},
-         c1:{t:'cover',x:24,y:206,data:defInfoData('cover')}},nseq:1,
+         c1:{t:'cover',x:24,y:206,data:defInfoData('cover')},
+         p1:{t:'prev',x:336,y:300,data:defInfoData('prev')}},nseq:1,
   outs:{o1:{x:660,y:100,folderName:'',outDirName:'',outDirPath:''}},activeOut:'o1',oseq:1,
-  edges:[{s:'m1',o:'o1'},{s:'s1',o:'o1'},{s:'c1',o:'o1'}],cam:{x:0,y:0,s:1,auto:1}}; }
+  edges:[{s:'m1',o:'o1'},{s:'s1',o:'o1'},{s:'c1',o:'o1'},{s:'p1',o:'o1'}],cam:{x:0,y:0,s:1,auto:1},prevMig:1}; }
+/** 試聴ノード導入前のデータ（旧プロジェクト/Info.dat読込）: 曲情報(infoBase)にあった試聴区間を試聴ノードへ移す。
+    試聴ノードが無ければ作って全書き出しノードへ繋ぐ（旧版は1つの値が全書き出しに効いていたため） */
+function migratePrevNode(){
+  const ib=infoBase||{}, num=(v,d)=>(v!=null&&v!==''&&isFinite(+v))?+v:d;
+  let pid=Object.keys(infoGraph.nodes).find(id=>infoGraph.nodes[id].t==='prev');
+  if(!pid){ let y=16; for(const id in infoGraph.nodes) y=Math.max(y,(infoGraph.nodes[id].y||0)+230);
+    pid='p'+(++infoGraph.nseq); infoGraph.nodes[pid]={t:'prev',x:24,y,data:defInfoData('prev')};
+    for(const oid in infoGraph.outs) infoGraph.edges.push({s:pid,o:oid}); }
+  Object.assign(infoGraph.nodes[pid].data,{start:num(ib._previewStartTime,PREV_DEF.start),dur:num(ib._previewDuration,PREV_DEF.dur)});
+  infoGraph.prevMig=1;
+}
 function sanitizeInfoGraph(){
   if(!infoGraph.outs){   // 旧形式（out単一・edges=文字列配列）
     const p=(infoGraph.pos&&infoGraph.pos.out)||{x:800,y:110};
@@ -8435,6 +8672,18 @@ function infoNodeT(id){ const n=infoGraph.nodes[id]; return n?n.t:null; }
 function connectedNodeId(t,oid){ oid=oid||infoGraph.activeOut;   // そのoutに接続中の指定タイプのノード（最後に繋いだもの）
   for(let i=(infoGraph.edges||[]).length-1;i>=0;i--){ const ed=infoGraph.edges[i];
     if(ed.o===oid&&infoNodeT(ed.s)===t) return ed.s; } return null; }
+/** アクティブな書き出しに繋がった試聴ノードへ値を入れる（無ければ作って繋ぐ）。null=その項目は変えない。
+    Undoの区切りは呼び出し側で取る（曲読込の自動取り込みは履歴に積まない） */
+function setConnectedPrev(start,dur){
+  let pid=connectedNodeId('prev');
+  if(!pid){ const o=infoGraph.outs[infoGraph.activeOut]||{x:660,y:100}, sup=_infoSnapSup; _infoSnapSup=true;
+    pid=addSrcNode('prev',Math.max(0,o.x-320),o.y+260);
+    infoGraph.edges.push({s:pid,o:infoGraph.activeOut}); _infoSnapSup=sup; }
+  const d=infoGraph.nodes[pid].data;
+  if(start!=null&&isFinite(start)) d.start=Math.max(0,Math.round(start*100)/100);
+  if(dur!=null&&isFinite(dur)) d.dur=Math.max(0.5,Math.round(dur*100)/100);
+  metaDirty=true; applyInfoGraph(); try{ drawInfoEdges(); }catch(_){}
+  return pid; }
 function applyInfoGraph(){   // アクティブな書き出しに接続されたノードだけを確定情報としてアプリへ反映
   infoBase=infoBase||{};
   const mid=connectedNodeId('meta'), m=mid&&infoGraph.nodes[mid];
@@ -8456,6 +8705,8 @@ function applyInfoGraph(){   // アクティブな書き出しに接続された
     else if(cv){ cv.name=''; cv.handle=null; }
     _coverKey=''; _inspCoverKey='';
   }
+  { const pid=connectedNodeId('prev'), p=pid&&infoGraph.nodes[pid];   // 試聴区間（元音源の秒。書き出しで無音追加ぶんを足す）
+    infoBase._previewStartTime=p?+p.data.start:PREV_DEF.start; infoBase._previewDuration=p?+p.data.dur:PREV_DEF.dur; }
   infoDirty=true; applyInfoChain(); metaDirty=true;
   if(typeof refreshInfoCards==='function') refreshInfoCards();
   // 環境が確定/変更されたらV2プレビューへ追従（曲読込・環境ノード変更）。
@@ -8575,7 +8826,7 @@ function refreshOutCards(){
     el.querySelector('.oReconnect').style.display=(act&&needsReconnect())?'':'none';
     { const h2=el.offsetHeight||160;
       el.querySelectorAll('.oPort').forEach(pd=>{ const k=pd.dataset.oport.split('|')[1], dot=pd.querySelector('i');
-        pd.style.top=(h2/2+(INFO_SRCS.indexOf(k)-1)*20-15)+'px';   // 縦中央に3つ（高さ変化に追従）
+        pd.style.top=(h2/2+(INFO_SRCS.indexOf(k)-(INFO_SRCS.length-1)/2)*20-15)+'px';   // 縦中央に並べる（ポート数・高さ変化に追従）
         const on=(infoGraph.edges||[]).some(ed=>ed.o===oid&&infoNodeT(ed.s)===k), col=INFO_NODE_DEFS[k][1];
         dot.style.background=on?col:'#1b1b1d';
         dot.style.border=on?'1.5px solid #141416':('3px solid '+col); }); }
@@ -8597,6 +8848,12 @@ function srcCardHTML(t){
       </div></div>
     <div class="nDiffs" style="display:grid;grid-template-columns:auto;gap:3px 14px;padding:6px 11px 0;">`+
     OUT_DIFFS.map(d=>`<label class="iDiff"><input type="checkbox" data-d="${d}">${d==='ExpertPlus'?'Expert+':d}</label>`).join('')+`</div>`;
+  if(t==='prev'){ const fld=(k,lb)=>`<div class="iRow"><label>${lb}</label>
+      <div class="bfField pvF" data-f2="${k}" style="flex:1;height:24px;justify-content:space-between;"><span class="bfA" data-k="dn">‹</span><span class="bfV" style="cursor:text;"></span><span class="bfA" data-k="up">›</span></div></div>`;
+    return `<h3 data-i18n="node.prev">${TL('node.prev','試聴')}</h3>
+    ${fld('start',TL('f.pvStart','開始'))}${fld('dur',TL('f.pvDur','長さ'))}
+    <button class="iBtn pvPlay"></button>
+    <div style="font-size:10px;color:#8a8a92;padding:0 11px;line-height:1.5;">${TL('ui.pvHint','Beat Saberの選曲画面で流れる区間（元の音源の秒）。無音追加ぶんは書き出し時に自動で足します')}</div>`; }
   return `<h3 data-i18n="node.cover">${TL('node.cover','カバー画像')}</h3>
     <button class="iBtn nPick" style="text-align:left">📁 ${TL('ui.selImage','画像を選択…')}</button>
     <img class="nThumb" style="width:calc(100% - 22px);height:auto;border-radius:6px;margin:0 11px;display:none;object-fit:contain;" alt="">
@@ -8630,6 +8887,14 @@ function renderInfoCards(){
         if(pr){ const nd2=infoGraph.nodes[id]; if(nd2){ infoSnapshot(); nd2.data.name=pr.fh.name; nd2.data.nativePath=pr.path; _coverHandles[id]=pr.fh;
           metaDirty=true; applyInfoGraph(); } }
         refreshInfoCards(); });
+      if(n.t==='prev'){   // 試聴: 開始/長さ（‹›=±1秒・Shift+‹›=±0.1秒・数値クリック=手入力）＋試聴ボタン
+        el.querySelectorAll('.pvF').forEach(fe=>{ const k=fe.dataset.f2;
+          wireStepper(fe,{get:()=>{ const nd2=infoGraph.nodes[id]; return nd2?(+nd2.data[k]||0):0; },
+            set:v=>{ const nd2=infoGraph.nodes[id]; if(!nd2||!isFinite(v)) return; infoSnapBurst();
+              nd2.data[k]=Math.max(k==='dur'?0.5:0,Math.round(v*100)/100); metaDirty=true; applyInfoGraph();
+              if(_pvPlay&&_pvPlay.id===id) startPrevPlay(id); },   // 試聴中に変えたら新しい区間で鳴らし直す
+            fmt:x=>(+x).toFixed(2)+' '+t('ui.secUnit','秒'), editFmt:x=>(+x).toFixed(2)}); });
+        el.querySelector('.pvPlay').addEventListener('click',()=>togglePrevPlay(id)); }
     }
     el.style.left=n.x+'px'; el.style.top=n.y+'px'; el.style.display='flex';
   }
@@ -8644,6 +8909,10 @@ function refreshInfoCards(){
       if(inp.tagName==='SELECT'&&v&&![...inp.options].some(o2=>o2.value===v)){ const o2=document.createElement('option'); o2.value=o2.textContent=v; inp.appendChild(o2); }
       if(inp.value!==v) inp.value=v; });
     el.querySelectorAll('.nDiffs input').forEach(cb=>{ cb.checked=!!(n.data.diffs&&n.data.diffs[cb.dataset.d]); });
+    el.querySelectorAll('.pvF').forEach(fe=>{ if(fe._sync) fe._sync(); });   // 試聴: Undo等で変わった値を表示へ
+    { const pb=el.querySelector('.pvPlay');
+      if(pb){ const on=!!(_pvPlay&&_pvPlay.id===id); pb.classList.toggle('pvOn',on);
+        pb.textContent=on?'■ '+TL('ui.pvStop','停止'):'▶ '+TL('ui.pvPlay','試聴'); } }
     { const dot=el.querySelector('.nPort i');   // ポートドット: 接続=塗りつぶし／未接続=色リング（中は暗）
       if(dot){ const col=INFO_NODE_DEFS[n.t][1], on=(infoGraph.edges||[]).some(ed=>ed.s===id);
         dot.style.background=on?col:'#1b1b1d';
@@ -8698,7 +8967,7 @@ function infoOutPortOf(oid,k){   // 書き出しノードの入力ポート（�
   const o=infoGraph.outs[oid]||{x:0,y:0};
   const el=infoWorldEl&&infoWorldEl.querySelector(`.iGrp[data-out="${oid}"]`);
   const h=(el&&el.offsetHeight)||160;
-  return {x:o.x,y:o.y+h/2+(INFO_SRCS.indexOf(k)-1)*20};
+  return {x:o.x,y:o.y+h/2+(INFO_SRCS.indexOf(k)-(INFO_SRCS.length-1)/2)*20};
 }
 function drawInfoEdges(){   // エッジ={s:ノードid,o:出力id}。同タイプは1つのoutに1本（繋ぎ替え=差し替え）。休止outへの線は薄く
   let under='', over='';   // under=ポートラベル（カードの下層）/ over=ドラッグ中のゴースト線のみ
@@ -8886,6 +9155,7 @@ function addSrcNode(t,x,y,copyFrom){   // 新規/複製=独立したデータ箱
   _inSel=new Set([id]); layoutInfoNodes(); infoSelApply(); metaDirty=true;
   stat(tf('msg.infoNodeAdded','{node}ノードを{action}しました',{node:INFO_NODE_DEFS[t][0],action:copyFrom?TL('word.duplicated','複製'):TL('word.added','追加')})); return id; }
 function deleteSrcNode(id){ const n=infoGraph.nodes[id]; if(!n) return;
+  if(_pvPlay&&_pvPlay.id===id) stopPrevPlay();
   infoSnapshot();
   delete infoGraph.nodes[id]; delete _coverHandles[id];
   { const c=_coverImgs.get('ig:'+id); if(c&&c.bmp&&c.bmp.close) try{ c.bmp.close(); }catch(_){}
@@ -9034,6 +9304,10 @@ function _tick(){
   { const lblZ=(mouseLine.visible?mouseLine.position.z:0)-0.55;
     for(const sp of laneNameSprites) sp.position.z=lblZ; }
   editGroup.position.z=placeMode?(lockBeat-viewB)*ZPB:((hoverBeat??viewB)-viewB)*ZPB;
+  // 直前ノーツの補助グリッド: 配置モード=赤の再生ヘッド基準 / カメラ固定モード=黄色の配置枠(lockBeat)基準。再生中は非表示
+  { const rb=(!auxShow||playing||lightMode)?null:(camMode==='place'?curV:(placeMode?lockBeat:null));
+    auxGroup.visible=rb!=null;
+    if(rb!=null){ auxGroup.position.z=(rb-viewB)*ZPB; updateAuxPrev(rb); } }
   // 配置モードはcellPlanesが毎フレーム赤ラインへ動くので、ゴーストもマウス直下で毎フレーム更新＝モード切替直後(マウス静止)でも即表示され、Fの色反転が見える（ヘルバ様報告の修正）
   if(placeMode&&camMode==='place'&&!box&&!orbitDrag&&!wallStage&&hoverPane==='main'){ raycaster.setFromCamera(pointer,camera); refreshHoverVisuals(); }
   if(lightMode&&camMode==='place'&&!box&&!orbitDrag&&hoverPane==='main'){ raycaster.setFromCamera(pointer,camera); refreshLightHover(); }   // ライトも配置モードは毎フレーム更新＝赤パネル(再生ヘッド)の拍にゴースト/配置が追従（ノーツと同仕様・ヘルバ様指定 2026-07-13）
@@ -9256,9 +9530,10 @@ async function idbDel(k){ const db=await idbDB(); if(!db) return;
 for(const k2 of ['recents','lastSongHandle','songHandles','libDirs']) idbDel(k2).catch(()=>{});
 async function newProject(){
   closeFileMenu();
-  if(!defaultFresh()&&!confirm(t('cf.newProject','現在の編集内容を破棄して、新規プロジェクトを作りますか？'))) return;
+  if(!await confirmDiscard('switch')) return;   // 未保存がある時だけ3択で確認（旧: 常にネイティブconfirm）
   resetAllState();   // 前ファイルの残留を全消し（フラット/_flatDirty/クリップ/ロック等）
   projFileHandle=null;
+  _nativeSavePath=''; _nativeSaveName='';   // ダブルクリックで開いたファイルの保存先を引き継がない＝新規を保存して元ファイルを上書きする事故の防止
   files={}; handles={}; dirHandle=null;
   infoGraph=defaultInfoGraph(); layoutInfoNodes(); applyInfoGraph();
   diffV3=true;
@@ -9270,6 +9545,7 @@ async function newProject(){
   newDefaultGraph();
   initScratchDiff();   // 標準5難易度で再スタート（プルダウンは常時表示）
   rebuild();
+  markSaved();
   showOk('新規プロジェクトを作成しました');
 }
 async function saveProjectCopy(){
@@ -9658,7 +9934,7 @@ document.getElementById('settingsReset').onclick=async()=>{   // 全ての環境
   try{ defs=await (await fetch('config/settings.default.json?v='+Date.now(),{cache:'no-store'})).json(); }catch(e){}
   try{ for(let i=localStorage.length-1;i>=0;i--){ const k=localStorage.key(i); if(k&&k.indexOf('bsnm_')===0) localStorage.removeItem(k); } }catch(e){}   // 既存の個人設定を全消去
   try{ for(const k in defs) if(k.indexOf('bsnm_')===0) localStorage.setItem(k,defs[k]); }catch(e){}   // デフォルト値を適用
-  try{ await fetch('__settings/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:defs})}); }catch(e){}   // settings.json も即確定（reload前にデバウンス待ちしない）
+  try{ await fetch('__settings/save',{method:'POST',headers:{'Content-Type':'application/json','X-NLM-Request':'1'},body:JSON.stringify({data:defs})}); }catch(e){}   // settings.json も即確定（reload前にデバウンス待ちしない）
   location.reload();
 };
 document.getElementById('settingsBg').addEventListener('pointerdown',e=>{ if(e.target.id==='settingsBg') e.target.style.display='none'; });
@@ -9783,12 +10059,9 @@ function wireStepper(el,{get,set,fmt,editFmt,prefix='',step=1,shiftStep=0.1}){  
   const lbl=el.querySelector('.bfLbl'); if(lbl) lbl.addEventListener('click',startEdit);   // 見出しクリックでも入力（Blender風）
   el._sync=sync; sync();
 }
-// プレビュー秒を Info.dat(infoBase) へ書き込む（applyInfoChain→infoJson→書き出しに反映）
-function setPreview(key,v){ v=Math.max(0,Math.round(v*100)/100); infoBase=infoBase||{}; infoBase[key]=v; applyInfoChain(); metaDirty=true; }
-function refreshMusicHdr(){ ['bpmField','pvStart','pvDur','njsField','offField','leadInField'].forEach(id=>{ const el=document.getElementById(id); if(el&&el._sync) el._sync(); }); refreshChainPanel(); refreshArcPanel(); }
+// ※試聴区間（旧ヘッダーの「プレビュー開始/プレビュー長」）はINFO画面の試聴ノードへ移設（2026-09-28）
+function refreshMusicHdr(){ ['bpmField','njsField','offField','leadInField'].forEach(id=>{ const el=document.getElementById(id); if(el&&el._sync) el._sync(); }); refreshChainPanel(); refreshArcPanel(); }
 wireStepper(document.getElementById('bpmField'),{get:()=>BPM,set:setBPMv,fmt:x=>x.toFixed(2)});   // 見出し「BPM」は .bfLbl（フィールド内）に分離
-wireStepper(document.getElementById('pvStart'),{get:()=>{ const x=(infoBase||{})._previewStartTime; return (x==null||x==='')?12:+x; },set:v=>setPreview('_previewStartTime',v),fmt:x=>x.toFixed(2)+' '+t('ui.secUnit','秒'),editFmt:x=>x.toFixed(2)});
-wireStepper(document.getElementById('pvDur'),{get:()=>{ const x=(infoBase||{})._previewDuration; return (x==null||x==='')?10:+x; },set:v=>setPreview('_previewDuration',v),fmt:x=>parseFloat(x.toFixed(2))+' '+t('ui.secUnit','秒'),editFmt:x=>String(parseFloat(x.toFixed(2)))});   // プレビュー長は末尾の.00を省く（10.00→10）
 wireStepper(document.getElementById('njsField'),{get:()=>njsOffCur().njs, set:v=>setNjsCur('njs',Math.max(0,Math.round(v*100)/100)), fmt:x=>String(parseFloat((+x).toFixed(2)))});   // 飛来速度NJS（難易度別・整数～小数）
 wireStepper(document.getElementById('offField'),{get:()=>njsOffCur().offset, set:v=>setNjsCur('offset',Math.round(v*1000)/1000), fmt:x=>(+x).toFixed(3), step:0.01, shiftStep:0.001});   // 飛来オフセット（難易度別・0.000表示・‹›=±0.01・Shift=±0.001）
 // 曲頭への無音追加（ms・全難易度共通）。songNode.offsetは負の秒数として保持し、
@@ -10808,7 +11081,6 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.applyPvSettings = applyPvSettings; } catch (_) {}
   try { rt.wirePv = wirePv; } catch (_) {}
   try { rt.wireStepper = wireStepper; } catch (_) {}
-  try { rt.setPreview = setPreview; } catch (_) {}
   try { rt.refreshMusicHdr = refreshMusicHdr; } catch (_) {}
   try { rt.vmResize = vmResize; } catch (_) {}
   try { rt.drawMeter = drawMeter; } catch (_) {}

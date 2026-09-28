@@ -39,6 +39,14 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   `_internal/`だけを新ビルドで上書きする。**`asset/`・`config/`・`lang/`は上書きしない**
   （exeの隣に生成されるユーザーデータ。設定・クリップが入っている。`app.py`の`_data_root()`参照）。
   上書き前に古い`exe`+`_internal`をバックアップしておくと安全（このリポジトリはgit管理外）。
+- **版番号**: 利用者向けの版番号は`js/constants.js`の`APP_VERSION`（例`v1.1.0-oz`）が唯一の定義元。
+  メニューバー右端（`main.js`）とexeのウィンドウタイトル（`app.py`の`_app_version()`がこの行を正規表現で読む）に出る。
+  リリース時はここを書き換え、GitHubのタグ/リリース名・配布zip名（`NonLinearMapper-<版>.zip`）と揃える。
+  配布zipは`dist/NonLinearMapper/`から作る（`NLM-app/`には自分の`config/`・`asset/`が入っているので使わない）。
+- **翻訳の互換**: exe隣の`lang/`は初回シード後は更新されないため、`serve.py`の`do_GET`が`/lang/*.json`を
+  「同梱版(`_internal/lang`)を土台にexe隣の版をキー単位で上書き」して返す。旧版の`lang/`を持つ利用者でも
+  新機能の訳が欠けない（2026-09-27）。新しい設定項目(`bsnm_*`)は「キーが無い＝初期値」で動くように書くこと
+  （旧`settings.json`は存在するキーだけlocalStorageへ流し込む方式＝`editor.html`冒頭）。
 - `nlm.spec`の`console=True`と`app.py`の`webview.start(debug=True)`は診断用フラグ。
   普段は両方無効(`console=False`・`debug`無し)でビルドすること。デバッグしたい時だけ一時的に有効化。
 - **ffmpeg依存**: song.egg変換(後述)にはPATH上の`ffmpeg`が必要。`winget install Gyan.FFmpeg`で導入可能。
@@ -107,6 +115,16 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
      無音を物理的に焼き込む**。Info.datの`_songTimeOffset`メタデータには依存しない（実際のBeat Saber
      本体がこのフィールドをどこまで確実に解釈するか不明なため、確実性を優先した設計判断）。
 
+## 試聴ノード（選曲画面のプレビュー区間・2026-09-28）
+
+- Info.datの`_previewStartTime`/`_previewDuration`はINFO画面の**試聴ノード**（`t:'prev'`）が持つ。旧ヘッダーの
+  「プレビュー開始/プレビュー長」欄は廃止。アクティブ書き出しに繋がった試聴ノードの値を`applyInfoGraph()`が
+  `infoBase`へ写し、未接続なら12秒/10秒（`PREV_DEF`）。
+- ノードの秒は**元の音源の秒**。`exportMap()`が無音追加(leadIn)ぶんを足して書き出す（song.eggの先頭に無音が焼き込まれるため）。
+  以前は足しておらず、無音追加を使うと試聴位置がずれていた。拍→音源秒の変換は`audioPosAtBeat()`（Musicの配置・カット・無音追加を考慮）。
+- 旧プロジェクト（`infoGraph.prevMig`なし）とプロジェクト無しのInfo.dat読込は`migratePrevNode()`で`infoBase`の値から試聴ノードを作り、
+  全書き出しに繋ぐ。`prevMig`を見て1回だけ行う（ユーザーが消した試聴ノードを復活させないため）。
+
 ## song.egg 書き出し（変換・キャッシュ）
 
 - 元の音源がOGGならバイトコピー、それ以外（mp3/wav/flac等）はffmpegで`libvorbis`へ変換。
@@ -116,6 +134,26 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   前回と同一なら再変換をスキップする（ffmpeg起動・大きい音声ファイルの再書き込みを避ける）。
 - 書き出しパネルの「song.eggを強制再変換」チェックボックスでキャッシュを無視して強制再生成できる
   （初期化・やり直し用）。
+
+## 未保存検知（ランプ・終了時の確認）
+
+- 判定は`projSig()`（`buildProjectText`と同じ項目を副作用なしで直列化）と保存時点の値の**比較**。
+  `metaDirty`は履歴に積まれる編集で立たない・Undoで戻らない等の穴があり判定には使っていない。
+  **プロジェクトに保存する項目を`buildProjectText`へ足したら`projSig`にも足すこと**（足さないとその変更でランプが点かない）。
+  逆に、自動で書き足される派生値（例: `infoBase._beatsPerMinute`）は除外しないと「元に戻してもランプが消えない」誤検知になる。
+- 閉じる確認は`app.py`の`events.closing`（未保存時だけ中止→JSの`__nlmAskQuit`で3択）。pywebview標準の
+  `confirm_close`は英語固定なので使わない。closingはUIスレッドで同期実行＝中で`evaluate_js`を待つとデッドロックする。
+- `editor-app.js`内の`window._dbg`は`js/main.js`が起動時に上書きするため、そちらに診断を足しても外から見えない。
+
+## 開発用窓口とローカルサーバーのアクセス制御（2026-09-28）
+
+- `window._dbg`（main.js・ランタイム全体）/`window._dbgApp`（editor-app.js・読み取り専用）/`_cam`/`_ctl`は
+  **pywebview外かつURLに`?dev=1`の時だけ**作る（`isDevMode()`/`NLM_DEV`）。配布版に開発用の入口を残さないため。
+  診断を足すなら`_dbgApp`へ（値の複製を返すだけにし、書き換え機能は持たせない）。
+- 検証は`tools/cdp.py`（ヘッドレスEdge＋CDP。撮影・本物の入力・JS実行）と`tools/fixtures/`を使う。詳細は`tools/README.md`。
+- `serve.py`はHostヘッダーがローカル名でない要求を403にし（DNSリバインディング対策・追加は`NLM_ALLOWED_HOSTS`）、
+  **POSTは`X-NLM-Request: 1`ヘッダー必須**（他サイトからのCSRF対策）。**新しいPOST APIを足したら、JS側のfetchにも
+  このヘッダーを付けること**（付け忘れると403で無言に失敗する）。
 
 ## 削除済み機能（意図的）
 

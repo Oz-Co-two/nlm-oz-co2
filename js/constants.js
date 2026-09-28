@@ -2,7 +2,12 @@
  * Shared layout / chart constants (mirrors runtime defaults).
  * Runtime closure still owns live mutable copies where needed.
  */
-export const VERSION = 'nlm-modular-1';
+export const VERSION = 'nlm-modular-1';   // 内部構成の識別子（開発用）。利用者向けの版番号は下の APP_VERSION
+
+/** 利用者向けの版番号（GitHubのタグ/リリース名と一致させる）。ここが唯一の定義元：
+ *  アプリ上部バーの表示（main.js）と、exe版のウィンドウタイトル（app.py がこの行を読む）の両方に使う。
+ *  リリースのたびにここだけ書き換える。 */
+export const APP_VERSION = 'v1.1.0-oz';
 
 /** Grid / timeline spacing (editor 3D + NLE). */
 export const LANE = 0.62;

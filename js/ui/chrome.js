@@ -28,7 +28,6 @@ export class UiChrome {
     'saveCamSpd',
     'saveSplits',
     'setLaneRatio',
-    'setPreview',
     'showErr',
     'showOk',
     'stat',
@@ -57,7 +56,6 @@ export class UiChrome {
   saveCamSpd(...args) { return this.rt.saveCamSpd(...args); }
   saveSplits(...args) { return this.rt.saveSplits(...args); }
   setLaneRatio(...args) { return this.rt.setLaneRatio(...args); }
-  setPreview(...args) { return this.rt.setPreview(...args); }
   showErr(...args) { return this.rt.showErr(...args); }
   showOk(...args) { return this.rt.showOk(...args); }
   stat(...args) { return this.rt.stat(...args); }

@@ -84,6 +84,8 @@
   .iBtn{width:auto;background:#2d2d2d;border:1px solid #1d1d1d;border-radius:6px;color:#e5e5e5;padding:6px 10px;cursor:pointer;font:inherit;font-size:12px;margin:0 11px;text-align:center;white-space:nowrap;}
 
   .iBtn:hover{background:#3d3d3d;}
+  .iBtn.pvOn{background:#24502f;border-color:#5fcf7a;color:#fff;}   /* 試聴ノード: 再生中 */
+  .iBtn.pvOn:hover{background:#2c6139;}
 
   .iBtn.folder{text-align:left;color:#e5e5e5;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
 

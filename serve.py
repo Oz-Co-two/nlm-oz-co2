@@ -23,9 +23,41 @@ def _safe(name):
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name).strip().strip('.')
     return name or 'clip'
 
+# ---- アクセス制御（2026-09-28） ----
+# 待ち受けは127.0.0.1のみだが、それだけでは「普段のブラウザで開いた悪意あるサイトが127.0.0.1へ要求を送る」
+# 攻撃（CSRF）と、DNSリバインディング（攻撃者のドメイン名を127.0.0.1へ向け直して読み書きする）を防げない。
+#  ① Hostヘッダーがローカルの名前でなければ拒否（DNSリバインディング対策）
+#  ② 書き込み系(POST)は独自ヘッダー X-NLM-Request 必須。他サイトからこのヘッダー付きで送るにはブラウザの
+#     事前確認(CORSプリフライト)が必要で、ここはそれを許可しないため送れない（アプリ自身の通信は同一オリジンなので影響なし）
+#  ③ Originヘッダーが付いていて他サイトのものなら拒否（念のための二重化）
+# Docker/WSLのポート転送やリバースプロキシで別名アクセスする場合は、環境変数 NLM_ALLOWED_HOSTS に
+# カンマ区切りでホスト名を追加する（例: NLM_ALLOWED_HOSTS=nlm.local,192.168.0.10）。
+ALLOWED_HOSTS = {'127.0.0.1', 'localhost', '::1'} | {
+    h.strip().lower() for h in (os.environ.get('NLM_ALLOWED_HOSTS') or '').split(',') if h.strip()}
+
+def _hostname(hostport):
+    """'127.0.0.1:8138' / '[::1]:8138' / 'localhost' → ホスト名部分（小文字）"""
+    hp = (hostport or '').strip().lower()
+    if hp.startswith('['):
+        return hp[1:hp.find(']')] if ']' in hp else hp[1:]
+    return hp.rsplit(':', 1)[0] if hp.count(':') == 1 else hp
+
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=BASE_DIR, **kwargs)
+
+    def _access_ok(self, write=False):
+        if _hostname(self.headers.get('Host')) not in ALLOWED_HOSTS:
+            return False
+        origin = self.headers.get('Origin')
+        if origin and origin != 'null' and _hostname(urlsplit(origin).netloc) not in ALLOWED_HOSTS:
+            return False
+        if write and self.headers.get('X-NLM-Request') != '1':
+            return False
+        return True
+
+    def _deny(self):
+        self.send_error(403, 'Forbidden (NLM local server: access from this host/origin is not allowed)')
 
     def translate_path(self, path):
         path = path.split('?', 1)[0].split('#', 1)[0]
@@ -58,7 +90,14 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             return sub
         return os.path.join(self.directory, *parts) if parts else self.directory
 
+    def do_HEAD(self):
+        if not self._access_ok():
+            return self._deny()
+        return super().do_HEAD()
+
     def do_GET(self):
+        if not self._access_ok():
+            return self._deny()
         # ダブルクリックで開くファイルの取得（起動時にフロントが読み、そのプロジェクトを開く）
         if self.path.split('?', 1)[0] == '/__openarg':
             ok = bool(OPEN_FILE) and os.path.isfile(OPEN_FILE)
@@ -72,6 +111,23 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 except Exception as e:
                     obj = {'ok': False, 'error': str(e)}
             return self._reply(200, obj)
+        # 翻訳は「同梱版を土台に exe隣の版で上書き」してキー単位で合成して返す。
+        # exe隣の lang/ は初回にシードされた後は更新されない（ユーザー編集を守るため）ので、
+        # 丸ごと差し替えだと旧版の lang/ を持つ利用者には新機能の訳が欠ける（アップデート時の互換対策 2026-09-27）。
+        lp = unquote(self.path.split('?', 1)[0])
+        m = re.fullmatch(r'/lang/([A-Za-z0-9_-]+\.json)', lp)
+        if m:
+            merged, found = {}, False
+            for d in (LANG_SEED_DIR, LANG_DIR):   # 後勝ち＝ユーザー側の訳が優先
+                p = os.path.join(d, m.group(1))
+                if os.path.isfile(p):
+                    try:
+                        with open(p, 'r', encoding='utf-8') as f:
+                            merged.update(json.load(f)); found = True
+                    except Exception:
+                        pass   # 壊れたファイルは無視して他方を使う
+            if found:
+                return self._reply(200, merged)
         return super().do_GET()
 
     def end_headers(self):
@@ -135,6 +191,8 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(ogg)
 
     def do_POST(self):
+        if not self._access_ok(write=True):
+            return self._deny()
         try:
             if self.path == '/__settings/save':   # 環境設定(bsnm_*)を config/settings.json へ保存
                 b = self._body()

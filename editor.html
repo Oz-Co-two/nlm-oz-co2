@@ -87,12 +87,11 @@
           <button id="vmMetroBtn" class="dtBtn" data-i18n-t="ui.metroToggle" title="メトロノーム ON/OFF（再生中に拍ごとにクリック音）"></button>
           <button id="vmBpmBtn" class="dtBtn" data-i18n-t="ui.bpmDetect" title="BPM測定（曲からテンポを推定）"></button>
           <span class="mbSep"></span>
-          <div id="pvStart" class="bfField" data-i18n-t="ui.pvStart" title="試聴プレビューの開始秒（‹›=±1・Shift+‹›=±0.1・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.pvStartL">プレビュー開始</span><span class="bfV">12.00 秒</span><span class="bfA" data-k="up">›</span></div>
-          <div id="pvDur" class="bfField" data-i18n-t="ui.pvDur" title="試聴プレビューの長さ秒（‹›=±1・Shift+‹›=±0.1・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.pvDurL">プレビュー長</span><span class="bfV">10 秒</span><span class="bfA" data-k="up">›</span></div>
+          <div id="dirtyLamp" class="dirtyLamp" data-i18n="ui.dirtyLamp" data-i18n-t="ui.dirtyLampT" title="点灯中＝保存していない変更があります（保存はメニューまたはCtrl+S）">未保存有り</div>
         </div>
         <div id="musicBar">
           <div id="diffBar" data-i18n-t="ui.diffBar" title="難易度（クリック=切替・選択中をもう一度クリック=メニュー。1〜5キーでも切替）"></div>
-          <div id="njsField" class="bfField" data-i18n-t="ui.njs" title="ノーツ飛来速度 NJS（難易度別・‹›=±1・Shift+‹›=±0.1・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.njsL">飛来速度</span><span class="bfV">16</span><span class="bfA" data-k="up">›</span></div>
+          <div id="njsField" class="bfField" data-i18n-t="ui.njs" title="ノーツ飛来速度 NJS（難易度別・‹›=±1・Shift+‹›=±0.1・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.njsL">飛来速度 (NJS)</span><span class="bfV">16</span><span class="bfA" data-k="up">›</span></div>
           <div id="offField" class="bfField" data-i18n-t="ui.offset" title="飛来オフセット（難易度別・‹›=±0.01・Shift+‹›=±0.001・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.offsetL">オフセット</span><span class="bfV">0.000</span><span class="bfA" data-k="up">›</span></div>
           <div id="leadInField" class="bfField" data-i18n-t="ui.leadIn" title="曲の先頭に無音を追加（ms・書き出し時にsong.eggへ実際に反映されます）。‹›=±10ms・Shift+‹›=±1ms・値クリック=手打ち"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.leadInL">無音追加</span><span class="bfV">0 ms</span><span class="bfA" data-k="up">›</span></div>
           <button id="tempoDetectAllBtn" class="bfField" style="cursor:pointer" title="拍番号の下のテンポパート帯（紫の◆）にある全パートのBPMを、区間ごとの音声解析で一括推定します。境界の追加/削除・BPM手入力は帯を右クリック/ダブルクリック">🎯 <span data-i18n="ui.tempoDetectAll">全パート自動判定</span></button>
@@ -269,6 +268,8 @@
       <input id="laneRatio" type="range" min="1" max="5" value="4"></div>
     <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.chromaMode">ライト配色モード</div>
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="chromaMode" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.chromaOn">Chroma（各ライト自由色・要Mod）</span><span class="t" style="color:#8a8a92;font-size:11px" data-i18n="set.chromaHint">OFF＝バニラ配色（Mod無しでも全員に見える）</span></label></div>
+    <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.auxPrev">直前ノーツ表示</div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="auxPrevShow" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.auxPrevOn">枠の左右に直前のノーツを表示（Hキーでも切替）</span></label></div>
   </div>
   <div class="setPanel" data-panel="vol">
     <div class="slRow"><div class="t"><span data-i18n="set.volMaster">マスター音量</span> <span id="volMVal">50</span>%</div>
@@ -338,7 +339,7 @@
   var _set=localStorage.setItem.bind(localStorage), _rm=localStorage.removeItem.bind(localStorage), _t=null;
   function schedule(){ if(_t) clearTimeout(_t); _t=setTimeout(function(){
     var data={}; for(var i=0;i<localStorage.length;i++){ var key=localStorage.key(i); if(key&&key.indexOf('bsnm_')===0&&!LOCAL_ONLY[key]) data[key]=localStorage.getItem(key); }
-    try{ fetch('__settings/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:data})}); }catch(_){}
+    try{ fetch('__settings/save',{method:'POST',headers:{'Content-Type':'application/json','X-NLM-Request':'1'},body:JSON.stringify({data:data})}); }catch(_){}
   },400); }
   localStorage.setItem=function(k,v){ _set(k,v); if((''+k).indexOf('bsnm_')===0) schedule(); };
   localStorage.removeItem=function(k){ _rm(k); if((''+k).indexOf('bsnm_')===0) schedule(); };
