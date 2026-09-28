@@ -7,9 +7,13 @@ Beat Saber の譜面エディタです。デスクトップアプリ（Windows /
 ## これは何か
 
 このリポジトリは、[helba](https://helba.flashhub.net/nlm/) さんが開発された **Non-Linear Mapper 0.8 beta**
-の派生版（フォーク）です。操作方法・パネル構成などのドキュメントは原作サイトが詳しいので、
-そちらを参照してください。
+の派生版（フォーク）です。
 
+はじめて使う方は、まず **[チュートリアル](docs/tutorial.md)** をどうぞ。曲の読み込みからノーツ配置、
+Beat Saber で遊べる形への書き出し・保存までを、画像付きで順番に説明しています。
+各パネルの細かい操作は、原作サイトのリファレンスマニュアルが詳しいです。
+
+- **チュートリアル（画像付き・基本の流れ）**: [docs/tutorial.md](docs/tutorial.md)
 - **原作 / 公式ドキュメント**: https://helba.flashhub.net/nlm/
 - **リファレンスマニュアル**: https://helba.flashhub.net/nlm/manual/
 - **原作の修正履歴**: https://helba.flashhub.net/nlm/changelog.html
@@ -49,7 +53,7 @@ note のコメント欄にて helba さんご本人から、本フォークと�
 
 ## このフォークでの変更点
 
-原作からの主な差分です。基本操作は上記の原作マニュアルを参照してください。
+原作からの主な差分です。基本操作は上記の[チュートリアル](docs/tutorial.md)と原作マニュアルを参照してください。
 
 ### v1.1.0-oz での追加・修正
 

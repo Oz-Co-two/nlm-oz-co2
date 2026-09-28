@@ -145,6 +145,24 @@ Pythonから使う場合（検証スクリプトの書き方）はファイル�
 - `make_fixtures.py`: 上の2つを作り直す。nlmf は cdp.py で実際にクリックして置き、アプリ自身に保存させている
   ＝保存形式が変わったらこれを実行すれば追従する。
 
+## チュートリアルの画像を撮り直す（make_tutorial_shots.py）
+
+`docs/tutorial.md` の画像（`docs/images/tutorial/*.png`）は、`tools/make_tutorial_shots.py` が空の状態から
+basic.wav を読み込み、実際のクリック・キー入力でノーツやライトを置きながら撮影したもの。UIを変えたら実行し直す。
+
+```
+.venv-build/Scripts/python.exe tools/make_tutorial_shots.py          # 全部撮る（約3分）
+.venv-build/Scripts/python.exe tools/make_tutorial_shots.py 05 06    # 番号を指定するとその画像だけ保存（操作は最初から全部行う）
+```
+
+- 赤枠と番号は撮影直前にページへ重ねた印。対象はCSSセレクタで指定しているので、配置が多少変わっても追従する。
+- ファイル/フォルダ選択は差し替えてある（音源=basic.wav、画像=その場で描いたカバー、出力先・保存先=ブラウザ内の仮想フォルダOPFS）。
+  書き出し・保存は実際に行われ、書き出し結果に `Info.dat`・`song.egg` が無ければ失敗として止まる（ffmpegが必要）。
+- 3Dビュー内のノーツ・ライトの位置は `_dbgApp.cellScreen` / `objScreen` / `lightLaneScreen` で取っている。
+- 配置モードで Ctrl+←（スタートへ）を使うと定位置カメラがずれるため、スクリプトでは ← を繰り返して戻している。
+- ヘッドレスEdgeは、右端のレベルメーター目盛りの位置に丸いアイコンを時々重ねて描く（DOMに無くページ側から消せない）。
+  そのため撮影範囲は右端（x=1838）の手前までにしている。
+
 ## ビルドして配布フォルダへ反映する
 
 `python tools/build_and_deploy.py`（venvのPythonでも通常のPythonでも可。ビルド自体は`.venv-build`を使う）。

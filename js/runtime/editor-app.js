@@ -6677,6 +6677,13 @@ if(NLM_DEV) window._dbgApp=Object.freeze({
   cellScreen:(x,y)=>{ const p=cellPlanes.find(c=>c.userData.x===x&&c.userData.y===y); if(!p) return null;
     const v=p.getWorldPosition(new THREE.Vector3()).project(camera), r=cv.getBoundingClientRect();
     return {x:r.left+(v.x+1)/2*r.width, y:r.top+(1-v.y)/2*r.height, onScreen:Math.abs(v.x)<=1&&Math.abs(v.y)<=1}; },
+  /** 3Dビューに表示中のオブジェクトの画面座標（ページ座標px。範囲選択の判定点と同じ）。クリック選択の位置に使う */
+  objScreen:()=>{ const r=cv.getBoundingClientRect();
+    return meshes.filter(m=>m.group.visible).map(m=>{ const o=m.obj, s=screenPosOf(m.group);
+      return {kind:o.kind, beat:o.beat??o.b, x:o.x, y:o.y, c:o.c, sx:r.left+s.x, sy:r.top+s.y, inView:s.in, sel:selection.has(o)}; }); },
+  /** ライトレーンli（0=左端）の拍beatの床の画面座標（ページ座標px。ライト範囲選択の判定点と同じ） */
+  lightLaneScreen:(li,beat)=>{ const r=cv.getBoundingClientRect(), v=new THREE.Vector3(LANE_X0+li*LANE_DX,0.03,(beat-viewBeat())*ZPB).project(camera);
+    return {x:r.left+(v.x+1)/2*r.width, y:r.top+(1-v.y)/2*r.height, inView:v.z<1}; },
 });
 // 同期で 'ok' を返す＝Python側はJSが生きていることだけ確認して待たない（結果はquit_appで伝える）
 window.__nlmAskQuit=()=>{
