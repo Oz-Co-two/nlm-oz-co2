@@ -1,0 +1,96 @@
+/* Non-Linear Mapper — mapcheck.css（譜面チェック・BeatLeader基準の結果パネル） */
+
+  #iMapCheck{margin:4px 11px 0;font-size:11.5px;}   /* INFOの書き出しノード最下段・書き出しボタンの上 */
+
+  #mcPanel{position:fixed;right:16px;top:64px;width:460px;max-width:calc(100vw - 32px);max-height:calc(100vh - 110px);
+    display:none;flex-direction:column;z-index:150;background:#1d1d1d;border:1px solid #2a2a2a;border-radius:10px;
+    box-shadow:0 8px 28px rgba(0,0,0,.55);color:var(--text);font-size:12px;}
+  #mcPanel .mcHead{display:flex;align-items:center;gap:8px;padding:9px 10px 8px 14px;border-bottom:1px solid #ffffff14;cursor:move;user-select:none;}
+  #mcPanel .mcTitle{flex:1;font-weight:700;font-size:13px;}
+  #mcPanel .mcHeadBtns{display:flex;gap:6px;}
+  #mcPanel .mcHeadBtns button{background:var(--widget);border:1px solid #1d1d1d;border-radius:6px;color:#e5e5e5;padding:4px 10px;cursor:pointer;font:inherit;font-size:11.5px;}
+  #mcPanel .mcHeadBtns button:hover{background:var(--widget2);}
+  #mcPanel .mcHeadBtns button:disabled{opacity:.6;cursor:default;}
+  #mcPanel .mcSum{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 14px;border-bottom:1px solid #ffffff0d;}
+  #mcPanel .mcSum:empty{display:none;}
+  #mcPanel .mcOk{color:var(--green);font-weight:700;margin-right:4px;}
+  #mcPanel .mcBody{overflow-y:auto;padding:4px 8px 8px;flex:1;min-height:60px;}
+  #mcPanel .mcFoot{padding:7px 14px 9px;border-top:1px solid #ffffff14;color:var(--textmute);font-size:10.5px;line-height:1.5;}
+  #mcPanel .mcFootSub{color:#6a6a72;}
+
+  #mcPanel .mcSec{margin:6px 0;}
+  #mcPanel .mcSec>summary{cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:5px 6px;border-radius:6px;
+    font-weight:700;font-size:12.5px;background:#242424;list-style:none;}
+  #mcPanel .mcSec>summary::before{content:'▸';color:var(--textmute);font-size:10px;width:10px;}
+  #mcPanel .mcSec[open]>summary::before{content:'▾';}
+  #mcPanel .mcSec>summary::-webkit-details-marker{display:none;}
+
+  #mcPanel .mcCnt{font-weight:500;font-size:10.5px;padding:1px 6px;border-radius:9px;border:1px solid #3a3a42;color:#c8c8d0;}
+  #mcPanel .mcCnt.st-rank{border-color:#6a4a1c;color:#ffc66b;}
+  #mcPanel .mcCnt.st-error{border-color:#6a2a32;color:#ff8a94;}
+  #mcPanel .mcCnt.st-warn{border-color:#5f5520;color:#f0dc72;}
+
+  #mcPanel .mcItem{padding:6px 6px 6px 8px;margin:3px 0;border-left:3px solid #3a3a42;border-radius:0 5px 5px 0;background:#202022;}
+  #mcPanel .mcItem.st-rank{border-left-color:#e0a030;}
+  #mcPanel .mcItem.st-error{border-left-color:#ff4d5e;}
+  #mcPanel .mcItem.st-warn{border-left-color:#d8c040;}
+  #mcPanel .mcLine{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;}
+  #mcPanel .mcIc{width:16px;text-align:center;}
+  #mcPanel .mcLab{font-weight:500;}
+  #mcPanel .mcN{font-size:10.5px;color:var(--textmute);}
+  #mcPanel .mcEn{font-size:10px;color:#6f6f78;}
+  #mcPanel .mcBeats{display:flex;flex-wrap:wrap;gap:3px;margin:5px 0 0 22px;}
+  #mcPanel .mcBeat{cursor:pointer;font-size:10.5px;font-variant-numeric:tabular-nums;padding:1px 6px;border-radius:4px;background:#2d2d30;color:#d0d0d8;}
+  #mcPanel .mcBeat:hover{background:var(--accent);color:#fff;}
+  #mcPanel .mcBeat.cur{background:#5a44a8;color:#fff;}
+  #mcPanel .mcMore{cursor:pointer;font-size:10.5px;padding:1px 6px;color:var(--accent);}
+  #mcPanel .mcMore:hover{text-decoration:underline;}
+  #mcPanel .mcNone{color:var(--textmute);padding:6px 10px;}
+  #mcPanel .mcErr{color:#ffb3bb;background:#3a1216;border:1px solid #ff4d5e;border-radius:6px;padding:8px 10px;margin:6px 0;}
+
+  /* タブ（BS Map Check と同じ判定 / NLM版 BL評価リスト） */
+  #mcPanel .mcTabs{display:flex;gap:4px;padding:6px 10px 0;border-bottom:1px solid #ffffff14;}
+  #mcPanel .mcTab{background:none;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;color:var(--textmute);
+    padding:5px 12px;cursor:pointer;font:inherit;font-size:11.5px;margin-bottom:-1px;}
+  #mcPanel .mcTab:hover{color:#e5e5e5;}
+  #mcPanel .mcTab.on{background:#1d1d1d;border-color:#ffffff14;color:#e5e5e5;font-weight:700;}
+  #mcPanel .mcTab[data-tab="bl"].on{background:#0f2624;border-color:#2bb3a3;color:#7fe6d8;}
+
+  /* NLM版 BL評価リスト: 公式の表や BS Map Check の結果と見間違えないよう、青緑の枠と背景にする */
+  #mcPanel.blMode{border:2px solid #2bb3a3;box-shadow:0 8px 28px rgba(0,0,0,.55),0 0 0 3px #2bb3a326;}
+  #mcPanel.blMode .mcBody{background:#0f2624;}
+  #mcPanel.blMode .mcFoot{background:#0c1f1d;color:#8fbdb6;border-top-color:#2bb3a355;}
+  #mcPanel .blBanner{display:flex;flex-direction:column;gap:3px;margin:6px 2px 8px;padding:8px 10px;border-radius:6px;
+    background:#16413c;border:1px dashed #2bb3a3;color:#cdeee9;font-size:11px;line-height:1.5;}
+  #mcPanel .blBanner b{color:#7fe6d8;font-size:12.5px;}
+  #mcPanel .blSum{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 2px 6px;}
+  #mcPanel .blOnly{margin-left:auto;font-size:11px;color:#a8cfc9;cursor:pointer;display:flex;align-items:center;gap:4px;}
+  #mcPanel .blCnt{font-size:10.5px;padding:1px 6px;border-radius:9px;border:1px solid #2f5a55;color:#bfe2dc;}
+  #mcPanel .blCnt.st-fail{border-color:#7a2a34;color:#ff8a94;}
+  #mcPanel .blCnt.st-check{border-color:#6a5f22;color:#f0dc72;}
+  #mcPanel .blCnt.st-pass,#mcPanel .blCnt.st-partial{border-color:#2d6a44;color:#7ee0a0;}
+  #mcPanel .blSec>summary{background:#16332f;}
+  #mcPanel .blSecId{font-family:ui-monospace,Consolas,monospace;color:#7fe6d8;}
+  #mcPanel .blRule{padding:6px 6px 6px 8px;margin:3px 0;border-left:3px solid #2f5a55;border-radius:0 5px 5px 0;background:#132e2b;}
+  #mcPanel .blRule.st-fail{border-left-color:#ff4d5e;background:#2a1a1f;}
+  #mcPanel .blRule.st-check{border-left-color:#d8c040;}
+  #mcPanel .blRule.st-pass,#mcPanel .blRule.st-partial{border-left-color:#3fbf6a;}
+  #mcPanel .blRule.st-manual,#mcPanel .blRule.st-na{opacity:.78;}
+  #mcPanel .blLine{display:flex;align-items:baseline;gap:6px;}
+  #mcPanel .blId{flex:none;font-family:ui-monospace,Consolas,monospace;font-size:10.5px;color:#7fe6d8;min-width:52px;}
+  #mcPanel .blSt{flex:none;width:14px;text-align:center;}
+  #mcPanel .blRule.st-fail .blSt{color:#ff6b78;} #mcPanel .blRule.st-check .blSt{color:#f0dc72;}
+  #mcPanel .blRule.st-pass .blSt,#mcPanel .blRule.st-partial .blSt{color:#6fdc94;}
+  #mcPanel .blRule.st-partial .blSt{opacity:.7;}
+  #mcPanel .blTxt{flex:1;}
+  #mcPanel .blKind{flex:none;font-size:9.5px;padding:0 5px;border-radius:3px;background:#1d4540;color:#9fd0c9;}
+  #mcPanel .blF{margin:4px 0 0 72px;font-size:11px;color:#bcd9d4;display:flex;flex-wrap:wrap;gap:4px 6px;align-items:baseline;}
+  #mcPanel .blF.st-fail{color:#ffb3bb;} #mcPanel .blF.st-check{color:#f3e39a;}
+  #mcPanel .blF .mcBeats{margin:2px 0 0;flex-basis:100%;}
+  #mcPanel .blDiff{font-size:10px;padding:0 5px;border-radius:3px;background:#24524c;color:#dff;}
+  #mcPanel .blNote{margin:4px 0 0 72px;font-size:10px;color:#86aaa4;line-height:1.45;}
+  #mcPanel .blStars{margin:5px 0 0 72px;display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;}
+  #mcPanel .blStar input{width:52px;margin-left:3px;background:#0b1c1a;border:1px solid #2f5a55;border-radius:4px;color:#e5e5e5;padding:1px 4px;font:inherit;font-size:11px;}
+  #mcPanel.blMode .mcBeat{background:#1f4a45;color:#dff;}
+  #mcPanel.blMode .mcBeat:hover{background:#2bb3a3;color:#04201d;}
+  #mcPanel.blMode .mcBeat.cur{background:#5a44a8;color:#fff;}

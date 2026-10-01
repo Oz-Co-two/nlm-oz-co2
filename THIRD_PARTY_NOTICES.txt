@@ -7,6 +7,7 @@ Non-Linear Mapper (NLM) は、以下の第三者コンポーネント・移植�
   0. ArcViewer（プレビュー描画エンジン・環境データの移植元）  GPLv3
      → このプロジェクト全体を GPLv3 とする理由。詳細は LICENSE 参照。
   0b. ChroMapper（一部機能の実装参考。コードのコピーではない）  GPL-2.0
+  0c. BS Map Check / bsmap（譜面チェック機能の移植元）  MIT
   1. three.js                     MIT
   2. M PLUS Rounded 1c (fonts)    SIL Open Font License 1.1
   3. pywebview                    BSD 3-Clause
@@ -49,6 +50,41 @@ GPLv3はコピーレフトライセンスのため、この部分（コード・
 あります。実装（アルゴリズム）は独自のコードで、ChroMapperのソースコードを
 直接コピー・翻訳した形跡はありませんが、機能仕様の参考にしたと見られるため
 記録として残します。
+
+-----------------------------------------------------
+0c. BS Map Check / bsmap（譜面チェック機能の移植元）
+    https://github.com/KivalEvan/BeatSaber-MapCheck
+    https://github.com/KivalEvan/BeatSaber-JSMap
+    License: MIT
+-----------------------------------------------------
+`js/mapcheck/mapcheck.js`（譜面チェック・BeatLeader基準）は、Kival Evan作の
+「BS Map Check」の各チェックと BeatLeader プリセットの設定値、およびそれが
+使う「bsmap」の計算（スイング判定・NJS・時間変換など）を、TypeScriptから
+JavaScriptへ移植したものです（BS Map Check commit 56d16718 / 2026-06-12 時点）。
+`js/mapcheck/env-tables.js` は bsmap の環境ごとのライト定義から自動抽出した
+データです。両プロジェクトとも同じ MIT ライセンスです。
+
+MIT License
+
+Copyright (c) 2021 Kival Evan
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 -----------------------------------------------------
 1. three.js  (js/vendor/three/)

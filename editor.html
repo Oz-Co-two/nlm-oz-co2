@@ -2,6 +2,10 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- CSP（2026-09-28）: 読み込んだファイル由来の文字列にスクリプトを仕込まれても実行させない二重の守り。
+     インラインの<script>・onclick等のHTML属性ハンドラは禁止。下のimportmapだけはハッシュで許可しているので、
+     importmapの中身を変えたら sha256 を計算し直すこと（1行のまま。CLAUDE.md参照） -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-gyM8IlLg3c96u8jtdTOgQbXLfuEy0YdYltcVSXhsDxA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
 <title>Non-Linear Mapper</title>
 <link rel="icon" href="icons/app_icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="css/base.css">
@@ -10,6 +14,7 @@
 <link rel="stylesheet" href="css/info.css">
 <link rel="stylesheet" href="css/editor3d.css">
 <link rel="stylesheet" href="css/chrome.css">
+<link rel="stylesheet" href="css/mapcheck.css">
 </head>
 <body>
 <div id="bootCover"></div>
@@ -28,6 +33,8 @@
       <hr>
       <button data-act="loadsong"><span data-i18n="menu.loadSong">音楽ファイルを読み込む…</span><span class="mkey"></span></button>
       <button data-act="addfolder"><span data-i18n="menu.addFolder">MEDIAにフォルダを追加…</span><span class="mkey"></span></button>
+      <hr>
+      <button data-act="mapcheck"><span data-i18n="menu.mapCheck">譜面チェック（BeatLeader基準）…</span><span class="mkey"></span></button>
     </div>
   </div>
   <button class="mbtn" id="mbSettings" data-i18n="menu.settings">環境設定</button>
@@ -86,8 +93,10 @@
           <div id="bpmField" class="bfField" data-i18n-t="ui.bpmField" title="BPM（‹›=±1・Shift+‹›=±0.1・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl">BPM</span><span class="bfV">120.00</span><span class="bfA" data-k="up">›</span></div>
           <button id="vmMetroBtn" class="dtBtn" data-i18n-t="ui.metroToggle" title="メトロノーム ON/OFF（再生中に拍ごとにクリック音）"></button>
           <button id="vmBpmBtn" class="dtBtn" data-i18n-t="ui.bpmDetect" title="BPM測定（曲からテンポを推定）"></button>
+          <div id="jdInfo" data-i18n-t="ui.jdInfoT" title="JD＝ノーツが出現してから消えるまでの距離／到達＝出現位置からプレイヤーの位置までの距離（JDの半分）／RT＝出現してからプレイヤーの位置に届くまでの時間。BPM・NJS・オフセットからゲームと同じ式で計算（表示のみ・変えるにはオフセットを調整）"></div>
           <span class="mbSep"></span>
           <div id="dirtyLamp" class="dirtyLamp" data-i18n="ui.dirtyLamp" data-i18n-t="ui.dirtyLampT" title="点灯中＝保存していない変更があります（保存はメニューまたはCtrl+S）">未保存有り</div>
+          <div id="swingLamp" class="dirtyLamp swingLamp" data-i18n="ui.swingLamp" data-i18n-t="ui.swingLampT" title="点灯中＝同じ向きが続いているノーツ（赤枠）があります。クリックでその位置へ移動。向きを直すと消えます（環境設定でOFF可）">同じ向き</div>
         </div>
         <div id="musicBar">
           <div id="diffBar" data-i18n-t="ui.diffBar" title="難易度（クリック=切替・選択中をもう一度クリック=メニュー。1〜5キーでも切替）"></div>
@@ -100,6 +109,7 @@
         <div id="infoWorld"><div id="infoGrid"></div><svg id="infoEdgeSvg" width="4000" height="3000"></svg><svg id="infoPortSvg" width="4000" height="3000"></svg>
         </div>
         <div id="chartInfo"></div>
+        <button class="iBtn" id="iMapCheck" data-i18n-t="ui.mapCheckTip" title="書き出す内容をBeatLeaderのランク基準（BS Map Checkと同じ判定）でチェックします"><span data-i18n="ui.mapCheck">🔍 譜面チェック（BeatLeader基準）</span></button>
         <button class="iBtn" id="iExport"><span data-i18n="ui.exportCustomSong">▶ カスタム曲書き出し</span></button>
       </div>
         <div id="nodepane">
@@ -111,6 +121,8 @@
         <div id="overview"><canvas id="ovcv"></canvas></div>
         <div id="specPane"><canvas id="speccv"></canvas></div>
         <div id="nodeKeys"><!-- NLE用ショートカット表示（新体系・右端） -->
+          <div class="mkrow"><span class="mkd" data-i18n="ui.nleScrub">時間移動</span><span class="mk" data-i18n="ui.nleScrubK">ホイール</span></div>
+          <div class="mkrow"><span class="mkd" data-i18n="ui.nleZoom">ズーム</span><span class="mk" data-i18n="ui.nleZoomK">Ctrl+ホイール</span></div>
           <div class="mkrow"><span class="mkd" data-i18n="ui.cut">カット</span><span class="mk">C</span></div>
           <div class="mkrow"><span class="mkd" data-i18n="ui.razor">分割モード（クリックで分割）</span><span class="mk">R</span></div>
           <div class="mkrow"><span class="mkd" data-i18n="ui.merge">マージ</span><span class="mk">Ctrl+G</span></div>
@@ -235,12 +247,11 @@
     <div class="row"><div class="t" data-i18n="tb.color">色（F=切替）</div><div class="colbtns"><div id="cRed" class="on" style="background:var(--red)" data-i18n="ui.colRed">赤</div><div id="cBlue" style="background:var(--blue)" data-i18n="ui.colBlue">青</div></div></div>
     <div class="row"><div class="t" data-i18n="tb.dir">切る向き</div><div class="palette" id="pal"></div></div>
 </div>
-<div id="neBg" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:120"
-  onpointerdown="if(event.target.id==='neBg')this.style.display='none'">
+<div id="neBg" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:120">
   <div style="width:400px;background:#1d1d1d;border:1px solid #2a2a2a;border-radius:10px;padding:16px 18px">
     <h2 id="neTitle" style="font-size:14px;margin:0 0 12px">NODE</h2>
     <div id="neFields"></div>
-    <div style="text-align:right;margin-top:10px"><button onclick="document.getElementById('neBg').style.display='none'" data-i18n="ui.close">閉じる</button></div>
+    <div style="text-align:right;margin-top:10px"><button id="neClose" data-i18n="ui.close">閉じる</button></div>
   </div>
 </div>
 <div id="settingsBg"><div id="settingsBox">
@@ -270,6 +281,8 @@
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="chromaMode" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.chromaOn">Chroma（各ライト自由色・要Mod）</span><span class="t" style="color:#8a8a92;font-size:11px" data-i18n="set.chromaHint">OFF＝バニラ配色（Mod無しでも全員に見える）</span></label></div>
     <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.auxPrev">直前ノーツ表示</div>
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="auxPrevShow" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.auxPrevOn">枠の左右に直前のノーツを表示（Hキーでも切替）</span></label></div>
+    <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.swingWarn">同じ向きの連続の警告</div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="swingWarnOn" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.swingWarnOn">置いたノーツが前後と同じ向き（差45°以内）なら赤枠・ランプ・音で知らせる</span></label></div>
   </div>
   <div class="setPanel" data-panel="vol">
     <div class="slRow"><div class="t"><span data-i18n="set.volMaster">マスター音量</span> <span id="volMVal">50</span>%</div>
@@ -305,6 +318,7 @@
     <div class="slRow"><div class="t"><span data-i18n="set.pan">パン</span> <span id="panVal">100</span>%</div>
       <input id="panSpd" type="range" min="50" max="150" value="100"></div>
     <label class="slRow" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="invert3DScroll" type="checkbox"><span data-i18n="set.invertScroll">3Dビューのホイール操作（時間移動）を反転</span></label>
+    <label class="slRow" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="invert2DScroll" type="checkbox"><span data-i18n="set.invertScroll2D">2D画面（NLE・Music）のホイール操作（時間移動）を反転</span></label>
   </div>
   <div class="setPanel" data-panel="keys">
     <div class="t" style="color:#c9a24a;margin-bottom:8px">キーの割り当てを変更できます。「変更」を押して、割り当てたいキー（修飾キー可）を押してください。マウス/ホイール操作は変更できません（参考表示）。</div>
@@ -317,40 +331,8 @@
   </div>
 </div></div>
 
-<script>
-// 個人の環境設定(bsnm_*)を config/settings.json にミラー保存＝localStorage喪失(サイトデータ削除/別オリジン)対策。
-// localStorage は従来どおり作業キャッシュとして使い、起動時にファイル→localStorage、変更時にlocalStorage→ファイル。
-// ※UIレイアウト系(パネル位置/画面比率/色履歴)は高頻度・マシン依存のためファイル対象外＝localStorage専用。
-// ※フォルダ/音源のFileHandle(IndexedDB)はJSON化不可なので対象外（従来どおりIndexedDB保持）。
-(function(){
-  // ファイルにミラーしない=localStorage専用（Tauri住み分け: UIレイアウト/高頻度/マシン依存）
-  var LOCAL_ONLY={bsnm_keypos:1,bsnm_keyfold:1,bsnm_split:1};
-  // ① 起動時: config/settings.json を読み、bsnm_* を localStorage へ流し込む（モジュールがlocalStorageを同期読みする前に確定させる）
-  try{
-    var xhr=new XMLHttpRequest();
-    xhr.open('GET','config/settings.json?v='+Date.now(),false);   // 同期: モジュール実行前に確定が必要
-    xhr.send();
-    if(xhr.status>=200&&xhr.status<300&&xhr.responseText){
-      var o=JSON.parse(xhr.responseText);
-      for(var k in o){ if(k.indexOf('bsnm_')===0&&!LOCAL_ONLY[k]){ try{ localStorage.setItem(k,o[k]); }catch(_){} } }
-    }
-  }catch(_){}
-  // ② 変更時: bsnm_* の set/remove を捕捉し、デバウンスで config/settings.json へ書き戻す（LOCAL_ONLYは除外）
-  var _set=localStorage.setItem.bind(localStorage), _rm=localStorage.removeItem.bind(localStorage), _t=null;
-  function schedule(){ if(_t) clearTimeout(_t); _t=setTimeout(function(){
-    var data={}; for(var i=0;i<localStorage.length;i++){ var key=localStorage.key(i); if(key&&key.indexOf('bsnm_')===0&&!LOCAL_ONLY[key]) data[key]=localStorage.getItem(key); }
-    try{ fetch('__settings/save',{method:'POST',headers:{'Content-Type':'application/json','X-NLM-Request':'1'},body:JSON.stringify({data:data})}); }catch(_){}
-  },400); }
-  localStorage.setItem=function(k,v){ _set(k,v); if((''+k).indexOf('bsnm_')===0) schedule(); };
-  localStorage.removeItem=function(k){ _rm(k); if((''+k).indexOf('bsnm_')===0) schedule(); };
-  // ③ 廃止済みキーの掃除: 誰も読まなくなった旧キーを localStorage / settings.json から除去（ミラーが全bsnm_*を書き戻すため放置すると永続する）。監査 2026-07-14
-  ['bsnm_cpal','bsnm_cphist'].forEach(function(k){ try{ if(localStorage.getItem(k)!=null) localStorage.removeItem(k); }catch(_){} });   // bsnm_cpal=クロマパレットはper-project化 / bsnm_cphist=色履歴パレット廃止
-})();
-</script>
-<script type="importmap">
-{ "imports": { "three":"./js/vendor/three/three.module.js",
-  "three/addons/":"./js/vendor/three/addons/" }}
-</script>
+<script src="./js/settings-mirror.js"></script>
+<script type="importmap">{ "imports": { "three":"./js/vendor/three/three.module.js", "three/addons/":"./js/vendor/three/addons/" }}</script>
 <script type="module" src="./js/main.js?v=chain-head-center-arrow"></script>
 
 </body>

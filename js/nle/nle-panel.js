@@ -53,7 +53,7 @@ export class NlePanel {
     'tlEnd',
     'tlScrub',
     'tlWindow',
-    'tlZoom'
+    'tlWheel'
     ];
   }
 
@@ -96,7 +96,7 @@ export class NlePanel {
   tlEnd(...args) { return this.rt.tlEnd(...args); }
   tlScrub(...args) { return this.rt.tlScrub(...args); }
   tlWindow(...args) { return this.rt.tlWindow(...args); }
-  tlZoom(...args) { return this.rt.tlZoom(...args); }
+  tlWheel(...args) { return this.rt.tlWheel(...args); }
 }
 
 /** Register domain object on `rt.modules.nle` and bind live impls. */

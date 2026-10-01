@@ -145,6 +145,30 @@ Pythonから使う場合（検証スクリプトの書き方）はファイル�
 - `make_fixtures.py`: 上の2つを作り直す。nlmf は cdp.py で実際にクリックして置き、アプリ自身に保存させている
   ＝保存形式が変わったらこれを実行すれば追従する。
 
+## 譜面チェックを原作と突き合わせる（mapcheck_difftest.py）
+
+`js/mapcheck/mapcheck.js`（譜面チェック・BeatLeader基準）は BS Map Check の移植。原作の判定が変わった時や
+移植を直した時は、これで原作サイトと同じ結果になるかを確かめる（ffmpeg とネット接続が必要）。
+
+```
+.venv-build/Scripts/python.exe tools/mapcheck_difftest.py 1 2 3 7 23   # seedごとに乱数譜面を作って比較
+```
+
+- 乱数で問題の多い譜面（5難易度）を作り、原作サイトをヘッドレスEdgeで開いてプリセット「BeatLeader」で読ませた結果と、
+  移植版の結果を「項目名（英語）→指摘された拍の集合」で比べる。`seed%3==2` はv3環境（Weave）、`seed%4==3` はv2形式の.dat。
+- 原作は読み込み時にデータ形式を検査し、範囲外の値（回転イベントの e=2 など）があると譜面ごと読まない。生成する値は形式上正しい範囲に収めること。
+- 既知の差はファイル冒頭に書いてある（原作が例外で項目ごと出さないケース）。それ以外の差は移植のずれ。
+
+## NLM版 BeatLeader評価リストの自己テスト（blcriteria_test.py）
+
+`js/mapcheck/blcriteria.js`（譜面チェックの2つ目のタブ）は、BeatLeader公式の文章の基準を項目番号どおりに判定する
+NLM独自の実装（BS Map Check の移植ではないので、原作と突き合わせる相手が無い）。問題の無い譜面を1つ作り、
+違反を1つずつ仕込んで該当項目が「違反/要確認」になるかを確かめる。判定を直した時・基準の改訂に追従した時に実行する。
+
+```
+.venv-build/Scripts/python.exe tools/blcriteria_test.py      # -v で全ケースの結果を表示
+```
+
 ## チュートリアルの画像を撮り直す（make_tutorial_shots.py）
 
 `docs/tutorial.md` の画像（`docs/images/tutorial/*.png`）は、`tools/make_tutorial_shots.py` が空の状態から

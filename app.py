@@ -4,7 +4,7 @@
 #     %LOCALAPPDATA%\NonLinearMapper\data 配下（ユーザー書込み可・アプリ更新で消えない）
 #   - ローカルの空きポートで serve.py を起動し、WebView2 のネイティブウィンドウで表示する。
 #     serve.py をそのまま使うので、フォルダ走査・保存・書き出し等のフロント実装は一切変更不要。
-import os, sys, socket, threading
+import os, sys, json, socket, threading
 
 # ★pywebview(WinForms) が使う pythonnet のランタイムを .NET Framework(netfx) に固定する。
 #   pythonnet 3.x は既定で coreclr(.NET 6+) を優先するが、素の Windows 11 は .NET ランタイム
@@ -37,12 +37,16 @@ def _unblock_dist_folder():
     # ランタイムがDLLロードを拒否し、pythonnetのCLR初期化が
     # "Failed to resolve Python.Runtime.Loader.Initialize from ...\Python.Runtime.dll"
     # で失敗する（配布ユーザー報告 2026-09-23。手動なら「zipのプロパティ→許可する」で回避可）。
-    # ここでは exe と同じフォルダ配下の全ファイルから Zone.Identifier を自動除去し、
+    # ここでは同梱物（_internal = sys._MEIPASS）配下のファイルから Zone.Identifier を自動除去し、
     # ユーザーの手動操作を不要にする。frozen時のみ（devはそもそも付かない）。
+    # ※対象は_internalだけ。exeの隣全体を対象にすると、ダウンロードフォルダ直下などに置かれた時に
+    #   無関係なダウンロードファイルの「インターネット由来」の印まで消してしまう（セキュリティ点検 2026-09-28）。
     # ※必ず webview/clr のインポート前に呼ぶこと。失敗しても起動は妨げない。
     if not getattr(sys, 'frozen', False):
         return
-    base = os.path.dirname(sys.executable)
+    base = getattr(sys, '_MEIPASS', '')
+    if not base or os.path.normcase(os.path.abspath(base)) == os.path.normcase(os.path.dirname(os.path.abspath(sys.executable))):
+        return   # onefile等で_internalが無い構成では何もしない（exeの隣全体を触らない）
     try:
         for root, _dirs, files in os.walk(base):
             for f in files:
@@ -204,6 +208,59 @@ def _open_file_arg():
             return os.path.abspath(a)
     return ''
 
+# ---- ネイティブ読み書きの許可範囲（セキュリティ点検 2026-09-28） ----
+# 画面側(JS)へ渡すファイル読み書きAPIは、どんな絶対パスでも受け付けると「細工した.nlmf等でJSを乗っ取られた時に
+# スタートアップフォルダへ実行ファイルを置かれる」等の被害に直結する。そこで:
+#  - 書き込みは「このPCでフォルダ選択ダイアログから選んだ出力フォルダ」の中だけ、かつ書き出しで作る種類のファイルだけ
+#  - 読み込みは音源/画像の拡張子、ダイアログで選んだファイル、許可済み出力フォルダの中だけ
+# 許可済み出力フォルダは config/native_out_dirs.json に保存（次回以降の自動接続に使う）。JSからは書き換えられない。
+_AUDIO_EXTS = {'.egg', '.ogg', '.oga', '.opus', '.mp3', '.m4a', '.aac', '.wav', '.flac', '.weba', '.webm'}
+_IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'}
+_READ_EXTS = _AUDIO_EXTS | _IMAGE_EXTS
+_WRITE_EXTS = {'.dat', '.egg', '.json'} | _IMAGE_EXTS   # Info.dat/各難易度.dat/song.egg/.nlm-egg.json/cover.*
+
+def _npath(p):
+    """比較用の正規化パス（ジャンクション/シンボリックリンクも実体へ解決・大文字小文字を無視）。"""
+    return os.path.normcase(os.path.realpath(os.path.abspath(str(p))))
+
+def _is_under(root, p):
+    try:
+        return os.path.commonpath([root, p]) == root
+    except ValueError:   # ドライブが違う等
+        return False
+
+class _NativeAccess:
+    def __init__(self, store_file):
+        self.store_file = store_file
+        self.picked_files = set()   # このセッションでダイアログから選ばれたファイル（拡張子が想定外でも読めるように）
+        try:
+            with open(store_file, 'r', encoding='utf-8') as f:
+                self.out_dirs = {_npath(d) for d in json.load(f).get('out_dirs', []) if isinstance(d, str)}
+        except Exception:
+            self.out_dirs = set()
+
+    def approve_dir(self, path):
+        self.out_dirs.add(_npath(path))
+        try:
+            os.makedirs(os.path.dirname(self.store_file), exist_ok=True)
+            with open(self.store_file, 'w', encoding='utf-8') as f:
+                json.dump({'out_dirs': sorted(self.out_dirs)}, f, ensure_ascii=False, indent=1)
+        except OSError:
+            pass   # 保存に失敗しても今回のセッションは使える（次回は再接続が必要になるだけ）
+
+    def in_out_dir(self, path):
+        p = _npath(path)
+        return any(_is_under(d, p) for d in self.out_dirs)
+
+    def can_read(self, path):
+        return (os.path.splitext(path)[1].lower() in _READ_EXTS
+                or _npath(path) in self.picked_files or self.in_out_dir(path))
+
+    def can_write(self, path):
+        name = os.path.basename(path)
+        return (':' not in name and os.path.splitext(name)[1].lower() in _WRITE_EXTS
+                and self.in_out_dir(os.path.dirname(path)))
+
 def main():
     _unblock_dist_folder()   # webview(→pythonnet/clr)のインポート前に済ませる
     app_root = _app_root()
@@ -228,6 +285,7 @@ def main():
     # JSが未保存の有無を set_dirty で知らせ、未保存がある時だけ閉じるのを止めてアプリ内の3択ダイアログ
     # （保存して終了／保存せずに終了／キャンセル＝言語設定に追従）を出す。終了が決まったら quit_app で閉じる。
     close_state = {'dirty': False, 'force': False}
+    access = _NativeAccess(os.path.join(data_root, 'config', 'native_out_dirs.json'))
 
     class Api:
         def set_dirty(self, on):
@@ -247,13 +305,17 @@ def main():
                 webview.FileDialog.OPEN,
                 file_types=('音源ファイル (*.egg;*.ogg;*.oga;*.opus;*.mp3;*.m4a;*.aac;*.wav;*.flac;*.weba;*.webm)',
                             'すべてのファイル (*.*)'))
+            if paths:
+                access.picked_files.add(_npath(paths[0]))
             return paths[0] if paths else None
 
-        def read_song_file(self, path):
+        def read_song_file(self, path):   # 名前は曲用だが、カバー画像・出力フォルダ内の目印ファイルの読込にも使う汎用読込
             import base64
             try:
                 if not path or not os.path.isfile(path):
                     return {'ok': False, 'error': 'not-found'}
+                if not access.can_read(path):
+                    return {'ok': False, 'error': 'not-allowed'}
                 with open(path, 'rb') as f:
                     data = f.read()
                 return {'ok': True, 'name': os.path.basename(path), 'mtime': os.path.getmtime(path),
@@ -269,6 +331,8 @@ def main():
         def pick_folder(self, start=''):
             kw = {'directory': start} if start and os.path.isdir(start) else {}
             paths = webview.windows[0].create_file_dialog(webview.FileDialog.FOLDER, **kw)
+            if paths:
+                access.approve_dir(paths[0])   # ユーザーが自分で選んだ＝書き出し先として許可（次回以降も自動接続できる）
             return paths[0] if paths else None
 
         def pick_image_file(self, start=''):
@@ -277,6 +341,8 @@ def main():
             paths = webview.windows[0].create_file_dialog(
                 webview.FileDialog.OPEN,
                 file_types=('画像ファイル (*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp)', 'すべてのファイル (*.*)'), **kw)
+            if paths:
+                access.picked_files.add(_npath(paths[0]))
             return paths[0] if paths else None
 
         @staticmethod
@@ -285,14 +351,19 @@ def main():
                 return None
             return os.path.join(base, name)
 
-        def fs_isdir(self, path):
-            return bool(path) and os.path.isdir(path)
+        def out_dir_ok(self, path):
+            # 保存済みの出力フォルダへ自動接続してよいか: 'ok'=許可済み / 'unapproved'=このPCで未選択 / 'missing'=存在しない
+            if not path or not os.path.isdir(path):
+                return 'missing'
+            return 'ok' if access.in_out_dir(path) else 'unapproved'
 
         def fs_isfile(self, path):
-            return bool(path) and os.path.isfile(path)
+            return bool(path) and os.path.isfile(path) and access.can_read(path)
 
         def fs_subdir(self, base, name, create):
             try:
+                if not base or not access.in_out_dir(base):
+                    return {'ok': False, 'error': 'not-allowed'}
                 p = self._child(base, name)
                 if not p:
                     return {'ok': False, 'error': 'bad-name'}
@@ -306,6 +377,8 @@ def main():
 
         def fs_file(self, base, name, create):
             try:
+                if not base or not access.in_out_dir(base):
+                    return {'ok': False, 'error': 'not-allowed'}
                 p = self._child(base, name)
                 if not p:
                     return {'ok': False, 'error': 'bad-name'}
@@ -320,6 +393,8 @@ def main():
             try:
                 if not path or not os.path.isdir(os.path.dirname(path)):
                     return {'ok': False, 'error': 'no-dir'}
+                if not access.can_write(path):
+                    return {'ok': False, 'error': 'not-allowed'}
                 with open(path, 'wb') as f:
                     f.write(base64.b64decode(b64))
                 return {'ok': True}

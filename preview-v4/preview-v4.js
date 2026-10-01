@@ -730,7 +730,7 @@ function rebuild(){
     for(const lk of links){
       const lb=beat0+dur*lk.t;
       pushChainPart(makePart(g.chainLink, g.matDot, CHAIN_LINK_SIZE, 1, false, true),   // リンクは実機同様の均一サイズ
-        lb, lk.lx, lk.ly, true, lk.ang);   // 接線角（実機式。頭→尾補間は廃止＝ヘルバ様決定）
+        lb, lk.lx, lk.ly, true, -lk.ang);   // 接線角（実機式。頭→尾補間は廃止＝ヘルバ様決定）。lk.angは反時計回り正、noteFrameは時計回り正で反転するので符号を合わせる
     }
   }
 

@@ -26,6 +26,7 @@ import { installGraphLegacy } from '../chart/graph-legacy.js';
 import { installUiChrome } from '../ui/chrome.js';
 import { installTickLoop } from '../loop/tick-loop.js';
 import { installEditorRuntimeHelpers } from '../runtime/editor-runtime.js';
+import { installMapCheckPanel } from '../mapcheck/mapcheck-panel.js';
 
 /**
  * Editor runtime — original closure (behavior-preserving).
@@ -43,6 +44,10 @@ function boostStateAt(beat){   // 指定拍でのBoost状態: その拍以前の
 function _briB(c){ const f=(v)=>Math.min(255,v+((255-v)*0.4)|0); return f(c>>16&255)<<16|f(c>>8&255)<<8|f(c&255); }   // ブースト既定＝基本色を明るくした派生
 function laserBoostCols(){ LRED_B=_briB(LRED); LBLUE_B=_briB(LBLUE); }
 const hexOf=n=>'#'+(n>>>0).toString(16).padStart(6,'0');
+// innerHTMLへ差し込む値のうち、ファイル(.nlmf/.nlmclip/Info.dat等)由来の文字列は必ずescHtmlを通す。
+// 細工したプロジェクトの曲名等でスクリプトを動かされ、pywebview APIでPCのファイルを書き換えられるのを防ぐ（セキュリティ点検 2026-09-28）
+const escHtml=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const safeHex=(c,def='#888888')=>(typeof c==='string'&&/^#[0-9a-f]{3,8}$/i.test(c))?c:def;   // SVG属性へ差し込む色（属性の外へ抜けさせない）
 function setNoteColStr(){ cRED=hexOf(RED); cBLUE=hexOf(BLUE); try{ updateColorBtn(); }catch(_){} }   // カスタム色変更をツールバー色ボタンへも反映（初期化中はTB_ICONS未定義でTDZ→try/catchで無視）
 // カラーピッカーのスウォッチから各色をライブ変更（ノーツ/ライト/ブースト）。値はライブ変数＋セットアップノードの両方へ直接反映＝applyInfoGraphで戻らず、undo連打も出ない（保存はinfoGraph経由・ヘルバ様指定 2026-07-13）
 function _hexToInt(hex){ const m=/^#?([0-9a-fA-F]{6})/.exec(hex||''); return m?parseInt(m[1],16)>>>0:null; }
@@ -184,6 +189,8 @@ const TL=(k,def)=>t(k,def);   // t()の安全な別名（引数名tでシャド�
 function tf(key,def,vars){ let s=t(key,def); if(vars) for(const k in vars) s=s.split('{'+k+'}').join(String(vars[k])); return s; }   // 差し込み穴つき翻訳（動的値を含むトースト用。{name}等を置換）
 async function loadLang(){
   try{ LANG=await (await fetch('lang/'+langCode+'.json?v='+(typeof ICON_V!=='undefined'?ICON_V:1),{cache:'no-cache'})).json(); }catch(e){ LANG={}; console.warn('lang読込失敗',e); }
+  // 訳文はinnerHTMLへも差し込まれるため、タグを含む訳(=配布された細工lang等)は捨てて既定文にする（正規の訳に'<'は無い）
+  for(const k in LANG){ if(typeof LANG[k]!=='string'||LANG[k].includes('<')){ console.warn('lang: 不正な訳を無視',k); delete LANG[k]; } }
   document.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent=t(el.dataset.i18n,el.textContent); });
   document.querySelectorAll('[data-i18n-t]').forEach(el=>{ el.title=t(el.dataset.i18nT,el.title); });
   document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ el.placeholder=t(el.dataset.i18nPh,el.placeholder); });
@@ -192,6 +199,7 @@ async function loadLang(){
   if(typeof refreshInspector==='function') refreshInspector();   // INFOノードカード/曲情報など動的生成テキストを再翻訳（言語切替時）
   if(document.getElementById('tbDirPanel')) buildDirPanel();
   if(typeof updateModeIndicator==='function') updateModeIndicator();   // 配置/編集モード表示は動的管理（data-i18n非依存）＝言語切替でも現在モードの訳語を出す
+  refreshJdInfo();   // JD/RT表示（差し込み穴つき）
 }
 // ---- ペインモード（Tabで切替。マウスの乗っているペインが対象） ----
 let curTab='tabFolder', pvMode='media', nodeMode='edit', nodeColMode='nle', hoverPane='main';   // 起動時はMEDIAを先に表示（ヘルバ様指示）
@@ -225,7 +233,7 @@ function setNodeColMode(m){ nodeColMode=m; const info=(m==='info'), gid=id=>docu
 const KEYS_COMMON=[
   ['回転','🖱️ 中ドラッグ'],
   ['パン','Shift + 🖱️ 中ドラッグ'],
-  ['ズーム','Shift + 🖱️ ホイール'],
+  ['ズーム','Ctrl + 🖱️ ホイール'],
   ['範囲選択','🖱️ 左ドラッグ'],
   ['追加選択','Shift + 🖱️ 左クリック/ドラッグ'],
   ['選択解除','A'],
@@ -254,10 +262,11 @@ const KEYS_NOTE=[
   ['追加','🖱️ 左クリック'],
   ['削除','🖱️ 右クリック'],
   ['向き回転','Alt + 🖱️ ホイール'],
+  ['ドットにする','D'],
   ['色の反転','F'],
   ['アーク / チェーン','2個以上 Ctrl+R ／ Ctrl+T・C（同色連続ペア）'],
   ['アーク','Alt + 🖱️ ホイール = mu（頭曲率）／ Ctrl + Alt + 🖱️ ホイール = tmu（尾曲率）'],
-  ['チェーン','Ctrl + 🖱️ ホイール = 分割数 ／ Ctrl + Alt + 🖱️ ホイール = squish（詰め）'],
+  ['チェーン','Shift + 🖱️ ホイール = 分割数 ／ Ctrl + Alt + 🖱️ ホイール = squish（詰め）'],
   ['壁のサイズ','S'],
   ['直前ノーツ表示 切替','H'],
 ];
@@ -300,6 +309,7 @@ const ACTIONS=[
   {id:'camMode',     cat:'common', label:'配置 / カメラ固定モード切替',  def:{k:'q'}},
   // NOTES
   {id:'noteFlip',    cat:'notes',  label:'色の反転',              def:{k:'f'}},
+  {id:'noteDot',     cat:'notes',  label:'ドットにする',          def:{k:'d'}},
   {id:'noteArc',     cat:'notes',  label:'アーク作成',            def:{k:'r', c:true}},
   {id:'noteChain',   cat:'notes',  label:'チェーン作成',          def:{k:'t', c:true}},
   {id:'noteWall',    cat:'notes',  label:'壁のサイズ',            def:{k:'s'}},
@@ -351,7 +361,7 @@ function renderMetaList(){
   el.innerHTML=ordered.length?'':'<div style="color:#5d7596">セクション未作成（下部タイムラインをダブルクリック）</div>';
   ordered.forEach((s,i)=>{ const d=document.createElement('div');
     const col=SEC_COLORS[sections.indexOf(s)%SEC_COLORS.length];
-    d.innerHTML=`<span style="color:${col}">■ ${s.label}</span><span style="color:#6f88ad">拍 ${s.beat}</span>`;
+    d.innerHTML=`<span style="color:${col}">■ ${escHtml(s.label)}</span><span style="color:#6f88ad">拍 ${escHtml(s.beat)}</span>`;
     d.onclick=()=>{ cur=s.beat; offset=beatToTimeTM(cur); };
     el.appendChild(d); });
 }
@@ -497,6 +507,7 @@ playDiamond.rotation.y=Math.PI/4; playDiamond.position.set(-NUMX,0.014,0); playD
 // 4×3を真ん中で割り、ワールド+x側の2列(lineIndex 0,1)は+x外側へ、-x側(2,3)は-x外側へずらす＝画面上の左右がそのまま対応
 // （赤用/青用ではない。クロス配置なら交差した側に出る）。基準: 配置モード=赤の再生ヘッド / カメラ固定モード=黄色の配置枠。
 // 再生中は非表示。直前がドットならドットのみ（それ以上は遡らない）。チェーンは尾の拍・尾のマスを終点とし頭の向きで扱う。
+// 赤青が同じマスに入った時だけ、そのマス内で斜めに分けて縮小表示する（重なると向きが読めないため・2026-09-28）。
 const AUX_S=1.0, AUX_GAP=0.3, AUX_COLOR=0xc040ff;   // 色は再生ヘッド(赤)・カーソル(黄)と区別できる赤紫
 const auxGroup=new THREE.Group(); auxGroup.visible=false; noteRoot.add(auxGroup);
 let auxShow=localStorage.getItem('bsnm_auxprev')!=='0';   // 表示ON/OFF（設定のチェック＋Hキー。bsnm_*なので settings.json へ自動ミラー）
@@ -1081,7 +1092,7 @@ function updateLightColorTB(){
     sw.title=chromaMode?'現在の配置色（クリックでカラーパレット）':'現在の配置色 ①②白（クリックでカラーパレット）'; }
   if(host){ host.innerHTML=''; host.style.display='none'; }   // 5個の箱は廃止＝パレット内で選択（ヘルバ様指定 2026-07-14）
 }
-function chromaSwSvg(col){ return `<svg viewBox="0 0 64 64"><rect x="3" y="3" width="58" height="58" rx="13" fill="${col}"/></svg>`; }   // 色矩形を大きく＝ノーツ色スウォッチと同等の見た目（ヘルバ様指定 2026-07-13）
+function chromaSwSvg(col){ return `<svg viewBox="0 0 64 64"><rect x="3" y="3" width="58" height="58" rx="13" fill="${safeHex(col)}"/></svg>`; }   // 色矩形を大きく＝ノーツ色スウォッチと同等の見た目（ヘルバ様指定 2026-07-13）
 let _cpTrigger=null, _cpSuppress=0, _cpSuppressTrig=null;   // カラーピッカーのトグル用（同じスウォッチを再度押したら閉じる・全開き口共通・ヘルバ様指定 2026-07-13）
 function pickHexAt(btn,initHex,onCommit){
   const sr=btn.getBoundingClientRect(), nr=ndcv.getBoundingClientRect();
@@ -1335,9 +1346,16 @@ function tlWindow(b){ if(tlFrozen) return tlFrozen;
     if(b>tlB0+tlSpan-mg) tlB0=Math.max(0,b-(tlSpan-mg));
     else if(b<tlB0+mg) tlB0=Math.max(0,b-mg); }
   return {b0:tlB0,span:tlSpan}; }
-function tlZoom(e){ e.preventDefault();
-  if(e.shiftKey&&!e.ctrlKey&&!e.altKey&&!e.metaKey){ tlScrub(e); return; }   // Shift+ホイール=スクラブ / 素のホイール=タイムラインズーム
-  if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;   // 未設定の修飾+ホイールは無効（ズームは素のホイールのみ）
+/** 停止中でも窓を再生ヘッドへ追従させる（ホイール/←→で動かした時だけ呼ぶ。クリックでのシークでは窓を動かさない＝2026-09-28指定） */
+function tlFollow(b){ if(tlFrozen) return;
+  if(tlViewB0!=null){ tlB0=tlViewB0; tlViewB0=null; }   // 手動スクロール位置から連続で追う（窓が飛ばない）
+  const mg=Math.min(4,tlSpan*0.3);
+  if(b>tlB0+tlSpan-mg) tlB0=Math.max(0,b-(tlSpan-mg));
+  else if(b<tlB0+mg) tlB0=Math.max(0,b-mg); }
+// 2Dタイムライン(NLEレイヤー/Music)のホイール: 素=再生ヘッド移動（3Dと同じ向き・環境設定で別に反転可） / Ctrl=ズーム / 他の修飾=無効（2026-09-28）
+function tlWheel(e){ e.preventDefault();
+  if(!e.ctrlKey&&!e.altKey&&!e.metaKey&&!e.shiftKey){ tlScrub(e,invert2DScroll); return; }
+  if(e.altKey||e.metaKey||e.shiftKey) return;
   const maxSpan=Math.max(32,Math.ceil(tlEnd()));   // タイムライン全長（最後尾ボックス+4拍、最低8小節）より広くは縮小できない
   const cv=e.currentTarget, rect=cv.getBoundingClientRect();   // ndcv/ovcv どちらでもマウス支点で拡大縮小（支点の拍がその場に留まる＝編集箇所が逃げない）
   const GUT=128, W=rect.width||1, mx=e.clientX-rect.left, frac=(mx-GUT)/Math.max(1,W-GUT);
@@ -1345,7 +1363,7 @@ function tlZoom(e){ e.preventDefault();
   tlSpan=Math.max(4,Math.min(maxSpan,tlSpan*(e.deltaY>0?1.25:0.8)));
   if(mx>=GUT&&frac<=1) tlViewB0=Math.max(0,pivotBeat-frac*tlSpan);   // 支点の拍がマウス位置に留まるよう窓をスクロール
   if(tlFrozen) tlFrozen=null; }
-ovcv.addEventListener('wheel',tlZoom,{passive:false});
+ovcv.addEventListener('wheel',tlWheel,{passive:false});
 const TLGUT=128;   // 左溝幅（S/MボタンとBPMステッパーが入る幅）。レイヤービューのLGUTと同値にして支点の縦線を一直線に揃える
 const beatToX=b=>TLGUT+(b-ovWin.b0)/ovWin.span*(ovW-TLGUT);
 const xToBeat=x=>ovWin.b0+(x-TLGUT)/(ovW-TLGUT)*ovWin.span;
@@ -2497,7 +2515,7 @@ function ndInlineEdit(rect,val,onCommit,numeric,anchor){
 }
 function setBPMv(v){
   if(!isFinite(v)||v<=0) return;
-  BPM=Math.round(v*100)/100;
+  BPM=Math.round(v*100)/100; refreshJdInfo();
   if(infoBase){ infoBase._beatsPerMinute=BPM; infoDirty=true; applyInfoChain(); }
   offset=beatToTimeTM(cur);
   if(playing) pause();
@@ -2726,6 +2744,9 @@ const EN_FIELDS={
   env:[['_environmentName','環境名（environmentName）']],
 };
 const EN_NUM=new Set(['_shuffle','_shufflePeriod','_previewStartTime','_previewDuration']);
+{ const bg=document.getElementById('neBg');   // 背景クリック/閉じるで畳む（CSPでHTML直書きのon*属性が使えないためここで登録）
+  if(bg){ bg.addEventListener('pointerdown',e=>{ if(e.target===bg) bg.style.display='none'; });
+    const cb=document.getElementById('neClose'); if(cb) cb.addEventListener('click',()=>{ bg.style.display='none'; }); } }
 function editExtraNode(n){
   const bg=document.getElementById('neBg'), box=document.getElementById('neFields');
   document.getElementById('neTitle').textContent=EN_DEF[n.kind].title;
@@ -3821,7 +3842,7 @@ ndcv.addEventListener('pointerup', e=>{ if(ndView!=='layers') return;
     }
     compileLayersToFlat(); metaDirty=true; }
   layerDrag=null; layerPan=null; });
-ndcv.addEventListener('wheel', e=>{ if(ndView!=='layers') return; tlZoom(e); },{passive:false});   // ズーム/スクラブは下段Musicと共有
+ndcv.addEventListener('wheel', e=>{ if(ndView!=='layers') return; tlWheel(e); },{passive:false});   // ズーム/スクラブは下段Musicと共有
 ndcv.addEventListener('mouseleave',()=>{ tlHoverBeat=null; _ndMouseY=-1; });
 function syncLaneSb(){   // drawLayersから毎フレーム（変化時のみstyle書込）。拍数ルーラーには被らない=LRULERから下
   const padTop=50;   // 50=#nodepaneのpadding-top（canvas上端）
@@ -4119,7 +4140,7 @@ prcv.addEventListener('dblclick', e=>{
 prcv.addEventListener('contextmenu',e=>e.preventDefault());
 addEventListener('pointermove', e=>{ if(prSeek) prSeekTo(e.clientX); });
 addEventListener('pointerup', ()=>{ if(prSeek){ prSeek=false; tlFrozen=null; } });
-prcv.addEventListener('wheel',tlZoom,{passive:false});
+prcv.addEventListener('wheel',tlWheel,{passive:false});
 
 let metaDirty=false;
 
@@ -4324,6 +4345,7 @@ function lastNotesBefore(rb){
 }
 let auxKey='', auxMats=null;
 const AUX_OPACITY=0.6;   // 実ノーツと見分けがつくよう半透明（ユーザー指定 2026-09-27。0.35ではスペクトル帯と重なると見えなかった）
+const AUX_SPLIT_S=0.65, AUX_SPLIT_D=0.2;   // 赤青同マス時の縮小率と、マス中心からの斜めずらし量（マス幅/高さ比）
 function updateAuxPrev(rb){
   const best=lastNotesBefore(rb);
   const key=mat(0).color.getHex()+'/'+mat(1).color.getHex()+'|'   // ノーツ色のカスタム変更にも追従
@@ -4334,6 +4356,9 @@ function updateAuxPrev(rb){
   for(const c of [0,1]){ auxMats.note[c].color.copy(mat(c).color); auxMats.note[c].emissive?.copy(mat(c).emissive); }
   while(auxNotes.children.length) auxNotes.remove(auxNotes.children[0]);
   const cl=(v,hi)=>Math.max(0,Math.min(hi,Math.round(v||0)));
+  // 赤青が同じマスに入った時だけ、そのマスの中で斜めに分けて縮小（赤=画面左上 / 青=画面右下。画面左=ワールド+x）
+  const cellsOf=b=>new Set(b?b.items.map(it=>cl(it.x,3)+','+cl(it.y,2)):[]);
+  const cRed=cellsOf(best[0]), cBoth=new Set([...cellsOf(best[1])].filter(k=>cRed.has(k)));
   best.forEach((b,c)=>{ if(!b) return;
     for(const it of b.items){ const d=it.d??8;
       const g=new THREE.Group();
@@ -4342,9 +4367,11 @@ function updateAuxPrev(rb){
       g.add(box); attachNoteArrowMarks(g,d,null,0);
       for(const m of g.children) if(m!==box) m.material=(d===8?auxMats.dot:auxMats.arrow);
       box.renderOrder=6; for(const m of g.children) if(m!==box) m.renderOrder=7;   // スペクトル帯(renderOrder=5)より後に描く＝帯の向こうでも埋もれない
-      g.scale.set(AUX_S,AUX_S,AUX_S*NOTE_THIN);
-      const [px,py]=auxCellPos(cl(it.x,3),cl(it.y,2));
-      g.position.set(px,py,0);   // 全ノーツを補助グリッドの面上にそろえる（赤青が同じマスでも半透明なので両方見える）
+      const cx=cl(it.x,3), cy=cl(it.y,2), both=cBoth.has(cx+','+cy);
+      const sc=AUX_S*(both?AUX_SPLIT_S:1), sg=c===0?1:-1;
+      g.scale.set(sc,sc,sc*NOTE_THIN);
+      const [px,py]=auxCellPos(cx,cy);
+      g.position.set(px+(both?sg*AUX_SPLIT_D*LANE*AUX_S:0),py+(both?sg*AUX_SPLIT_D*LAYER*AUX_S:0),0);   // 補助グリッドの面上にそろえる
       auxNotes.add(g); } });
   tagHelper(auxNotes);
 }
@@ -4912,6 +4939,7 @@ function rebuild(){
   [...notes,...bombs,...walls,...arcs,...chains].filter(o=>layerVisible('n',o._tr||0)).forEach(addObj);   // 幽霊廃止: notesは常に全表示
   refreshChainPanel();
   refreshArcPanel();
+  refreshJdInfo();   // 難易度切替でNJS/オフセットが変わる
 }
 
 // state
@@ -6171,7 +6199,7 @@ async function applyProject(pj){
   musicSegs=(pj&&pj.musicSegs)||null; musicSelSet=new Set();   // Cカットのセグメントも復元
   if(pj&&pj.noteRed!=null){ RED=pj.noteRed>>>0; BLUE=pj.noteBlue>>>0; } else { RED=0xff274d; BLUE=0x3092ff; }
   if(pj&&pj.laserRed!=null){ LRED=pj.laserRed>>>0; LBLUE=pj.laserBlue>>>0; } else { LRED=0xff274d; LBLUE=0x3092ff; }
-  _cpal=(pj&&Array.isArray(pj.chromaPalette))?pj.chromaPalette.slice(0,48):[];   // クロマパレットはプロジェクトから復元（無ければ空＝新規/旧ファイル）
+  _cpal=(pj&&Array.isArray(pj.chromaPalette))?pj.chromaPalette.filter(c=>safeHex(c,null)).slice(0,48):[];   // 色として正しい値だけ（ファイル由来の値をSVGへ差し込むため）   // クロマパレットはプロジェクトから復元（無ければ空＝新規/旧ファイル）
   try{ lightBrush.chroma=null; lightBrush._lastChromaHex=null; _lightPalIdx=-1; }catch(_){}   // ブラシのクロマ状態もリセット（既定=左ノーツ色へ戻る）
   laserBoostCols(); setNoteColStr(); refreshInfoCards(); applyModeDim();
   await loadDiff(sel.value);
@@ -6239,11 +6267,16 @@ async function tryAutoLoadSongNative(){
 }
 // プロジェクトを開いた直後、保存済みのネイティブパス（出力フォルダ・カバー画像）へダイアログ無しで自動接続する。
 // パスが今は存在しない（移動・削除）場合は何もしない＝従来どおり「再接続」で選び直してもらう。
+// 出力フォルダは「このPCでフォルダ選択ダイアログから選んだことがある」ものだけ自動接続する（app.pyのout_dir_okが判定）。
+// 他人から受け取った.nlmfに任意のフォルダ（スタートアップ等）を書き出し先として仕込まれても、黙って書き込まないため。
 async function tryAutoRestoreNativeInputs(){
   await waitPywebview(); const api=nativeApi(); if(!api||!infoGraph) return;
-  let changed=false;
+  let changed=false, unapproved=false;
   for(const oid in (infoGraph.outs||{})){ const o=infoGraph.outs[oid]; if(!o.outDirPath) continue;
-    try{ if(await api.fs_isdir(o.outDirPath)){ _outHandles[oid]=mkNativeDir(o.outDirPath); changed=true; } }catch(e){} }
+    try{ const st=await api.out_dir_ok(o.outDirPath);
+      if(st==='ok'){ _outHandles[oid]=mkNativeDir(o.outDirPath); changed=true; }
+      else if(st==='unapproved') unapproved=true; }catch(e){} }
+  if(unapproved) stat(t('msg.outDirReconfirm','書き出し先フォルダは「再接続」で選び直してください（このPCでまだ選ばれていないフォルダのため、自動では接続しません）'));
   const act=infoGraph.activeOut, ao=act&&infoGraph.outs[act];
   if(ao&&ao.outDirPath&&_outHandles[act]&&_outHandles[act].nativePath===ao.outDirPath){
     outDirHandle=_outHandles[act];
@@ -6669,6 +6702,8 @@ if(NLM_DEV) window._dbgApp=Object.freeze({
   dirty:()=>{ let same=null; try{ same=projSig()===_savedSig; }catch(_){} return {lamp:_dirtyNow,same,inputSinceBase:_inputSinceBase}; },
   sigPair:()=>({now:projSig(),saved:_savedSig}),   // 未保存判定の比較対象（誤検知の調査用。差分は呼び出し側で取る）
   aux:()=>({visible:auxGroup.visible,key:auxKey,show:auxShow}),
+  swing:()=>({on:swingWarnOn,warned:[...swingWarnSet].map(n=>({beat:n.beat,x:n.x,y:n.y,c:n.c,d:n.d})),
+    lamp:!!document.getElementById('swingLamp')?.classList.contains('on'),frames:swingPool.filter(g=>g.visible).length}),
   prev:()=>({playing:!!_pvPlay,id:_pvPlay?_pvPlay.id:null,connected:connectedNodeId('prev'),
     infoStart:infoBase?infoBase._previewStartTime:null,infoDur:infoBase?infoBase._previewDuration:null,leadInMs:getLeadInMs()}),
   audioPosAtBeat:b=>audioPosAtBeat(b),
@@ -6708,7 +6743,17 @@ function njsOffExport(dnm){ const c=njsCfg[(dnm+'Standard.dat').toLowerCase()]||
 function njsOffCur(){ const dnm=(currentDiffName||'').replace(/Standard\.dat$/i,'').replace(/\.dat$/i,'')||'Hard';
   const c=njsCfg[(currentDiffName||'').toLowerCase()]||{}; return {njs:c.njs!=null?c.njs:(_DIFF_NJS[dnm]||16), offset:c.offset!=null?c.offset:0}; }
 function setNjsCur(field,v){ const k=(currentDiffName||'').toLowerCase(); if(!k) return; (njsCfg[k]=njsCfg[k]||{})[field]=v; metaDirty=true;
-  if(pv4On&&typeof pv4Push==='function') pv4Push(); }   // 飛来速度/オフセットの変更をプレビューへ即反映
+  if(pv4On&&typeof pv4Push==='function') pv4Push(); refreshJdInfo(); }   // 飛来速度/オフセットの変更をプレビューへ即反映
+// JD/RT（ゲームと同じ計算・mapcheck.jsのcalcHjdと同じ）。BPMはInfo.datの基準BPM＝テンポパートの影響を受けない
+function jdInfoCur(){ const {njs,offset}=njsOffCur(), spb=60/BPM; let hjd=4;
+  while(njs*spb*hjd>17.999) hjd/=2;
+  if(hjd<1) hjd=1;
+  hjd=Math.max(hjd+offset,0.25);
+  return {jd:2*njs*spb*hjd, half:njs*spb*hjd, rt:spb*hjd*1000}; }   // jd=出現〜消失 / half=出現〜プレイヤー位置 / rt=ms
+function refreshJdInfo(){ const el=document.getElementById('jdInfo'); if(!el) return;
+  const j=jdInfoCur(); if(!isFinite(j.jd)){ el.textContent=''; return; }
+  const v={jd:j.jd.toFixed(1),half:j.half.toFixed(1),rt:Math.round(j.rt)};   // 2段（上=JD/到達・下=RT）。難易度バーの幅を食わないよう小さく
+  el.replaceChildren(...[tf('ui.jdInfo','JD {jd}m／到達 {half}m',v), tf('ui.rtInfo','RT {rt}ms',v)].map(s=>{ const d=document.createElement('div'); d.textContent=s; return d; })); }
 // song.egg変換キャッシュ: 出力先フォルダに小さなマーカーを置き、音源が前回書き出しと同一なら
 // 変換/コピーをスキップする（毎回ffmpegを起動しない・毎回でかいファイルを書き直さない）
 async function readEggMark(dest){ try{ const fh=await dest.getFileHandle('.nlm-egg.json'); return JSON.parse(await (await fh.getFile()).text()); }catch(e){ return null; } }
@@ -6728,11 +6773,8 @@ async function getSongFileLike(){
   }
   return null;
 }
-async function exportMap(forceEgg=false){
-  if(!currentDiffName){ stat('書き出し対象がありません'); return; }
-  stashCurrentDiff();
-  applyInfoGraph();   // 接続ノード(曲情報/設定/カバー)の確定情報をinfoBaseへ＋カバーhandleをextraNodesへミラー＋applyInfoChainでinfoJson更新
-  // --- 書き出す難易度を確定（中身のある Standard 難易度・OUT_DIFFS順） ---
+// 書き出す難易度の.dat（中身のある Standard 難易度・OUT_DIFFS順）。譜面チェックも同じものを検査する
+function collectExportDiffs(){
   const cutB=msegs().reduce((m,sg)=>Math.max(m,segEndBeat(sg)),0);   // Music終端で長さ固定
   const clip=arr=>cutB>0?(arr||[]).filter(o=>o.beat<=cutB+1e-6):(arr||[]);
   const diffFiles=[];
@@ -6742,8 +6784,69 @@ async function exportMap(forceEgg=false){
       &&!(st.arcs||[]).length&&!(st.chains||[]).length) continue;   // 空は出さない
     const stX=cutB>0?{...st, notes:clip(st.notes),bombs:clip(st.bombs),walls:clip(st.walls),
       arcs:(st.arcs||[]).filter(a=>a.b<=cutB+1e-6),chains:(st.chains||[]).filter(c2=>c2.b<=cutB+1e-6),lightEvents:clip(st.lightEvents)}:st;
-    diffFiles.push({dnm, name:dnm+'Standard.dat', text:JSON.stringify(buildDiffJsonFor(stX))});
+    diffFiles.push({dnm, name:dnm+'Standard.dat', json:buildDiffJsonFor(stX)});
   }
+  return diffFiles;
+}
+// Info.dat（完全版・Beat Saber v2 Info）
+function buildExportInfo(diffFiles, coverName){
+  const b=infoJson||infoBase||{}, numv=(v,d)=>Number.isFinite(+v)?+v:d;
+  return { _version:'2.1.0',
+    _songName:b._songName||'', _songSubName:b._songSubName||'', _songAuthorName:b._songAuthorName||'', _levelAuthorName:b._levelAuthorName||'',
+    _beatsPerMinute:BPM, _songTimeOffset:numv(b._songTimeOffset,0), _shuffle:numv(b._shuffle,0),
+    // Shuffleはゲームで使われていない古い項目。BeatLeaderの基準（R1.B.2: 未使用または0）に合わせ、Shuffleが0なら周期も0で書く
+    //（他のエディタや公式譜面は0.5を書くので、読み込んだ値をそのまま出すと常に違反になる）
+    _shufflePeriod:numv(b._shuffle,0)!==0?numv(b._shufflePeriod,0):0,
+    _previewStartTime:Math.round((numv(b._previewStartTime,PREV_DEF.start)+getLeadInMs()/1000)*1000)/1000,   // 試聴ノードは元音源の秒＝song.eggに焼き込む無音ぶんを足す
+    _previewDuration:numv(b._previewDuration,PREV_DEF.dur),
+    _songFilename:'song.egg', _coverImageFilename:coverName||b._coverImageFilename||'',
+    _environmentName:b._environmentName||(srcInfo()||{})._environmentName||'DefaultEnvironment', _allDirectionsEnvironmentName:b._allDirectionsEnvironmentName||(srcInfo()||{})._allDirectionsEnvironmentName||'GlassDesertEnvironment',
+    _difficultyBeatmapSets:[{ _beatmapCharacteristicName:'Standard',
+      _difficultyBeatmaps:diffFiles.map(d=>{ const nj=njsOffExport(d.dnm); return { _difficulty:d.dnm, _difficultyRank:_DIFF_RANK[d.dnm], _beatmapFilename:d.name,
+        _noteJumpMovementSpeed:nj.njs, _noteJumpStartBeatOffset:nj.offset }; }) }] };
+}
+// ---- 譜面チェック（BeatLeader基準）: 書き出すのと同じ.dat/Info.datの値を検査する ----
+async function collectMapCheckInput(){
+  if(!currentDiffName) return {error:t('mc.noChart','チェックする譜面がありません')};
+  stashCurrentDiff(); applyInfoGraph();
+  const diffFiles=collectExportDiffs();
+  if(!diffFiles.length) return {error:t('m:書き出せる難易度がありません（ノーツ/ライトが空です）','書き出せる難易度がありません（ノーツ/ライトが空です）')};
+  const info=buildExportInfo(diffFiles,'');
+  let cover=null;   // 書き出しと同じく、書き出しノードに繋がったカバー画像ファイルを見る
+  const covN=extraNodes.find(n=>n.kind==='cover'&&graphEdges.some(e=>e.sig==='cover'&&e.fromId===n.id&&e.toId==='out'));
+  if(covN&&covN.handle){ try{ const f=await covN.handle.getFile(), bmp=await createImageBitmap(f); cover={w:bmp.width,h:bmp.height,name:f.name}; if(bmp.close) bmp.close(); }catch(_){} }
+  const sets=info._difficultyBeatmapSets||[], bms=sets.flatMap(s=>s._difficultyBeatmaps||[]);
+  return { info:{bpm:info._beatsPerMinute, environment:info._environmentName, previewStart:info._previewStartTime, previewDuration:info._previewDuration},
+    // NLM版BL評価リスト用（書き出すInfo.datの値そのまま。NLMはカラースキーム・必須MOD・難易度名を書かないので空になる）
+    meta:{songName:info._songName, subName:info._songSubName, author:info._songAuthorName, mapper:info._levelAuthorName},
+    infoRaw:{songTimeOffset:info._songTimeOffset, shuffle:info._shuffle, shufflePeriod:info._shufflePeriod,
+      colorSchemes:info._colorSchemes||[], requirements:[...new Set(bms.flatMap(b=>(b._customData&&b._customData._requirements)||[]))]},
+    diffs:diffFiles.map(d=>{ const nj=njsOffExport(d.dnm); return {difficulty:d.dnm, json:d.json, njs:nj.njs, njsOffset:nj.offset}; }),
+    audioDuration:audioBuf?audioBuf.duration+getLeadInMs()/1000:null,   // song.egg＝先頭の無音追加＋元の音源
+    cover };
+}
+// チェック結果の拍をクリック → その難易度へ切り替え、該当オブジェクトを選択してその拍へ移動（重複チェックの‹›と同じ流儀）
+async function mapCheckJump(dn,o){
+  if(!diffIsCurrent(dn)){
+    switchDiffByIndex(OUT_DIFFS.indexOf(dn));
+    for(let i=0;i<40&&!diffIsCurrent(dn);i++) await new Promise(r=>setTimeout(r,50));   // 難易度の読込（非同期）を待つ
+    if(!diffIsCurrent(dn)) return;
+  }
+  if(playing) pause();
+  const near=(a,b2)=>Math.abs((a||0)-b2)<1e-4, at=it=>near(it.beat??it.b,o.beat)&&it.x===o.x&&it.y===o.y;
+  const pool=o.kind==='note'?[...notes.filter(it=>at(it)&&(o.c==null||it.c===o.c)),...chains.filter(at)]   // チェーンの頭は書き出し時に合成されるノーツ
+    :o.kind==='bomb'?bombs.filter(at):o.kind==='wall'?walls.filter(at):o.kind==='arc'?arcs.filter(at):o.kind==='chain'?chains.filter(at):[];
+  if(pool.length){ selection=new Set(pool.slice(0,1)); lightSelection.clear(); gizmoMode=pool[0].kind==='chain'?null:'move'; }
+  seekEase(o.beat||0);
+  const dz=0-controls.target.z; camera.position.z+=dz; controls.target.z+=dz; controls.update();   // 着地点を画面中央へ（.キーと同流儀）
+  stat(tf('mc.jumped','{diff} の {beat} 拍目へ移動しました',{diff:dispDiff(dn),beat:Math.round((o.beat||0)*1000)/1000}));
+}
+const mapCheckPanel=installMapCheckPanel({t,escHtml,dispDiff,collect:collectMapCheckInput,jump:mapCheckJump});
+async function exportMap(forceEgg=false){
+  if(!currentDiffName){ stat('書き出し対象がありません'); return; }
+  stashCurrentDiff();
+  applyInfoGraph();   // 接続ノード(曲情報/設定/カバー)の確定情報をinfoBaseへ＋カバーhandleをextraNodesへミラー＋applyInfoChainでinfoJson更新
+  const diffFiles=collectExportDiffs();
   if(!diffFiles.length){ showErr(t('m:書き出せる難易度がありません（ノーツ/ライトが空です）','書き出せる難易度がありません（ノーツ/ライトが空です）')); return; }
   // --- 出力先: outDirHandle(選んだCustomLevels) 内に「出力フォルダ名」サブフォルダを作成。無ければ従来のdirHandle/ダウンロード ---
   const folderName=((graphIO&&graphIO.out&&graphIO.out.folderName)||'').trim();
@@ -6805,19 +6908,8 @@ async function exportMap(forceEgg=false){
       }catch(err){ eggWarn=' '+tf('msg.eggFail','※song.egg書き込み失敗: {err}',{err}); }
     } else eggWarn=' '+t('m:※音源のファイル参照が無くsong.eggを書けません（曲を読み込み直してください）','※音源のファイル参照が無くsong.eggを書けません（曲を読み込み直してください）');
   }
-  // --- Info.dat をビルド（完全版・Beat Saber v2 Info） ---
-  const b=infoJson||infoBase||{}, numv=(v,d)=>Number.isFinite(+v)?+v:d;
-  const info={ _version:'2.1.0',
-    _songName:b._songName||'', _songSubName:b._songSubName||'', _songAuthorName:b._songAuthorName||'', _levelAuthorName:b._levelAuthorName||'',
-    _beatsPerMinute:BPM, _songTimeOffset:numv(b._songTimeOffset,0), _shuffle:numv(b._shuffle,0), _shufflePeriod:numv(b._shufflePeriod,0.5),
-    _previewStartTime:Math.round((numv(b._previewStartTime,PREV_DEF.start)+getLeadInMs()/1000)*1000)/1000,   // 試聴ノードは元音源の秒＝song.eggに焼き込む無音ぶんを足す
-    _previewDuration:numv(b._previewDuration,PREV_DEF.dur),
-    _songFilename:'song.egg', _coverImageFilename:coverName||b._coverImageFilename||'',
-    _environmentName:b._environmentName||(srcInfo()||{})._environmentName||'DefaultEnvironment', _allDirectionsEnvironmentName:b._allDirectionsEnvironmentName||(srcInfo()||{})._allDirectionsEnvironmentName||'GlassDesertEnvironment',
-    _difficultyBeatmapSets:[{ _beatmapCharacteristicName:'Standard',
-      _difficultyBeatmaps:diffFiles.map(d=>{ const nj=njsOffExport(d.dnm); return { _difficulty:d.dnm, _difficultyRank:_DIFF_RANK[d.dnm], _beatmapFilename:d.name,
-        _noteJumpMovementSpeed:nj.njs, _noteJumpStartBeatOffset:nj.offset }; }) }] };
-  const files2=[['Info.dat',JSON.stringify(info,null,2)], ...diffFiles.map(d=>[d.name,d.text])];
+  const info=buildExportInfo(diffFiles, coverName);
+  const files2=[['Info.dat',JSON.stringify(info,null,2)], ...diffFiles.map(d=>[d.name,JSON.stringify(d.json)])];
   // --- 書き込み ---
   if(dest){
     try{
@@ -7125,8 +7217,91 @@ function placeAt(cell){
     const n={kind:'bomb',beat:b,x:cell.x,y:cell.y,_tr:tr,raw:null}; bombs.push(n); addObj(n); selection=new Set([n]);
   }
   gizmoMode=null;   // 置いた直後はギズモを出さない＝連続配置中にハンドルが次のクリックを奪わない（ギズモは既存をクリックで選択した時だけ）
+  if(brush.type==='note') swingWarnCheckPlaced(notes.find(n=>Math.abs(n.beat-b)<1e-4&&n.x===cell.x&&n.y===cell.y));
   if(camMode==='place') selection.clear();   // 配置モードは置いた後に選択を残さない＝次を違う傾きで置ける（ヘルバ様指定）
 }
+// ---- 同じ向きの連続の警告（2026-10-01）----
+// 同じ色で前後の振りと向きの差が0°/45°だと、振り返しができず以降の流れが崩れる。置いた瞬間にだけ判定し、
+// 引っかかったノーツに赤枠＋ランプ＋短いビープ。赤枠は直す（向き変更・削除・Undo等）と定期再判定で消える。
+// 判定の簡略化（譜面チェックほど厳密ではない）: 1/5拍未満の間隔はスライダー＝同じ振りとして判定しない／
+// ドットは向きが無いので判定しない／間にボムがあれば意図的なリセットとみなして判定しない／チェーンは頭の向きで尾まで1振り。
+let swingWarnOn=localStorage.getItem('bsnm_swingwarn')!=='0';   // 環境設定でOFF可（bsnm_*なので settings.json へ自動ミラー）
+const swingWarnSet=new Set();
+// 選択中に向き/色を変えたノーツ。選択から外れた時に判定する（回している途中で毎回鳴らさないため・2026-10-01）。
+// 選択の外し方（A・クリック・範囲選択・Undo等）は経路が多いので、描画ループで「選択に入っていないもの」を拾う
+const swingPending=new Set();
+function swingPendingFlush(){ if(!swingPending.size) return;
+  const done=[...swingPending].filter(n=>!selection.has(n)); if(!done.length) return;
+  done.forEach(n=>swingPending.delete(n)); swingWarnCheckPlaced(done); }
+let brushArrowD=1;   // Dキーでブラシをドットにする前の矢印（もう一度Dで戻す）
+const SWING_SLIDER_GAP=0.2;
+function swingItemsOf(c){ const out=[];
+  for(const n of notes) if(n.c===c&&!n._ghost) out.push({o:n,beat:n.beat,end:n.beat,d:n.d});
+  for(const ch of chains) if(ch.c===c&&!ch._ghost) out.push({o:ch,beat:ch.b,end:Math.max(ch.b,ch.tb??ch.b),d:ch.d});
+  return out; }
+function dirDiff(a,b){ const x=Math.abs((DIR_ANGLE[a]??0)-(DIR_ANGLE[b]??0))%360; return Math.min(x,360-x); }
+/** nの前後の振りのうち、向きの差が45°以下の相手 {prev,next}（無ければnull） */
+function swingConflicts(n){
+  const none={prev:null,next:null};
+  if(!n||n.kind!=='note'||n.d===8||n._ghost) return none;
+  const EPS=1e-4, items=swingItemsOf(n.c);
+  let prev=null, next=null;
+  for(const it of items){ if(it.o===n) continue;
+    if(it.beat<n.beat-EPS){ if(!prev||it.end>prev.end) prev=it; }
+    else if(it.beat>n.beat+EPS){ if(!next||it.beat<next.beat) next=it; } }
+  const bombBetween=(b0,b1)=>bombs.some(x=>x.beat>b0+EPS&&x.beat<b1-EPS);
+  const bad=(it,b0,b1)=>it&&it.d!==8&&b1-b0>=SWING_SLIDER_GAP&&!bombBetween(b0,b1)&&dirDiff(it.d,n.d)<=45;
+  return {prev:bad(prev,prev&&prev.end,n.beat)?prev.o:null, next:bad(next,n.beat,next&&next.beat)?next.o:null}; }
+function swingViolation(n){ const c=swingConflicts(n); return c.prev||c.next; }
+function swingBeep(){ try{ if(actx.state==='suspended') actx.resume();
+  const t0=actx.currentTime;
+  [[0,520],[0.09,390]].forEach(([dt,f])=>{ const o=actx.createOscillator(); o.type='triangle'; o.frequency.value=f;
+    const g=actx.createGain(); g.gain.setValueAtTime(0.3,t0+dt); g.gain.exponentialRampToValueAtTime(0.001,t0+dt+0.08);
+    o.connect(g); g.connect(masterGain); o.start(t0+dt); o.stop(t0+dt+0.09); }); }catch(_){} }
+function updateSwingLamp(flash){ const el=document.getElementById('swingLamp'); if(!el) return;
+  el.style.display=swingWarnOn?'':'none';
+  el.classList.toggle('on',swingWarnOn&&swingWarnSet.size>0);
+  if(flash){ el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } }
+/** 置いた/向きを変えたノーツ（1個または配列）を判定する。複数でも音とメッセージは1回だけ */
+function swingWarnCheckPlaced(arg){
+  if(!swingWarnOn||!arg) return;
+  // 前と同じ向き＝置いたノーツが悪い→置いたノーツに赤枠／後ろと同じ向き＝前からの流れでは後ろが崩れている→後ろのノーツに赤枠
+  // （途中を消して向きを変えて置き直した時、正しく置いた方に赤枠が出ないように・2026-10-01）。チェーンには赤枠を出せないので置いたノーツへ
+  // 複数は時刻順に見る（一緒に回した隣どうしは「後ろ側」に赤枠＝1個ずつ置いた時と同じ結果）
+  const list=(Array.isArray(arg)?arg:[arg]).filter(n=>n&&n.kind==='note'&&notes.includes(n)).sort((a,b)=>a.beat-b.beat);
+  let first=null;
+  for(const n of list){ const c=swingConflicts(n);
+    if(c.prev) swingWarnSet.add(n); else swingWarnSet.delete(n);
+    if(c.next) swingWarnSet.add(c.next.kind==='note'?c.next:n);
+    if(!first&&(c.prev||c.next)) first=c; }
+  if(!first){ updateSwingLamp(false); return; }
+  updateSwingLamp(true); swingBeep();
+  const prev=first.prev, other=first.prev||first.next;
+  const ob=other.kind==='chain'?other.b:other.beat;
+  if(prev) stat(tf('msg.swingWarn','⚠ 同じ向きが続いています（{beat}拍の{dir}と同じ向き）',{beat:+ob.toFixed(3),dir:DIRICON[other.d]}));
+  else stat(tf('msg.swingWarnNext','⚠ 後ろの{beat}拍の{dir}が同じ向きになりました（赤枠）',{beat:+ob.toFixed(3),dir:DIRICON[other.d]})); }
+let _swingRecheckAt=0;
+function swingWarnRecheck(){ _swingRecheckAt=performance.now();
+  if(!swingWarnSet.size) return;
+  for(const n of [...swingWarnSet]) if(!swingWarnOn||!notes.includes(n)||!swingViolation(n)) swingWarnSet.delete(n);
+  updateSwingLamp(false); }
+function setSwingWarnOn(on){ swingWarnOn=!!on; try{ localStorage.setItem('bsnm_swingwarn',swingWarnOn?'1':'0'); }catch(_){}
+  const el=document.getElementById('swingWarnOn'); if(el) el.checked=swingWarnOn;
+  if(!swingWarnOn) swingWarnSet.clear();
+  updateSwingLamp(false); }
+{ const el=document.getElementById('swingWarnOn');
+  if(el){ el.checked=swingWarnOn; el.addEventListener('change',()=>setSwingWarnOn(el.checked)); }
+  const lamp=document.getElementById('swingLamp');   // クリック=赤枠のノーツのうち一番手前へ移動
+  if(lamp) lamp.addEventListener('click',()=>{ const ns=[...swingWarnSet].filter(n=>notes.includes(n)); if(!ns.length) return;
+    const b=Math.min(...ns.map(n=>n.beat)); if(playing) pause(); cur=b; offset=beatToTimeTM(cur); tlFollow(cur); });
+  updateSwingLamp(false); }
+// 赤枠（重複の黄色枠より一回り大きい）
+const swingPool=[];
+function ensureSwingPool(n){ while(swingPool.length<n){ const g=new THREE.Group();
+  g.add(new THREE.Mesh(selGeom,new THREE.MeshBasicMaterial({color:0xff3344,transparent:true,opacity:0.16,depthWrite:false})));
+  g.add(new THREE.LineSegments(selEdge,new THREE.LineBasicMaterial({color:0xff3344})));
+  g.traverse(c=>{ c.raycast=()=>{}; });
+  g.visible=false; scene.add(g); tagHelper(g); swingPool.push(g); } }
 function deleteNoteBombAt(e){   // 配置モードの右クリック: マウス下のノーツ/ボム/壁を削除（ヘルバ様指定）
   const o=objUnder(e);
   if(o&&(o.kind==='note'||o.kind==='bomb'||o.kind==='wall')){ snapshot(); removeObj(o); metaDirty=true; stat(tf('msg.deleted','削除しました')); return true; }
@@ -7382,10 +7557,10 @@ addEventListener('pointerup', e=>{
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 // ---- wheel ----
 let lastRotTime=0, lastRotTarget=null;
-function tlScrub(e,invert){ e.preventDefault();   // Shift+ホイール=再生ヘッドをスナップ幅でスクラブ（全画面共通）。
-  // invert=true は3Dビューのみ（環境設定「3Dビューのホイール操作を反転」）。2D側(NLE/Music)は従来通り常に非反転。
+function tlScrub(e,invert){ e.preventDefault();   // ホイール=再生ヘッドをスナップ幅でスクラブ（3D・2D共通）。
+  // invert は3D/2Dそれぞれの環境設定「ホイール操作を反転」（別項目）。2Dの窓も追従させる＝3Dと2Dが連動して見える
   const up=invert?(e.deltaY>=0):(e.deltaY<0);
-  cur=Math.max(0,snapV(cur+(up?snap:-snap))); offset=beatToTimeTM(cur);
+  cur=Math.max(0,snapV(cur+(up?snap:-snap))); offset=beatToTimeTM(cur); tlFollow(cur);
   if(playing) play();   // 再生中は止めず新位置から再スケジュール（A/Dと同じ流儀）
 }
 cv.addEventListener('wheel', e=>{ e.preventDefault();
@@ -7453,7 +7628,7 @@ cv.addEventListener('wheel', e=>{ e.preventDefault();
       }
       return; }
     // チェーン選択時のホイールは3つだけ（ヘルバ様指定 2026-07-12）:
-    //   Ctrl+ホイール=分割数sc（別ハンドラ） / Ctrl+Alt+ホイール=squish / 頭・尾ノーツ上 Alt+ホイール=向き
+    //   Shift+ホイール=分割数sc（別ハンドラ） / Ctrl+Alt+ホイール=squish / 頭・尾ノーツ上 Alt+ホイール=向き
     //   Shift系の組み合わせ（旧: Shift+Alt=曲率・Ctrl+Shift+Alt=縮小率）は廃止
     const cs=selChains();
     if(cs.length){
@@ -7479,7 +7654,7 @@ cv.addEventListener('wheel', e=>{ e.preventDefault();
       }
       return; }
   }
-  if(e.ctrlKey&&!e.altKey&&!e.shiftKey&&!e.metaKey&&!lightMode){   // チェーン選択中: Ctrl+ホイール=分割数 sc（ヘルバ様指定）
+  if(e.shiftKey&&!e.altKey&&!e.ctrlKey&&!e.metaKey&&!lightMode){   // チェーン選択中: Shift+ホイール=分割数 sc（2026-09-28にCtrlから移動＝Ctrl+ホイールはズームへ）
     const cs=selChains();
     if(cs.length){
       const delta=(e.deltaY!==0?e.deltaY:e.deltaX); const dir=delta>0?-1:1;
@@ -7496,15 +7671,18 @@ cv.addEventListener('wheel', e=>{ e.preventDefault();
     if(targets.length){ const now=performance.now();
       if(now-lastRotTime>500||lastRotTarget!==hov) snapshot();
       lastRotTime=now; lastRotTarget=hov;
-      targets.forEach(n=>{ n.d=rotStep(n.d,step); refreshMesh(n); });
-      brush.d=targets[targets.length-1].d; refreshPal();
+      // 回転はドットを除く8方向＝全ノーツが同じ角度だけ回り、向きの関係が崩れない（ドットはDキーで変換・2026-10-01）。
+      // 矢印と混ざったドットはドットのまま。ドットだけを回した時は矢印へ戻す
+      const arrows=targets.filter(n=>n.d!==8), rot=arrows.length?arrows:targets;
+      rot.forEach(n=>{ n.d=rotStepNoDot(n.d,step); refreshMesh(n); swingPending.add(n); });
+      brush.d=rot[rot.length-1].d; refreshPal();
       if(placeMode) refreshGhost();
-      stat(tf('msg.rotate','回転: {dir}{mult}',{dir:DIRICON[targets[0].d],mult:targets.length>1?` ×${targets.length}`:''})); }
-    else { brush.d=rotStep(brush.d,step); refreshPal();
+      stat(tf('msg.rotate','回転: {dir}{mult}',{dir:DIRICON[rot[0].d],mult:targets.length>1?` ×${targets.length}`:''})); }
+    else { brush.d=rotStepNoDot(brush.d,step); refreshPal();
       if(placeMode) refreshGhost();
       stat(tf('msg.brushDir','ブラシ向き: {dir}',{dir:DIRICON[brush.d]})); }
     return; }
-  if(e.shiftKey&&!e.ctrlKey&&!e.altKey&&!e.metaKey){   // Shift+ホイール=ズーム（マウス位置に向かって寄る・ヘルバ様指定 2026-07-13）
+  if(e.ctrlKey&&!e.shiftKey&&!e.altKey&&!e.metaKey){   // Ctrl+ホイール=ズーム（マウス位置に向かって寄る・ヘルバ様指定 2026-07-13。2026-09-28にShiftから移動＝2Dのズームと統一）
     setPtr(e);
     let focus;
     if(raycaster.ray.intersectPlane(floorPlane,_fv))
@@ -7514,7 +7692,7 @@ cv.addEventListener('wheel', e=>{ e.preventDefault();
     camera.position.sub(focus).multiplyScalar(zk).add(focus);
     controls.target.sub(focus).multiplyScalar(zk).add(focus);
     return; }
-  if(e.ctrlKey||e.altKey||e.metaKey) return;   // 他の修飾+ホイールは無効
+  if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;   // 他の修飾+ホイールは無効（Shiftはチェーン未選択なら何もしない）
   tlScrub(e,invert3DScroll);   // 素のホイール=タイムライン操作（スクラブ）（ヘルバ様指定 2026-07-13）。3Dビューのみ環境設定で向きを反転できる
 }, {passive:false});
 
@@ -8342,7 +8520,7 @@ addEventListener('keydown', e=>{
       if(_ease4){ const dir=e.key==='ArrowRight'?1:-1; seekEase(Math.max(0,cur+dir*4)); return; }   // Shift+Ctrl+←/→=4拍・イージング
       if(_js||_je){ const dir=_je?1:-1; const tgt=dir<0?0:timelineEndBeat();                        // スタート/末尾へ（曲無しでもNLEクリップ末尾へ・窓もスクロール）
         if(!e.repeat&&(dir<0||tgt>0)){ seekEase(tgt); tlViewB0=null; tlB0=Math.max(0,tgt-tlSpan*0.5); } return; }
-      const dir=_fn?1:-1; cur=Math.max(0,snapV(cur+dir*snap)); offset=beatToTimeTM(cur); return; }        // 素の←/→=スナップ幅・即時
+      const dir=_fn?1:-1; cur=Math.max(0,snapV(cur+dir*snap)); offset=beatToTimeTM(cur); tlFollow(cur); return; }        // 素の←/→=スナップ幅・即時（2Dの窓も追従）
   }
   // F=色の巡回/反転は「ブラシの色」を変える操作＝どのペインにマウスがあっても効かせる（全画面共通）。
   // 下のNODE分岐より前に置く＝NLE/INFO上にマウスがあると効かなかった（ヘルバ様報告「Fがちょこちょこ効かない」2026-07-18）。
@@ -8355,12 +8533,26 @@ addEventListener('keydown', e=>{
       const targets = (o&&o.c!=null&&(o.kind==='note'||o.kind==='arc'||o.kind==='chain')&&selection.has(o))
         ? [...selection].filter(x=>x.c!=null&&(x.kind==='note'||x.kind==='arc'||x.kind==='chain')) : [];
       if(targets.length){ snapshot();
-        targets.forEach(n=>{ n.c=(n.c===0?1:0); refreshMesh(n); if(n.kind==='note') recolorLinkedSliders(n); });
+        targets.forEach(n=>{ n.c=(n.c===0?1:0); refreshMesh(n); if(n.kind==='note'){ recolorLinkedSliders(n); swingPending.add(n); } });
         brush.c=targets[targets.length-1].c; setColor(brush.c,false);
         metaDirty=true;
         stat('ノーツの色を反転しました'+(targets.length>1?` ×${targets.length}`:'')); }
       else if(o&&o.c==null) stat('F: このオブジェクトに色はありません');
       else setColor(brush.c===0?1:0,false); } return; }
+  // D=ドットにする（Alt+ホイールの回転からドットを外したので、その代わりの入口・2026-10-01）。
+  // 対象の決め方はFと同じ＝カーソル直下が選択中のノーツなら選択中のノーツ全部、それ以外はブラシ（ブラシはドット⇄直前の矢印を切替）
+  if(!lightMode&&hit(e,'noteDot')){ if(!e.repeat){
+      const o=objUnder();
+      const targets = (o&&o.kind==='note'&&selection.has(o)) ? [...selection].filter(x=>x.kind==='note'&&x.d!==8) : [];
+      if(targets.length){ snapshot();
+        targets.forEach(n=>{ n.d=8; refreshMesh(n); });
+        brush.d=8; refreshPal(); if(placeMode) refreshGhost();
+        metaDirty=true; swingWarnRecheck();
+        stat(t('msg.toDot','ドットにしました')+(targets.length>1?` ×${targets.length}`:'')); }
+      else if(o&&o.kind==='note'&&selection.has(o)) stat(t('msg.alreadyDot','すでにドットです'));
+      else { if(brush.d!==8){ brushArrowD=brush.d; brush.d=8; } else brush.d=brushArrowD;
+        refreshPal(); if(placeMode) refreshGhost();
+        stat(tf('msg.brushDir','ブラシ向き: {dir}',{dir:DIRICON[brush.d]})); } } return; }
   // 直前ノーツ表示の切替（どのペインでも効く・設定のチェックと連動）。
   // 旧版で他の操作をHへ割り当て済みの利用者の設定を壊さないよう、ユーザーが明示的に同じキーへ割り当てた操作があればそちらを優先
   if(!lightMode&&hit(e,'auxPrev')&&!ACTIONS.some(a=>a.id!=='auxPrev'&&_keymap[a.id]&&sameBind(_keymap[a.id],effBind('auxPrev')))){
@@ -8568,7 +8760,7 @@ function refreshChartInfo(){   // 譜面データ: NLE/NOTES/LIGHTINGの実デ�
   const el=document.getElementById('chartInfo'); if(!el) return;
   const nm2=(songNode&&songNode.name)||TL('ci.noAudio','（音源未読込）');
   const dur=audioBuf?`${Math.floor(songDur/60)}:${String(Math.floor(songDur%60)).padStart(2,'0')}`:'--:--';
-  let html2=`<div>${TL('ci.song','曲')}<b>${nm2} ・ ${dur}</b></div><div>BPM<b>${BPM}</b></div>`
+  let html2=`<div>${TL('ci.song','曲')}<b>${escHtml(nm2)} ・ ${dur}</b></div><div>BPM<b>${escHtml(BPM)}</b></div>`
     +`<div style="display:flex;align-items:center;gap:9px;border:1px solid #43434a;border-radius:6px;background:rgba(43,43,43,.85);padding:5px 11px;margin-top:8px;min-width:150px;"><img src="icons/char_standard.svg" alt="Standard" style="width:20px;height:20px;flex:0 0 auto;"><span style="font-size:12.5px;color:#c8ccd4;">${TL('ui.dualStandard','二刀流（Standard）')}</span></div>`;   // 二刀流アイコンを横長の四角で囲む（設定ノードと統一・ヘルバ様指示）
   const curK=(currentDiffName||'').toLowerCase();
   for(const dnm of OUT_DIFFS){ const key2=dnm.toLowerCase()+'standard.dat';
@@ -8786,7 +8978,7 @@ function readinessHTML(){ return exportReadiness().map(it=>{ const icon=it.ok?'�
   return `<div style="color:${it.ok?'#d8dce2':(it.req?'#e2b0b6':'#8a8a92')}"><span style="color:${col};font-weight:700;width:12px;text-align:center;">${icon}</span>${it.label}${tag}</div>`; }).join(''); }
 function renderOutCards(){
   for(const el of [...infoWorldEl.querySelectorAll('.iGrp[data-out]')]) if(!infoGraph.outs[el.dataset.out]){
-    const ex=el.querySelector('#iExport'); if(ex) document.getElementById('uiStash').appendChild(ex);   // 書き出しボタンはカードと道連れにしない（Undoでカードが消えても退避→refreshでアクティブへ戻る）
+    for(const bid of ['iMapCheck','iExport']){ const ex=el.querySelector('#'+bid); if(ex) document.getElementById('uiStash').appendChild(ex); }   // 書き出し/チェックのボタンはカードと道連れにしない（Undoでカードが消えても退避→refreshでアクティブへ戻る）
     el.remove(); }
   for(const oid in infoGraph.outs){ let el=infoWorldEl.querySelector(`.iGrp[data-out="${oid}"]`);
     if(!el){ el=document.createElement('div'); el.className='iGrp'; el.dataset.node='out:'+oid; el.dataset.out=oid;
@@ -8837,7 +9029,9 @@ function refreshOutCards(){
         const on=(infoGraph.edges||[]).some(ed=>ed.o===oid&&infoNodeT(ed.s)===k), col=INFO_NODE_DEFS[k][1];
         dot.style.background=on?col:'#1b1b1d';
         dot.style.border=on?'1.5px solid #141416':('3px solid '+col); }); }
-    if(act){ const ex=document.getElementById('iExport'); if(ex&&ex.parentElement!==el) el.appendChild(ex); }   // 書き出しボタンはアクティブノードの最下段のみ
+    if(act){ const mc=document.getElementById('iMapCheck'), ex=document.getElementById('iExport');   // 書き出し/チェックのボタンはアクティブノードの最下段のみ（チェック→書き出しの順）
+      // 付け直すのは置き場所が違う時だけ（pointerdownのたびに付け直すとクリックが届かない＝CLAUDE.mdの注意6）
+      if(ex&&(ex.parentElement!==el||(mc&&mc.nextElementSibling!==ex))){ if(mc) el.appendChild(mc); el.appendChild(ex); } }
   }
 }
 // ---- ソースノード（曲情報/設定/カバー）の動的カード ----
@@ -9176,14 +9370,15 @@ layoutInfoNodes(); applyInfoGraph();
 const KEYSHTML_NLE=(document.querySelector('#nodeKeys .mkbody')||document.getElementById('nodeKeys')).innerHTML;
 const KEYSHTML_NODE=[['新規ノード','🖱️ 右クリック'],['全ノードの中央へ','.']]
   .map(([d,k])=>`<div class="mkrow"><span class="mkd">${d}</span><span class="mk">${k}</span></div>`).join('');
+document.getElementById('iMapCheck').addEventListener('click',()=>mapCheckPanel.open());
 document.getElementById('iExport').onclick=()=>{   // 必須項目（音源/ノーツ/フォルダー名/出力先）が揃うまで書き出しは止める
   const miss=exportReadiness().filter(x=>x.req&&!x.ok);
   if(miss.length){ showErr(tf('msg.exportMissing','書き出せません: {list} が足りません',{list:miss.map(m=>m.label.replace(/（.*/,'')).join('・')})); return; }
   const fEl=infoWorldEl.querySelector(`.iGrp[data-out="${infoGraph.activeOut}"] .oForceEgg`);
   exportMap(!!(fEl&&fEl.checked)); };
 // ---- ノーツ色スウォッチ（設定グループ。クリック→カラーピッカー→3D/2Dへ即反映） ----
-function noteSwSvg(col){ return `<svg viewBox="0 0 64 64"><rect x="8" y="8" width="48" height="48" rx="11" fill="${col}"/><path d="M21 23 H43 L32 34 Z" fill="#fff"/></svg>`; }
-function laserSwSvg(col){ return `<svg viewBox="0 0 64 64"><rect x="8" y="8" width="48" height="48" rx="11" fill="${col}"/><rect x="28" y="16" width="8" height="32" rx="3" fill="#fff"/></svg>`; }   // 縦ビーム=レーザー
+function noteSwSvg(col){ return `<svg viewBox="0 0 64 64"><rect x="8" y="8" width="48" height="48" rx="11" fill="${safeHex(col)}"/><path d="M21 23 H43 L32 34 Z" fill="#fff"/></svg>`; }
+function laserSwSvg(col){ return `<svg viewBox="0 0 64 64"><rect x="8" y="8" width="48" height="48" rx="11" fill="${safeHex(col)}"/><rect x="28" y="16" width="8" height="32" rx="3" fill="#fff"/></svg>`; }   // 縦ビーム=レーザー
 setInterval(refreshInspector,400);
 // 重複チェックのチップ（左下・chartInfoの真上・400ms間隔で再スキャン）
 { const dupEl=document.getElementById('dupChip');
@@ -9326,6 +9521,9 @@ function _tick(){
   updateChainOverlay();
   ensureSelPool(selection.size); let si=0;
   ensureDupPool(dupNoteSet.size+dupLightSet.size+dupChainCells.size); let di=0;   // 重複の黄色枠（ノーツ/ボム+チェーン頭尾+ライトチップ共用プール。チェーンは最大2マスぶん余分に確保）
+  swingPendingFlush();   // 選択中に向き/色を変えたノーツが選択から外れたら判定
+  if(swingWarnSet.size&&performance.now()-_swingRecheckAt>300) swingWarnRecheck();   // 赤枠のノーツを直したら消す（定期再判定）
+  ensureSwingPool(swingWarnSet.size); let wi=0;
   for(const m of meshes){ const o=m.obj;
     let head, tail;
     if(o.kind==='note'||o.kind==='bomb'){ head=o.beat; tail=o.beat; m.group.position.z=(o.beat-viewB)*ZPB;
@@ -9360,7 +9558,13 @@ function _tick(){
         const [px,py]=cellPos(cell.x,cell.y);
         db2.position.set(px,py,m.group.position.z+(cell.beat-(o.b||0))*ZPB);
         db2.rotation.z=0;
-        db2.scale.set(1.3,1.3,NOTE_THIN+0.18); } } }
+        db2.scale.set(1.3,1.3,NOTE_THIN+0.18); } }
+    if(!lightMode&&o.kind==='note'&&swingWarnSet.has(o)&&m.group.visible&&wi<swingPool.length){   // 同じ向きの連続=赤枠（重複の黄色枠より一回り大きい）
+      const wb=swingPool[wi++]; wb.visible=true;
+      wb.position.copy(m.group.position);
+      wb.rotation.z=(o.d>=4&&o.d<=7)?Math.PI/4:0;
+      wb.scale.set(1.5,1.5,NOTE_THIN+0.3); } }
+  for(;wi<swingPool.length;wi++) swingPool[wi].visible=false;
   // 段階式壁の寸法矢印は、上のループで壁の group.z が (o.beat-viewB) へ更新された「後」に位置を取り直す。
   // pointermove時だけの更新では、viewB が動いたフレームで矢印だけ前の位置に取り残される（ヘルバ様報告「一瞬変な場所に←が出る」2026-07-18）
   if(wallStage) updateWallDimArrows();
@@ -9582,6 +9786,7 @@ document.getElementById('mFileMenu').addEventListener('click',async e=>{
   else if(act==='savecopy') saveProjectCopy();
   else if(act==='loadsong'){ closeFileMenu(); openSongFile(); }   // Musicレーンの「音楽ファイルを読み込む」と同じ
   else if(act==='addfolder'){ closeFileMenu(); document.getElementById('libAddBtn').click(); }   // MEDIAの「フォルダを追加」と同じ（showDirectoryPicker→scanLibrary）
+  else if(act==='mapcheck'){ closeFileMenu(); mapCheckPanel.open(); }
 });
 
 // ---- フローティングツールバー ----
@@ -9996,6 +10201,10 @@ wireSpd('panSpd','panVal','pan',camPanSpeed);
 let invert3DScroll=(localStorage.getItem('bsnm_invert3dscroll')==='1');
 { const el=document.getElementById('invert3DScroll'); if(el){ el.checked=invert3DScroll;
   el.addEventListener('change',()=>{ invert3DScroll=el.checked; localStorage.setItem('bsnm_invert3dscroll',invert3DScroll?'1':'0'); }); } }
+// 2D画面（NLEレイヤー/Music）のホイール時間移動の反転。3Dとは別項目（2026-09-28）。初期値=反転なし＝3Dの既定と同じ向き
+let invert2DScroll=(localStorage.getItem('bsnm_invert2dscroll')==='1');
+{ const el=document.getElementById('invert2DScroll'); if(el){ el.checked=invert2DScroll;
+  el.addEventListener('change',()=>{ invert2DScroll=el.checked; localStorage.setItem('bsnm_invert2dscroll',invert2DScroll?'1':'0'); }); } }
 // preview設定（bloom/ambient等。bsnm_pv4に%で保存=100%が既定・pv4へはrawでpush。Previewを開くと反映）
 let pvCfg={str:100,rad:100,thr:100,amb:100,ems:100,refl:100};
 try{ Object.assign(pvCfg,JSON.parse(localStorage.getItem('bsnm_pv4')||'{}')); }catch(e){}
@@ -10067,7 +10276,7 @@ function wireStepper(el,{get,set,fmt,editFmt,prefix='',step=1,shiftStep=0.1}){  
   el._sync=sync; sync();
 }
 // ※試聴区間（旧ヘッダーの「プレビュー開始/プレビュー長」）はINFO画面の試聴ノードへ移設（2026-09-28）
-function refreshMusicHdr(){ ['bpmField','njsField','offField','leadInField'].forEach(id=>{ const el=document.getElementById(id); if(el&&el._sync) el._sync(); }); refreshChainPanel(); refreshArcPanel(); }
+function refreshMusicHdr(){ ['bpmField','njsField','offField','leadInField'].forEach(id=>{ const el=document.getElementById(id); if(el&&el._sync) el._sync(); }); refreshJdInfo(); refreshChainPanel(); refreshArcPanel(); }
 wireStepper(document.getElementById('bpmField'),{get:()=>BPM,set:setBPMv,fmt:x=>x.toFixed(2)});   // 見出し「BPM」は .bfLbl（フィールド内）に分離
 wireStepper(document.getElementById('njsField'),{get:()=>njsOffCur().njs, set:v=>setNjsCur('njs',Math.max(0,Math.round(v*100)/100)), fmt:x=>String(parseFloat((+x).toFixed(2)))});   // 飛来速度NJS（難易度別・整数～小数）
 wireStepper(document.getElementById('offField'),{get:()=>njsOffCur().offset, set:v=>setNjsCur('offset',Math.round(v*1000)/1000), fmt:x=>(+x).toFixed(3), step:0.01, shiftStep:0.001});   // 飛来オフセット（難易度別・0.000表示・‹›=±0.01・Shift=±0.001）
@@ -10687,7 +10896,7 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.crispVLine = crispVLine; } catch (_) {}
   try { rt.tlEnd = tlEnd; } catch (_) {}
   try { rt.tlWindow = tlWindow; } catch (_) {}
-  try { rt.tlZoom = tlZoom; } catch (_) {}
+  try { rt.tlWheel = tlWheel; } catch (_) {}
   try { rt.drawOverview = drawOverview; } catch (_) {}
   try { rt.addMarkerAt = addMarkerAt; } catch (_) {}
   try { rt.markerMenuTop = markerMenuTop; } catch (_) {}

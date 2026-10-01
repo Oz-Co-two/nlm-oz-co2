@@ -1,6 +1,6 @@
 # NLM開発サーバー: キャッシュ無効ヘッダ付き（Chromeの古いファイル使い回しを根絶）
 # ＋ アセット(asset/)クリップの保存/改名/削除API（ローカル専用。Tauri化時はネイティブ書込みへ置換）
-import http.server, json, os, posixpath, re, base64, shutil, subprocess, tempfile
+import http.server, json, os, posixpath, re, shutil, subprocess, tempfile
 from urllib.parse import unquote, urlsplit, parse_qs
 
 # BASE_DIR = Webコンテンツの置き場（読み取り専用でよい）。exe化(PyInstaller)ではバンドル展開先を渡す。
@@ -15,7 +15,6 @@ SETTINGS_FILE = os.path.join(CONFIG_DIR, 'settings.json')        # 個人の環�
 LANG_DIR = os.path.join(DATA_DIR, 'lang')                       # 翻訳(lang/*.json)は exe隣を優先＝ユーザーが編集/言語追加できる
 LANG_SEED_DIR = os.path.join(BASE_DIR, 'lang')                  # バンドル同梱の翻訳（exe隣に無い時のフォールバック）
 OPEN_FILE = os.environ.get('NLM_OPEN_FILE') or ''              # ダブルクリックで開くファイル（app.pyが%1から設定）。ネイティブパスなので保存もここへ書き戻せる
-SHOTS_DIR = os.path.join(os.path.dirname(BASE_DIR), 'WEB', 'assets', 'shots')   # マニュアル用スクショ保存先（ローカル開発専用）
 
 def _safe(name):
     # ファイル名を安全化（パストラバーサル・不正文字の除去）。ディレクトリ部は捨てる
@@ -63,6 +62,11 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         path = path.split('?', 1)[0].split('#', 1)[0]
         rel = posixpath.normpath(unquote(path))
         parts = [p for p in rel.split('/') if p and p != '.']
+        # Windowsでは '\' やドライブ名('C:')もパス区切りとして効くため、1要素でもそれを含めば配信しない。
+        # （例: /C:%5CWindows%5Cwin.ini がフォルダ外の実ファイルを返していた。元のSimpleHTTPRequestHandlerが
+        #   持っていたこの検査を独自実装で落としていた。セキュリティ点検 2026-09-28）
+        if any(p == '..' or '\\' in p or ':' in p or os.path.splitdrive(p)[0] for p in parts):
+            return os.path.join(BASE_DIR, '__forbidden__')   # 存在しないパス＝404
         # /asset/* は DATA_DIR/asset/ へ。無ければバンドル同梱の見本(ASSET_SEED_DIR)へフォールバック。
         if parts and parts[0] == 'asset':
             sub = os.path.join(ASSET_DIR, *parts[1:]) if len(parts) > 1 else ASSET_DIR
@@ -129,6 +133,16 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             if found:
                 return self._reply(200, merged)
         return super().do_GET()
+
+    def list_directory(self, path):
+        # フォルダ一覧はアセット(asset/)の走査にだけ使う。それ以外（アプリ本体のフォルダ等）は見せない
+        p = os.path.normcase(os.path.abspath(path))
+        for root in (ASSET_DIR, ASSET_SEED_DIR):
+            r = os.path.normcase(os.path.abspath(root))
+            if p == r or p.startswith(r + os.sep):
+                return super().list_directory(path)
+        self.send_error(404, 'File not found')
+        return None
 
     def end_headers(self):
         self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
@@ -218,18 +232,6 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 return self._reply(200, {'ok': True, 'name': os.path.basename(OPEN_FILE)})
             if self.path.split('?', 1)[0] == '/__convert/toOgg':   # 書き出し時: OGG以外の音源をsong.egg用にOGG Vorbisへ変換（ffmpeg利用・無ければエラー返却）
                 return self._convert_to_ogg()
-            if self.path == '/__shot/save':   # マニュアル用スクショを WEB/assets/shots/ へ保存（ローカル開発専用）
-                b = self._body()
-                name = _safe(b.get('name', 'shot'))
-                if not name.lower().endswith('.png'):
-                    name += '.png'
-                m = re.match(r'^data:image/\w+;base64,(.+)$', b.get('data', ''), re.S)
-                if not m:
-                    return self._reply(400, {'ok': False, 'error': 'bad data url'})
-                os.makedirs(SHOTS_DIR, exist_ok=True)
-                with open(os.path.join(SHOTS_DIR, name), 'wb') as f:
-                    f.write(base64.b64decode(m.group(1)))
-                return self._reply(200, {'ok': True, 'name': name})
             os.makedirs(ASSET_DIR, exist_ok=True)
             if self.path == '/__asset/save':
                 b = self._body()

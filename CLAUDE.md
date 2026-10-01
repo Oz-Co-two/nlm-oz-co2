@@ -32,6 +32,8 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 ## ビルド・実行
 
 - 開発用venv: `.venv-build/`（`.gitignore`済み）。`pip install pywebview pythonnet pyinstaller`。
+  **Python 3.14**で作る（`py -3.14 -m venv .venv-build`。2026-09-28に3.9から移行・3.14はセキュリティ修正が2030-10まで）。
+  上限はpythonnet（3.1.0は`<3.15`）で決まるので、3.15以降へ上げる時はpythonnetの対応を先に確認すること。
   `.venv/` は `tools/` のテンポ解析用（librosa）で、ビルドには使わない。
 - ビルド: `.venv-build/Scripts/python.exe -m PyInstaller --noconfirm --clean nlm.spec` →
   `dist/NonLinearMapper/` にonedir出力（`NonLinearMapper.exe` + `_internal/`）。
@@ -46,13 +48,13 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - **翻訳の互換**: exe隣の`lang/`は初回シード後は更新されないため、`serve.py`の`do_GET`が`/lang/*.json`を
   「同梱版(`_internal/lang`)を土台にexe隣の版をキー単位で上書き」して返す。旧版の`lang/`を持つ利用者でも
   新機能の訳が欠けない（2026-09-27）。新しい設定項目(`bsnm_*`)は「キーが無い＝初期値」で動くように書くこと
-  （旧`settings.json`は存在するキーだけlocalStorageへ流し込む方式＝`editor.html`冒頭）。
+  （旧`settings.json`は存在するキーだけlocalStorageへ流し込む方式＝`js/settings-mirror.js`。CSP導入でeditor.htmlから分離）。
 - `nlm.spec`の`console=True`と`app.py`の`webview.start(debug=True)`は診断用フラグ。
   普段は両方無効(`console=False`・`debug`無し)でビルドすること。デバッグしたい時だけ一時的に有効化。
 - **ffmpeg依存**: song.egg変換(後述)にはPATH上の`ffmpeg`が必要。`winget install Gyan.FFmpeg`で導入可能。
   無い場合はエラーメッセージでインストール手順を案内する仕様（無言で失敗はしない）。
 - **配布zipのMark of the Web対策**: `app.py`の`_unblock_dist_folder()`（`main()`の先頭、
-  `import webview`より前で呼ぶ）が、exeと同じフォルダ配下の全ファイルからZone.Identifier
+  `import webview`より前で呼ぶ）が、同梱物（`_internal`＝`sys._MEIPASS`）配下のファイルからZone.Identifier
   (NTFSの代替データストリーム)を除去する。配布zipをダウンロードして展開すると、この印が
   DLLに引き継がれたままになり、.NETランタイムがDLLロードを拒否して
   "Failed to resolve Python.Runtime.Loader.Initialize from ...\Python.Runtime.dll" で
@@ -84,6 +86,7 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
    `getFile`だけを実装したFileSystemHandle互換）で包むので、`exportMap`は無改修で動く。実パスは
    `infoGraph.outs[oid].outDirPath`と`cover.data.nativePath`に保存し、プロジェクトを開いた直後に
    `tryAutoRestoreNativeInputs()`が存在確認のうえダイアログ無しで自動接続する（パスが無ければ従来どおり「再接続」）。
+   ただし出力フォルダは**このPCでダイアログから選んだことがあるもの**だけ（下の「ファイル読み書きの許可範囲」参照）。
    ダイアログは保存済みパスを開始位置にして開く。旧方式の`showDirectoryPicker({id})`は前回の場所を勝手に覚え、
    出力先を変えた後も古い場所で開いてしまっていた。pywebview外（`python serve.py`+ブラウザ）では従来のブラウザピッカーへ戻る。
 5. **フォルダ選択ダイアログが毎回「一つ上の階層」を表示する**のはWindows標準のフォルダ選択ダイアログの
@@ -125,6 +128,31 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - 旧プロジェクト（`infoGraph.prevMig`なし）とプロジェクト無しのInfo.dat読込は`migratePrevNode()`で`infoBase`の値から試聴ノードを作り、
   全書き出しに繋ぐ。`prevMig`を見て1回だけ行う（ユーザーが消した試聴ノードを復活させないため）。
 
+## 譜面チェック（BeatLeader基準・2026-09-28）
+
+- `js/mapcheck/mapcheck.js` は BS Map Check（KivalEvan・MIT）の**BeatLeaderプリセット**と、それが使う bsmap の計算の移植。
+  ランク審査で実際に使われるのが BS Map Check なので、**「原作と同じ結果」を最優先**にしている。そのため原作の計算のクセも
+  わざと再現している（直すと審査で見られる結果とずれる）:
+  - 各配列を並べ替えない（原作は読み込み時に並べ替えず、.datに書かれた順で判定する。NLMの書き出しは時刻順）
+  - チェーンのリンクの秒(`sec`)に拍の値が入る／bsmapの`vectorMul`は0を掛けると元の値のまま（`mulQ`）
+  - 「照らされていないボム」は原作が例外で何も出さない条件では何も出さない
+- 原作と違うのは「原作が例外で項目ごと消える」ケースだけ（分割数1のチェーン、不正IDのイベントボックス）。移植は判定できた分を出す。
+- 検査対象は書き出しと同じ `collectExportDiffs()`/`buildExportInfo()` の結果（`exportMap`から切り出して共有）。
+  書き出しの中身を変えればチェックにも自動で反映される。音源の長さは「元の音源＋無音追加」。
+- 原作の更新に追従する時・移植を直した時は `tools/mapcheck_difftest.py`（原作サイトと自動で突き合わせ。tools/README.md）。
+- `js/mapcheck/env-tables.js` は bsmap の `src/beatmap/misc/environment.ts` から自動抽出した表（環境の追加時は作り直す）。
+- 結果パネルは `mapcheck-panel.js`。項目名は `mc.k.<key>`（日本語の既定値はパネル内の`JA`表）。
+- パネルの2つ目のタブ「NLM版 BL評価リスト」（`blcriteria.js`＋表示`blcriteria-view.js`・2026-09-29）は、BeatLeader公式の**文章の基準**
+  （beatleader.wiki の Ranking Criteria）を項目番号（R1.A.1…）どおりに並べたNLM独自の判定表。BS Map Check とは別物なので、
+  **公式の結果と見間違えないよう枠と背景を青緑にしている**（ユーザーの要望。`#mcPanel.blMode`）。判定の種類は
+  自動（文面の数値どおり）/候補（図や審査員の判断に頼る項目。一部は BS Map Check の結果を流用）/手動/対象外。
+  文面に定義が無くNLMが解釈した所（チェーン密度＝squish、振り始め・スイング軌道のマス、ボムの照明の近似など）は
+  コメントと画面の注記（`BL_NOTE_JA`）に書いてある。基準の改訂に追従したら `CRITERIA_DATE` を更新し `tools/blcriteria_test.py`。
+  - スイングのまとまりは BS Map Check のもの（90度ちょうどで分ける）を使わず独自に作る（45度ルールが判定できなくなるため）。
+  - 視界ブロック（R5.A）は★とTechレーティングを使う公式の式。値は利用者がパネルで入れる（アプリを開いている間だけ保持）。
+  - R1.B.2（Shuffle/Shuffle Periodは未使用か0）に合わせ、`buildExportInfo`はShuffleが0なら周期も0で書く（他のエディタや公式譜面は0.5を書くため、
+    読み込んだ値をそのまま出すと常に違反になっていた。ゲームはこの2項目を使っていないので遊び心地は変わらない）。
+
 ## song.egg 書き出し（変換・キャッシュ）
 
 - 元の音源がOGGならバイトコピー、それ以外（mp3/wav/flac等）はffmpegで`libvorbis`へ変換。
@@ -154,6 +182,27 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - `serve.py`はHostヘッダーがローカル名でない要求を403にし（DNSリバインディング対策・追加は`NLM_ALLOWED_HOSTS`）、
   **POSTは`X-NLM-Request: 1`ヘッダー必須**（他サイトからのCSRF対策）。**新しいPOST APIを足したら、JS側のfetchにも
   このヘッダーを付けること**（付け忘れると403で無言に失敗する）。
+- `serve.py`の`translate_path`は`\`・ドライブ名・`..`を含むパスを404にする（Windowsではこれらでフォルダ外を読めてしまう）。
+  フォルダ一覧（`list_directory`）はアセット走査用に`asset/`配下だけ許可。
+
+## セキュリティの約束事（2026-09-28の点検で導入）
+
+他人から受け取るファイル（.nlmf・.nlmclip・Info.dat・翻訳ファイル）の中身は信用しない、が前提。
+- **innerHTMLへ差し込む値のうちファイル由来の文字列は必ず`escHtml()`を通す**（editor-app.js冒頭）。色をSVG属性へ
+  差し込む時は`safeHex()`。点検時、.nlmfの曲名(`graph.song.name`)がそのままinnerHTMLに入りスクリプトが実行できた。
+  テキストだけなら`textContent`を使うのが一番安全。
+- **CSP**（editor.htmlの`<meta http-equiv="Content-Security-Policy">`）: インライン`<script>`と`onclick="..."`等の
+  HTML属性ハンドラは禁止（二重の守り。1つ目の約束を破っても仕込まれたスクリプトは動かない）。イベントはJSで
+  `addEventListener`する。importmapだけはsha256で許可しているので、**importmapを変えたらハッシュを計算し直す**
+  （改行コードで値が変わらないよう1行のまま。`base64(sha256(<script>と</script>の間の文字列))`）。
+  外部サイトの読み込み・`eval`も不可（今は使っていない）。
+- 翻訳ファイルの訳文に`<`が含まれていたら`loadLang()`が捨てて既定文にする（訳文もinnerHTMLに入るため）。
+- **ファイル読み書きの許可範囲**（app.pyの`_NativeAccess`）: JSへ渡す`fs_*`/`read_song_file`は任意パスを受けない。
+  - 書き込み: 許可済み出力フォルダの中だけ、拡張子は`_WRITE_EXTS`（.dat/.egg/.json/画像）だけ。
+    **書き出しで新しい種類のファイルを作るようにしたら`_WRITE_EXTS`に足すこと**（足さないと`not-allowed`で失敗する）。
+  - 許可済み出力フォルダ＝`pick_folder`（ネイティブのフォルダ選択ダイアログ）で選ばれたフォルダ。exe隣の
+    `config/native_out_dirs.json`に保存され次回も自動接続できる。JS側から許可を足す口は作らないこと。
+  - 読み込み: 音源/画像の拡張子、そのセッションでダイアログから選んだファイル、許可済み出力フォルダの中だけ。
 
 ## 削除済み機能（意図的）
 
