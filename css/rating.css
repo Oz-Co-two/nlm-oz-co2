@@ -1,0 +1,35 @@
+/* Non-Linear Mapper — rating.css（難易度を測る・BeatLeaderの星の近似の結果パネル。見た目は譜面チェックに合わせる） */
+
+  #iRating{margin:4px 11px 0;font-size:11.5px;}   /* INFOの書き出しノード最下段・譜面チェックと書き出しボタンの間（renderOutCardsが移す） */
+
+  #rtPanel{position:fixed;right:32px;top:84px;width:440px;max-width:calc(100vw - 32px);max-height:calc(100vh - 110px);
+    display:none;flex-direction:column;z-index:151;background:#1d1d1d;border:1px solid #2a2a2a;border-radius:10px;
+    box-shadow:0 8px 28px rgba(0,0,0,.55);color:var(--text);font-size:12px;}
+  #rtPanel .rtHead{display:flex;align-items:center;gap:8px;padding:9px 10px 8px 14px;border-bottom:1px solid #ffffff14;cursor:move;user-select:none;}
+  #rtPanel .rtTitle{flex:1;font-weight:700;font-size:13px;}
+  #rtPanel .rtHeadBtns,#rtPanel .rtPlugBtns{display:flex;gap:6px;align-items:center;}
+  #rtPanel button,#rtPanel select{background:var(--widget);border:1px solid #1d1d1d;border-radius:6px;color:#e5e5e5;padding:4px 10px;cursor:pointer;font:inherit;font-size:11.5px;}
+  #rtPanel button:hover{background:var(--widget2);}
+  #rtPanel button:disabled,#rtPanel select:disabled{opacity:.6;cursor:default;}
+  #rtPanel .rtPlug{display:flex;align-items:center;gap:8px;padding:7px 14px;border-bottom:1px solid #ffffff0d;color:var(--textmute);}
+  #rtPanel .rtPlugTxt{flex:1;}
+  #rtPanel .rtMsg{padding:6px 14px;font-size:11.5px;line-height:1.5;}
+  #rtPanel .rtMsg:empty{display:none;}
+  #rtPanel .rtMsg.ok{color:var(--green);}
+  #rtPanel .rtMsg.err{color:#ffb3bb;}
+  #rtPanel .rtBody{overflow-y:auto;padding:6px 10px 8px;flex:1;min-height:40px;}
+  #rtPanel .rtIntro{line-height:1.6;padding:6px 4px;}
+  #rtPanel .rtRepo{color:var(--textmute);margin-top:4px;user-select:text;}
+  #rtPanel .rtErr{color:#ffb3bb;background:#3a1216;border:1px solid #ff4d5e;border-radius:6px;padding:8px 10px;margin:6px 0;}
+  #rtPanel .rtTable{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;}
+  #rtPanel .rtTable th{text-align:right;color:var(--textmute);font-weight:500;font-size:11px;padding:3px 6px;border-bottom:1px solid #ffffff14;}
+  #rtPanel .rtTable td{text-align:right;padding:5px 6px 1px;}
+  #rtPanel .rtTable th:first-child,#rtPanel .rtTable td:first-child{text-align:left;}
+  #rtPanel .rtStar{font-weight:700;color:#ffd23d;font-size:13px;}
+  #rtPanel .rtMods td{padding:0 6px 6px;border-bottom:1px solid #ffffff0a;text-align:right;}
+  #rtPanel .rtMod{color:var(--textmute);font-size:10.5px;margin-left:10px;}
+  #rtPanel .rtSkip td{color:var(--textmute);padding-bottom:6px;border-bottom:1px solid #ffffff0a;}
+  #rtPanel .rtSkip td:last-child{text-align:left;font-size:11px;}
+  #rtPanel .rtMeta{color:#6a6a72;font-size:10.5px;margin-top:6px;text-align:right;}
+  #rtPanel .rtFoot{padding:7px 14px 9px;border-top:1px solid #ffffff14;color:var(--textmute);font-size:10.5px;line-height:1.5;}
+  #rtPanel .rtFootSub{color:#6a6a72;}

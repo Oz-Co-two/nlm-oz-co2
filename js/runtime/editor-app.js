@@ -27,6 +27,8 @@ import { installUiChrome } from '../ui/chrome.js';
 import { installTickLoop } from '../loop/tick-loop.js';
 import { installEditorRuntimeHelpers } from '../runtime/editor-runtime.js';
 import { installMapCheckPanel } from '../mapcheck/mapcheck-panel.js';
+import { installRatingPanel } from '../rating/rating-panel.js';
+import { installUpdater } from '../update/update-dialog.js';
 
 /**
  * Editor runtime — original closure (behavior-preserving).
@@ -6842,6 +6844,21 @@ async function mapCheckJump(dn,o){
   stat(tf('mc.jumped','{diff} の {beat} 拍目へ移動しました',{diff:dispDiff(dn),beat:Math.round((o.beat||0)*1000)/1000}));
 }
 const mapCheckPanel=installMapCheckPanel({t,escHtml,dispDiff,collect:collectMapCheckInput,jump:mapCheckJump});
+// ---- 難易度を測る（BeatLeaderの星の近似）: 書き出すのと同じInfo.dat/.datを別配布のプラグインへ渡す（rating_plugin.py） ----
+async function collectRatingInput(){
+  if(!currentDiffName) return {error:t('rt.noChart','測る譜面がありません')};
+  stashCurrentDiff(); applyInfoGraph();
+  const diffFiles=collectExportDiffs();
+  if(!diffFiles.length) return {error:t('m:書き出せる難易度がありません（ノーツ/ライトが空です）','書き出せる難易度がありません（ノーツ/ライトが空です）')};
+  const info=buildExportInfo(diffFiles,'');
+  return {files:[{name:'Info.dat',text:JSON.stringify(info)}, ...diffFiles.map(d=>({name:d.name,text:JSON.stringify(d.json)}))]};
+}
+const ratingPanel=installRatingPanel({t,escHtml,dispDiff,collect:collectRatingInput});
+// 本体の自動更新（js/update/update-dialog.js → serve.py → app_update.py）。起動時の確認はexe版・環境設定ONの時だけ
+const updater=installUpdater({t,tf,lang:()=>langCode,confirmDiscard,showOk});
+{ const el=document.getElementById('updateCheckOn');
+  if(el){ el.checked=updater.isOn(); el.addEventListener('change',()=>updater.setOn(el.checked)); } }
+setTimeout(()=>updater.autoCheck(),3000);   // 起動直後の読み込み（曲・プロジェクト）と重ならないよう少し待つ
 async function exportMap(forceEgg=false){
   if(!currentDiffName){ stat('書き出し対象がありません'); return; }
   stashCurrentDiff();
@@ -8978,7 +8995,7 @@ function readinessHTML(){ return exportReadiness().map(it=>{ const icon=it.ok?'�
   return `<div style="color:${it.ok?'#d8dce2':(it.req?'#e2b0b6':'#8a8a92')}"><span style="color:${col};font-weight:700;width:12px;text-align:center;">${icon}</span>${it.label}${tag}</div>`; }).join(''); }
 function renderOutCards(){
   for(const el of [...infoWorldEl.querySelectorAll('.iGrp[data-out]')]) if(!infoGraph.outs[el.dataset.out]){
-    for(const bid of ['iMapCheck','iExport']){ const ex=el.querySelector('#'+bid); if(ex) document.getElementById('uiStash').appendChild(ex); }   // 書き出し/チェックのボタンはカードと道連れにしない（Undoでカードが消えても退避→refreshでアクティブへ戻る）
+    for(const bid of ['iMapCheck','iRating','iExport']){ const ex=el.querySelector('#'+bid); if(ex) document.getElementById('uiStash').appendChild(ex); }   // 書き出し/チェックのボタンはカードと道連れにしない（Undoでカードが消えても退避→refreshでアクティブへ戻る）
     el.remove(); }
   for(const oid in infoGraph.outs){ let el=infoWorldEl.querySelector(`.iGrp[data-out="${oid}"]`);
     if(!el){ el=document.createElement('div'); el.className='iGrp'; el.dataset.node='out:'+oid; el.dataset.out=oid;
@@ -9029,9 +9046,9 @@ function refreshOutCards(){
         const on=(infoGraph.edges||[]).some(ed=>ed.o===oid&&infoNodeT(ed.s)===k), col=INFO_NODE_DEFS[k][1];
         dot.style.background=on?col:'#1b1b1d';
         dot.style.border=on?'1.5px solid #141416':('3px solid '+col); }); }
-    if(act){ const mc=document.getElementById('iMapCheck'), ex=document.getElementById('iExport');   // 書き出し/チェックのボタンはアクティブノードの最下段のみ（チェック→書き出しの順）
+    if(act){ const mc=document.getElementById('iMapCheck'), rt=document.getElementById('iRating'), ex=document.getElementById('iExport');   // 書き出し/チェック/難易度のボタンはアクティブノードの最下段のみ（チェック→難易度→書き出しの順）
       // 付け直すのは置き場所が違う時だけ（pointerdownのたびに付け直すとクリックが届かない＝CLAUDE.mdの注意6）
-      if(ex&&(ex.parentElement!==el||(mc&&mc.nextElementSibling!==ex))){ if(mc) el.appendChild(mc); el.appendChild(ex); } }
+      if(ex&&(ex.parentElement!==el||(mc&&mc.nextElementSibling!==rt)||(rt&&rt.nextElementSibling!==ex))){ if(mc) el.appendChild(mc); if(rt) el.appendChild(rt); el.appendChild(ex); } }
   }
 }
 // ---- ソースノード（曲情報/設定/カバー）の動的カード ----
@@ -9371,6 +9388,7 @@ const KEYSHTML_NLE=(document.querySelector('#nodeKeys .mkbody')||document.getEle
 const KEYSHTML_NODE=[['新規ノード','🖱️ 右クリック'],['全ノードの中央へ','.']]
   .map(([d,k])=>`<div class="mkrow"><span class="mkd">${d}</span><span class="mk">${k}</span></div>`).join('');
 document.getElementById('iMapCheck').addEventListener('click',()=>mapCheckPanel.open());
+document.getElementById('iRating').addEventListener('click',()=>ratingPanel.open());
 document.getElementById('iExport').onclick=()=>{   // 必須項目（音源/ノーツ/フォルダー名/出力先）が揃うまで書き出しは止める
   const miss=exportReadiness().filter(x=>x.req&&!x.ok);
   if(miss.length){ showErr(tf('msg.exportMissing','書き出せません: {list} が足りません',{list:miss.map(m=>m.label.replace(/（.*/,'')).join('・')})); return; }
@@ -9787,6 +9805,8 @@ document.getElementById('mFileMenu').addEventListener('click',async e=>{
   else if(act==='loadsong'){ closeFileMenu(); openSongFile(); }   // Musicレーンの「音楽ファイルを読み込む」と同じ
   else if(act==='addfolder'){ closeFileMenu(); document.getElementById('libAddBtn').click(); }   // MEDIAの「フォルダを追加」と同じ（showDirectoryPicker→scanLibrary）
   else if(act==='mapcheck'){ closeFileMenu(); mapCheckPanel.open(); }
+  else if(act==='rating'){ closeFileMenu(); ratingPanel.open(); }
+  else if(act==='update'){ closeFileMenu(); updater.manualCheck(); }
 });
 
 // ---- フローティングツールバー ----

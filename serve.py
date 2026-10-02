@@ -1,7 +1,9 @@
 # NLM開発サーバー: キャッシュ無効ヘッダ付き（Chromeの古いファイル使い回しを根絶）
 # ＋ アセット(asset/)クリップの保存/改名/削除API（ローカル専用。Tauri化時はネイティブ書込みへ置換）
-import http.server, json, os, posixpath, re, shutil, subprocess, tempfile
+import http.server, json, os, posixpath, re, shutil, subprocess, sys, tempfile
 from urllib.parse import unquote, urlsplit, parse_qs
+from rating_plugin import RatingPlugin, PluginError
+from app_update import Updater, UpdateError
 
 # BASE_DIR = Webコンテンツの置き場（読み取り専用でよい）。exe化(PyInstaller)ではバンドル展開先を渡す。
 # DATA_DIR = 書き込み対象（config/settings.json と asset/*.nlmclip）。exe化では exe と同居のユーザー書込み可フォルダを渡す。
@@ -15,6 +17,9 @@ SETTINGS_FILE = os.path.join(CONFIG_DIR, 'settings.json')        # 個人の環�
 LANG_DIR = os.path.join(DATA_DIR, 'lang')                       # 翻訳(lang/*.json)は exe隣を優先＝ユーザーが編集/言語追加できる
 LANG_SEED_DIR = os.path.join(BASE_DIR, 'lang')                  # バンドル同梱の翻訳（exe隣に無い時のフォールバック）
 OPEN_FILE = os.environ.get('NLM_OPEN_FILE') or ''              # ダブルクリックで開くファイル（app.pyが%1から設定）。ネイティブパスなので保存もここへ書き戻せる
+
+# 本体の自動更新（app_update.py）。exe 版では DATA_DIR＝exe の隣＝差し替える配布フォルダ
+UPDATER = Updater(BASE_DIR, DATA_DIR, bool(getattr(sys, 'frozen', False)))
 
 def _safe(name):
     # ファイル名を安全化（パストラバーサル・不正文字の除去）。ディレクトリ部は捨てる
@@ -204,6 +209,50 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(ogg)
 
+    def _rating(self):
+        # 取得先URL・置き場所は rating_plugin.py に固定。JSから受け取るのは「使う版」と譜面の中身だけ
+        rp = RatingPlugin(DATA_DIR)
+        act = self.path[len('/__rating/'):]
+        try:
+            if act == 'status':
+                return self._reply(200, rp.status())
+            if act == 'check':
+                return self._reply(200, rp.check())
+            if act == 'install':
+                return self._reply(200, rp.install())
+            if act == 'use':
+                return self._reply(200, rp.use(self._body().get('version')))
+            if act == 'measure':
+                return self._reply(200, rp.measure(self._body()))
+        except PluginError as e:
+            return self._reply(200, {'ok': False, 'error': e.code, 'detail': e.detail})
+        return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
+
+    def _update(self):
+        # 取得先URL・差し替える物は app_update.py に固定。JSから受け取るのは言語（と更新内容を開く版番号）だけ
+        act = self.path[len('/__update/'):]
+        try:
+            if act == 'status':
+                return self._reply(200, UPDATER.status())
+            if act == 'check':
+                return self._reply(200, UPDATER.check())
+            if act == 'download':
+                return self._reply(200, UPDATER.start_download())
+            if act == 'progress':
+                return self._reply(200, UPDATER.progress())
+            if act == 'cancel':
+                return self._reply(200, UPDATER.cancel())
+            if act == 'apply':
+                return self._reply(200, UPDATER.apply(self._body().get('lang')))
+            if act == 'openNotes':
+                b = self._body()
+                return self._reply(200, UPDATER.open_notes(b.get('lang'), b.get('version')))
+            if act == 'openReleases':
+                return self._reply(200, UPDATER.open_releases())
+        except UpdateError as e:
+            return self._reply(200, {'ok': False, 'error': e.code, 'detail': e.detail})
+        return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
+
     def do_POST(self):
         if not self._access_ok(write=True):
             return self._deny()
@@ -232,6 +281,10 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 return self._reply(200, {'ok': True, 'name': os.path.basename(OPEN_FILE)})
             if self.path.split('?', 1)[0] == '/__convert/toOgg':   # 書き出し時: OGG以外の音源をsong.egg用にOGG Vorbisへ変換（ffmpeg利用・無ければエラー返却）
                 return self._convert_to_ogg()
+            if self.path.startswith('/__update/'):   # 本体の自動更新。詳細は app_update.py
+                return self._update()
+            if self.path.startswith('/__rating/'):   # 難易度を測る（BeatLeaderの星の近似）プラグイン。詳細は rating_plugin.py
+                return self._rating()
             os.makedirs(ASSET_DIR, exist_ok=True)
             if self.path == '/__asset/save':
                 b = self._body()

@@ -262,6 +262,13 @@ class _NativeAccess:
                 and self.in_out_dir(os.path.dirname(path)))
 
 def main():
+    # 自動更新の差し替え役として起動された（旧版が _update/new/ に展開したこの exe を起動した）時は、
+    # 差し替えて配布フォルダの exe を起動し直すだけで終わる。画面・サーバー・関連付けの登録はしない
+    # （ここで関連付けを登録すると .nlmf が消える予定の _update/ の exe を指してしまう）。詳細は app_update.py
+    if '--apply-update' in sys.argv:
+        import app_update
+        app_update.apply_main(sys.argv)
+        return
     _unblock_dist_folder()   # webview(→pythonnet/clr)のインポート前に済ませる
     app_root = _app_root()
     data_root = _data_root(app_root)
@@ -274,6 +281,8 @@ def main():
 
     sys.path.insert(0, app_root)
     import serve  # 既存の開発サーバをそのままライブラリとして使う
+    import app_update
+    app_update.startup(serve.UPDATER)   # 自動更新の直後なら「更新しました」を出す準備と _update/ の片付け
 
     port = _free_port()
     httpd = serve.make_server(port=port, bind='127.0.0.1')

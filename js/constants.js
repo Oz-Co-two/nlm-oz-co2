@@ -7,7 +7,7 @@ export const VERSION = 'nlm-modular-1';   // 内部構成の識別子（開発�
 /** 利用者向けの版番号（GitHubのタグ/リリース名と一致させる）。ここが唯一の定義元：
  *  アプリ上部バーの表示（main.js）と、exe版のウィンドウタイトル（app.py がこの行を読む）の両方に使う。
  *  リリースのたびにここだけ書き換える。 */
-export const APP_VERSION = 'v1.2.0-oz';
+export const APP_VERSION = 'v1.3.0-oz';
 
 /** Grid / timeline spacing (editor 3D + NLE). */
 export const LANE = 0.62;

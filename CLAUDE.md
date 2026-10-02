@@ -153,6 +153,40 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   - R1.B.2（Shuffle/Shuffle Periodは未使用か0）に合わせ、`buildExportInfo`はShuffleが0なら周期も0で書く（他のエディタや公式譜面は0.5を書くため、
     読み込んだ値をそのまま出すと常に違反になっていた。ゲームはこの2項目を使っていないので遊び心地は変わらない）。
 
+## 難易度を測る（BeatLeaderの星の近似・2026-10-02）
+
+- 計算は**本体に同梱しない別配布のプラグイン** nlm-rating（https://github.com/Oz-Co-two/nlm-rating ・MIT・.NETの自己完結exe・zip約19MB）。
+  BeatLeaderの公開コード（RatingAPI＋beatleader-analyzer server-dev）を使う。本家と同じ星は保証できない（Accが本家より2〜9%低い譜面がある）
+  ので、画面には「近似値・公式ツールではない」と必ず出す。比較テスト・上流の追従手順はプラグイン側のREADME。
+- NLM側: `rating_plugin.py`（取り込み・更新・実行）＋`serve.py`の`/__rating/*`（POST）＋`js/rating/rating-panel.js`。
+  入力は譜面チェックと同じ`collectExportDiffs()`/`buildExportInfo()`（`collectRatingInput`）。
+- 置き場所は exe隣の`plugins/rating/<版>/`（`current.json`で使う版を選ぶ・旧版は残す）。取得先URLは`rating_plugin.py`に固定し、
+  zipは`manifest.json`のSHA-256・サイズと照合してから展開する。JSからURL・パスを渡せるようにしないこと（署名なしexeを実行するため）。
+- 通信仕様の版`PROTOCOL`（rating_plugin.py）はプラグイン側`Program.Protocol`と同じ値。入出力の形を変えたら両方を上げる
+  （NLMは知らないprotocolの版を取り込まない＝古いNLMに新しすぎるプラグインが入らない）。
+- 上流はノーツ20個未満の難易度を計算しない（`skipped:"tooFewNotes"`）。
+- プラグイン側の保守はそのリポジトリで行う: `python build.py`（zipとmanifest.json）→ `python tests/compare_bl.py <exe>`（本家の値との比較。
+  Pass/Techが1つでもずれたら失敗）。上流の追従手順はプラグインのREADME。公開は**プラグインのリリースが先、それを使うNLMの版が後**。
+
+## 本体の自動更新（2026-10-02）
+
+- `app_update.py`（確認・ダウンロード・照合・展開・差し替え）＋`serve.py`の`/__update/*`（POST）＋`js/update/update-dialog.js`。
+  起動時の確認はexe版だけ・環境設定`bsnm_updateCheck`で OFF 可・通信の失敗は黙って無視。「更新しない」の版は`bsnm_updateSkip`
+  （それより新しい版が出るまで起動時に出さない。ファイルメニューの「更新を確認…」からは常に出す）。
+- 最新リリースに添付した`update.json`（`tools/make_release.py`が作る）を読む。中身は zip の SHA-256・サイズと、
+  `CHANGELOG.md`/`CHANGELOG.en.md`の各版の行頭の太字（`- **〜**`）＝更新のお知らせに出す見出し。
+  **変更点は README ではなく CHANGELOG に日英両方で書く**（版の並び・見出しの数が日英で違うと make_release が止まる）。
+- 差し替えは**新しい版の exe**が行う: 旧版が zip を exe 隣の`_update/new/`へ展開 → その exe を
+  `--apply-update --target <配布フォルダ> --pid <旧版のpid> --lang <ja|en>`で起動して自分は終了 → 新しい版が旧版の終了を待って
+  `NonLinearMapper.exe`・`_internal`・案内文だけを入れ替え（前の版は`_previous_<版>/`に1世代）→ 起動し直し → `_update/`を片付け。
+  **この引数・update.json の形式（`FORMAT`）・zip の中身の形は版をまたぐ約束**（旧版が新しい版の exe を呼ぶため）。
+  形式を変える時は`FORMAT`を上げる（旧版は自動更新せずリリースページを開く案内になる）。
+- 別の PyInstaller 製 exe を起動する時は`_env_for_child()`（`PYINSTALLER_RESET_ENVIRONMENT=1`・`_PYI_*`を消す）を通すこと。
+  親の設定を引き継ぐと子の exe が正しく起動しない。
+- 差し替え役として起動された時は`app.py`の`main()`の先頭で抜ける（画面・サーバー・関連付けの登録をしない。登録すると
+  .nlmf が消える予定の`_update/`の exe を指してしまう）。
+- 取得先URLは`app_update.py`に固定。JS から受け取るのは言語（と更新内容を開く版番号）だけ。
+
 ## song.egg 書き出し（変換・キャッシュ）
 
 - 元の音源がOGGならバイトコピー、それ以外（mp3/wav/flac等）はffmpegで`libvorbis`へ変換。

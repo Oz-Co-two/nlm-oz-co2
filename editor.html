@@ -15,6 +15,8 @@
 <link rel="stylesheet" href="css/editor3d.css">
 <link rel="stylesheet" href="css/chrome.css">
 <link rel="stylesheet" href="css/mapcheck.css">
+<link rel="stylesheet" href="css/rating.css">
+<link rel="stylesheet" href="css/update.css">
 </head>
 <body>
 <div id="bootCover"></div>
@@ -35,6 +37,9 @@
       <button data-act="addfolder"><span data-i18n="menu.addFolder">MEDIAにフォルダを追加…</span><span class="mkey"></span></button>
       <hr>
       <button data-act="mapcheck"><span data-i18n="menu.mapCheck">譜面チェック（BeatLeader基準）…</span><span class="mkey"></span></button>
+      <button data-act="rating"><span data-i18n="menu.rating">難易度を測る（BeatLeaderの星の近似）…</span><span class="mkey"></span></button>
+      <hr>
+      <button data-act="update"><span data-i18n="menu.update">更新を確認…</span><span class="mkey"></span></button>
     </div>
   </div>
   <button class="mbtn" id="mbSettings" data-i18n="menu.settings">環境設定</button>
@@ -110,6 +115,7 @@
         </div>
         <div id="chartInfo"></div>
         <button class="iBtn" id="iMapCheck" data-i18n-t="ui.mapCheckTip" title="書き出す内容をBeatLeaderのランク基準（BS Map Checkと同じ判定）でチェックします"><span data-i18n="ui.mapCheck">🔍 譜面チェック（BeatLeader基準）</span></button>
+        <button class="iBtn" id="iRating" data-i18n-t="ui.ratingTip" title="書き出す内容の難易度をBeatLeaderの星（Pass/Tech/Acc）の近似値で測ります。追加プラグインが必要です"><span data-i18n="ui.rating">★ 難易度を測る（BL星の近似）</span></button>
         <button class="iBtn" id="iExport"><span data-i18n="ui.exportCustomSong">▶ カスタム曲書き出し</span></button>
       </div>
         <div id="nodepane">
@@ -283,6 +289,8 @@
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="auxPrevShow" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.auxPrevOn">枠の左右に直前のノーツを表示（Hキーでも切替）</span></label></div>
     <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.swingWarn">同じ向きの連続の警告</div>
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="swingWarnOn" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.swingWarnOn">置いたノーツが前後と同じ向き（差45°以内）なら赤枠・ランプ・音で知らせる</span></label></div>
+    <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.updateCheck">更新の確認</div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="updateCheckOn" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.updateCheckOn">起動時に新しいバージョンがあるか確認する（GitHub に接続します）</span></label></div>
   </div>
   <div class="setPanel" data-panel="vol">
     <div class="slRow"><div class="t"><span data-i18n="set.volMaster">マスター音量</span> <span id="volMVal">50</span>%</div>

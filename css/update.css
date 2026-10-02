@@ -1,0 +1,25 @@
+/* Non-Linear Mapper — update.css（本体の自動更新のダイアログ。見た目は未保存の確認ダイアログに合わせる） */
+
+  #updDlgBg{position:fixed;inset:0;z-index:510;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;}
+  #updDlg{background:#26262b;border:1px solid #44444c;border-radius:10px;padding:18px 20px 16px;width:460px;max-width:calc(100vw - 40px);
+    max-height:calc(100vh - 80px);display:flex;flex-direction:column;color:#eee;font-size:13px;box-shadow:0 10px 40px rgba(0,0,0,.6);}
+  #updDlg .udTitle{font-weight:700;font-size:14px;margin-bottom:10px;}
+  #updDlg .udBody{overflow:auto;min-height:0;margin-bottom:16px;line-height:1.6;}
+  #updDlg .udCur{color:#9a9aa4;font-size:12px;margin-bottom:8px;}
+  #updDlg .udNotes{background:#1d1d21;border:1px solid #3a3a42;border-radius:6px;padding:6px 12px 8px;}
+  #updDlg .udVer{display:flex;align-items:baseline;gap:10px;margin-top:6px;}
+  #updDlg .udVerName{font-weight:700;color:#56ffc1;}
+  #updDlg .udMore{color:#8ab4ff;font-size:11.5px;}
+  #updDlg ul{margin:2px 0 4px;padding-left:20px;}
+  #updDlg li{margin:1px 0;}
+  #updDlg .udHint{color:#b8b8c0;font-size:12px;margin-top:10px;}
+  #updDlg .udMsg{white-space:pre-line;}
+  #updDlg .udMsg.err{color:#ffb3bb;}
+  #updDlg .udBar{height:8px;background:#1d1d21;border:1px solid #3a3a42;border-radius:4px;margin-top:10px;overflow:hidden;}
+  #updDlg .udFill{height:100%;width:0;background:#3d6ee0;transition:width .2s;}
+  #updDlg .udBtns{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
+  #updDlg button{padding:6px 14px;border-radius:6px;border:1px solid #55555e;background:#34343b;color:#eee;font-size:12.5px;cursor:pointer;}
+  #updDlg button:hover{background:#40404a;}
+  #updDlg button:disabled{opacity:.5;cursor:default;}
+  #updDlg button.pri{background:#3d6ee0;border-color:#5a86ec;color:#fff;}
+  #updDlg button.pri:hover{background:#4a7af0;}

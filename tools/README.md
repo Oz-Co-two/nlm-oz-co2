@@ -202,3 +202,16 @@ PyInstallerでビルド後、配布フォルダ`NLM-app/`の`exe`と`_internal`�
   なお、`.venv-build`以外の実在するPython(システムPython・別のvenv等)で起動した場合は、
   スクリプト内部で自動的に`.venv-build`のPythonへ再実行する仕組みを入れてあるので、
   上記2つのどちらかが動きさえすれば以後は気にしなくてよい。
+
+## リリース用のファイルを作る（make_release.py）と自動更新の自己テスト（update_test.py）
+
+`python tools/make_release.py` — ビルド後（`dist/NonLinearMapper`）に実行し、GitHub リリースに添付する
+`dist/release/NonLinearMapper-<版>.zip` と `dist/release/update.json` を作る。update.json はアプリ内の自動更新
+（`app_update.py`）が最新リリースから読むファイルで、zip の SHA-256・サイズと、`CHANGELOG.md`/`CHANGELOG.en.md` の
+各版の太字の見出し（更新のお知らせに出る）が入る。APP_VERSION・ビルド結果・CHANGELOG の先頭の版が揃っていないと止まる。
+**リリースには zip と update.json の両方を添付すること**（update.json が無いと、旧版のアプリに更新が知らされない）。
+
+`python tools/update_test.py` — ネットに繋がず、ローカルの偽の配布元で自動更新を通しで確かめる
+（更新内容の絞り込み・SHA-256 照合・改ざん/zip slip の拒否・差し替え・失敗時の復元・利用者データを触らないこと・更新後の片付け・CHANGELOG の日英の対応）。
+本物の exe の差し替え役は `NonLinearMapper.exe --apply-update --target <配布フォルダ> --pid 0 --lang ja --no-launch`
+（`<配布フォルダ>/_update/new/NonLinearMapper/` に置いた exe から起動する）で単体で試せる。

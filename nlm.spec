@@ -13,6 +13,8 @@ HERE = os.path.abspath('.')
 datas = [
     ('editor.html', '.'),
     ('serve.py', '.'),
+    ('rating_plugin.py', '.'),   # 難易度を測る（BL星の近似）プラグインの取り込み・実行。serve.py が import する
+    ('app_update.py', '.'),      # 本体の自動更新。serve.py・app.py が import する
     ('js', 'js'),
     ('css', 'css'),
     ('fonts', 'fonts'),
@@ -24,7 +26,7 @@ datas = [
 ]
 
 # pywebview の Windows(WebView2) バックエンドと pythonnet を確実に取り込む
-hiddenimports = ['serve']
+hiddenimports = ['serve', 'rating_plugin', 'app_update']
 binaries = []
 for pkg in ('webview', 'clr_loader', 'pythonnet'):
     try:
