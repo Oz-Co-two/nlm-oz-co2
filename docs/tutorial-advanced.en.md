@@ -5,10 +5,7 @@
 For those who have finished the [basic tutorial](tutorial.en.md). This tutorial explains faster ways to work,
 the checks before publishing a map, and how to measure the difficulty (★).
 
-> **About the screenshots**
-> The screenshots currently show the **Japanese UI**; English screenshots will be added later.
-> The numbers (①, ②, …) in the screenshots match the tables in the text, and the names in **bold** are the English UI labels.
-> A few labels are still shown in Japanese even in the English UI; for those, the Japanese text is given in parentheses so you can find them.
+> The screenshots show the English UI (v1.4.1-oz). The numbers (①, ②, …) in the screenshots match the tables in the text.
 
 ## Contents
 
@@ -45,7 +42,7 @@ In the NLE it scrolls so that the current beat is in the center.
 Press the **"," (comma) key** to open a circular menu (pie menu) for choosing the snap (how far each step moves).
 You can switch to a finer snap only while placing 1/4-beat patterns, without moving the mouse to the toolbar.
 
-![The snap pie menu of the "," key](images/tutorial-advanced/01-1-snap-pie.png)
+![The snap pie menu of the "," key](images/tutorial-advanced-en/01-1-snap-pie.png)
 
 Hold the key, move the mouse toward the item you want, and release the key to choose it.
 
@@ -90,21 +87,21 @@ Right-click a marker to also:
 - **▶ Set as song preview start**: make the marker position the start of the part played on the song select screen
 - Rename / delete it
 
-![The right-click menu of a marker. ① is "Set as song preview start"](images/tutorial-advanced/01-2-marker-menu.png)
+![The right-click menu of a marker. ① is "Set as song preview start"](images/tutorial-advanced-en/01-2-marker-menu.png)
 
 You can also right-click a clip in the NLE → "**Cut at markers**" to split the clip at every marker inside it ([chapter 3](#3-making-the-most-of-the-nle)).
 
 ### Customizing shortcuts
 
-You can change the key assignments in the shortcut editing tab (ショートカット編集) of **Preferences**.
+You can change the key assignments in the **Shortcuts** tab of **Preferences**.
 
-![The shortcut editing tab. ① is the change button](images/tutorial-advanced/01-3-shortcut-edit.png)
+![The Shortcuts tab. ① is the Change button](images/tutorial-advanced-en/01-3-shortcut-edit.png)
 
-1. Press the change button (変更) of the action you want to change
+1. Press the **Change** button of the action you want to change
 2. Press the new key (combinations with Ctrl, Alt and Shift are possible). Press Esc to cancel
 
 - If the key is already used by another action, its frame turns red to let you know
-- Changed actions get a default button (既定) so you can reset them one by one. You can also reset them all at once (全て既定に戻す)
+- Changed actions get a **Default** button so you can reset them one by one. **Reset all to default** resets them all at once
 - Only keyboard actions can be changed (mouse and wheel actions cannot)
 - The assignments are saved with your preferences, so they are kept after restarting the app
 
@@ -123,7 +120,7 @@ These displays help you decide "which way the next swing goes" and "whether the 
 Outside the placement frame (the red frame in Place mode, the yellow frame in Camera-lock mode), **to its left and right**, there are helper grids
 that show the **last red and blue notes you placed**, with their position and direction, semi-transparently.
 
-![The previous notes shown semi-transparently to the left and right of the red frame](images/tutorial-advanced/02-1-aux-swing.png)
+![The previous notes shown semi-transparently to the left and right of the red frame](images/tutorial-advanced-en/02-1-aux-swing.png)
 
 In the image, the left purple frame shows the previous red note (up), and the right purple frame shows the previous blue note.
 The note inside the red frame in the middle was placed facing up, the same as the previous red note, so it has the red frame of the "Same-direction warning" described next.
@@ -172,7 +169,7 @@ If you don't need the warning, turn off **Same-direction warning** in Preference
 
 To the right of the BPM field in the header, three values related to how notes appear are shown.
 
-![The NLE header. ① is JD / RT, ② is the SAME DIR lamp](images/tutorial-advanced/02-2-header.png)
+![The NLE header. ① is JD / RT, ② is the SAME DIR lamp](images/tutorial-advanced-en/02-2-header.png)
 
 | Display | Meaning |
 |---|---|
@@ -194,7 +191,7 @@ When you load a song, the strength of each frequency is shown as a colored band 
 - **NLE**: below the waveform in the Music row
 - **3D view**: outside the space where you place notes
 
-![① is the waveform in the Music row, ② is the spectrogram](images/tutorial-advanced/02-3-spectrogram.png)
+![① is the waveform in the Music row, ② is the spectrogram](images/tutorial-advanced-en/02-3-spectrogram.png)
 
 The song in the image is a click track made for the explanation, so vertical lines appear on every beat. In a real song, the whole band gets brighter where the song builds up.
 
@@ -216,7 +213,7 @@ For songs that reuse the same patterns, such as repeated choruses, copying and a
 
 From top to bottom, these rows are shown.
 
-![Parts of the NLE](images/tutorial-advanced/03-1-nle-parts.png)
+![Parts of the NLE](images/tutorial-advanced-en/03-1-nle-parts.png)
 
 | No. | Row | What you can do |
 |---|---|---|
@@ -272,7 +269,7 @@ You can copy only within the difficulty that is open.
 
 ### The right-click menu of a clip
 
-![The right-click menu of a clip](images/tutorial-advanced/03-2-clip-menu.png)
+![The right-click menu of a clip](images/tutorial-advanced-en/03-2-clip-menu.png)
 
 | Item | What it does |
 |---|---|
@@ -347,7 +344,7 @@ When you make several difficulties, it is faster to finish one difficulty first,
 
 Among the difficulty buttons at the top of the screen (EASY to EXPERT+), **click the button of the difficulty that is already selected** to open a menu.
 
-![① Click the button of the selected difficulty, ② choose the source in "Receive notes"](images/tutorial-advanced/04-1-diff-menu.png)
+![① Click the button of the selected difficulty, ② choose the source in "Receive notes"](images/tutorial-advanced-en/04-1-diff-menu.png)
 
 | Item | What it does |
 |---|---|
@@ -425,7 +422,7 @@ Each tempo part sets the BPM of the section from its ◆ to the next ◆.
 **Adding a tempo part**
 
 - **Right-click** an empty spot on the band → "**+ Add tempo part here**": adds one at the mouse position
-- **Right-click** an empty spot on the band → "**＋ 秒で指定…**" (specify in seconds): enter the seconds from the start of the song to add one exactly there
+- **Right-click** an empty spot on the band → "**+ Specify in seconds…**": enter the seconds from the start of the song to add one exactly there
 - You can also **double-click** an empty spot on the band
 
 Right after adding, it takes over the BPM at that position, so adding alone does not change how the song lines up.
@@ -437,7 +434,7 @@ Right after adding, it takes over the BPM at that position, so adding alone does
 - "**🎯 Auto-detect all parts**" in the header: auto-detects all tempo parts at once
 - To delete one, right-click the ◆ → "**Delete tempo part**"
 
-![The right-click menu of a tempo part ◆, and ① the "Auto-detect all parts" button](images/tutorial-advanced/05-1-tempo-menu.png)
+![The right-click menu of a tempo part ◆, and ① the "Auto-detect all parts" button](images/tutorial-advanced-en/05-1-tempo-menu.png)
 
 **Example workflow**
 
@@ -494,7 +491,7 @@ In LIGHTING mode, you place lights on these 10 lanes.
 | **C** (hold, choose, release) | Color pie menu (left note color, right note color, saved colors) |
 | **F** | Cycle through the colors to place |
 
-![The behavior pie menu of the W key](images/tutorial-advanced/06-1-light-pie.png) ![The color pie menu of the C key](images/tutorial-advanced/06-2-color-pie.png)
+![The behavior pie menu of the W key](images/tutorial-advanced-en/06-1-light-pie.png) ![The color pie menu of the C key](images/tutorial-advanced-en/06-2-color-pie.png)
 
 On the left is the behavior pie menu of the W key, on the right the color pie menu of the C key (it shows the left note color, the right note color and your saved colors).
 Hold the key, move the mouse toward the item you want, and release the key to choose it.
@@ -516,7 +513,7 @@ Selected lights can be edited together, for example with Alt + wheel.
 
 ### Light color mode (Chroma and vanilla)
 
-Choose how lights are colored with the light color mode (ライト配色モード) in Preferences.
+Choose how lights are colored with **Light color mode** in Preferences.
 
 | Mode | Colors | What players need |
 |---|---|---|
@@ -539,11 +536,11 @@ You can start it from any of these:
 - **Auto lighting…** in the File menu
 - **💡 Auto lighting…**, shown next to map check items about too few lights ([chapter 8](#common-items-and-how-to-fix-them))
 
-![The Auto light button on the toolbar](images/tutorial-advanced/06-3-auto-light-button.png)
+![The Auto light button on the toolbar](images/tutorial-advanced-en/06-3-auto-light-button.png)
 
 A confirmation shows the source difficulty, the difficulties that get the lights, the stage, and the number of lights to be made. Press **Create** to make them.
 
-![The auto lighting confirmation](images/tutorial-advanced/06-4-auto-light-dialog.png)
+![The auto lighting confirmation](images/tutorial-advanced-en/06-4-auto-light-dialog.png)
 
 #### The lights it makes
 
@@ -560,7 +557,7 @@ A confirmation shows the source difficulty, the difficulties that get the lights
 
 #### Where they go
 
-![The auto light clip](images/tutorial-advanced/06-5-auto-light-lane.png)
+![The auto light clip](images/tutorial-advanced-en/06-5-auto-light-lane.png)
 
 - One light lane is added at the top, with an "**Auto light**" clip (①) from the start to the end of the song
 - The lights are made from **the difficulty with the most notes**, and the same lights go into **every difficulty** that has content (notes, bombs, walls, etc.)
@@ -597,7 +594,7 @@ On the INFO screen (Tab over the NLE), the information of the exported song is d
 
 ### Kinds of nodes
 
-![The INFO screen. ① Song info ② Cover image ③ Settings ④ Song Preview ⑤ Export (two)](images/tutorial-advanced/07-1-info-nodes.png)
+![The INFO screen. ① Song info ② Cover image ③ Settings ④ Song Preview ⑤ Export (two)](images/tutorial-advanced-en/07-1-info-nodes.png)
 
 | Node | Color | What it sets |
 |---|---|---|
@@ -686,7 +683,7 @@ The judgement is the same as [BS Map Check](https://github.com/KivalEvan/BeatSab
 
 #### Reading the results
 
-![The map check panel](images/tutorial-advanced/08-1-mapcheck.png)
+![The map check panel](images/tutorial-advanced-en/08-1-mapcheck.png)
 
 The image shows the check of a short map made for the explanation (16 seconds, few lights).
 
@@ -739,7 +736,7 @@ If an image is only slightly off, like 512×510, you can fix it inside NLM witho
 When the map check shows a cover image item (not square / too small), or R1.A.4 (cover image) of the NLM BL criteria list is a violation,
 **🖼 Fix cover image…** appears on that row. Press it to open a confirmation.
 
-![The cover image fix confirmation. ① How to fix ② Preview of the result](images/tutorial-advanced/08-5-cover-fit-dialog.png)
+![The cover image fix confirmation. ① How to fix ② Preview of the result](images/tutorial-advanced-en/08-5-cover-fit-dialog.png)
 
 | No. | Name | Description |
 |---|---|---|
@@ -763,7 +760,7 @@ The map check also judges the fixed image.
 
 The cover image node on the INFO screen shows what is fixed (①) and **Stop fixing** (②).
 
-![The fix display on the cover image node. ① What is fixed ② Stop fixing](images/tutorial-advanced/08-6-cover-fit-card.png)
+![The fix display on the cover image node. ① What is fixed ② Stop fixing](images/tutorial-advanced-en/08-6-cover-fit-card.png)
 
 - Press **Stop fixing** to export the original image. **Ctrl + Z** also undoes it
 - The fix setting is saved in the project
@@ -782,7 +779,7 @@ The colors are different from the map check so they are not mistaken for each ot
 
 #### Marks and kinds
 
-![The NLM BL criteria list](images/tutorial-advanced/08-2-bl-criteria.png)
+![The NLM BL criteria list](images/tutorial-advanced-en/08-2-bl-criteria.png)
 
 | No. | Name | Description |
 |---|---|---|
@@ -816,7 +813,7 @@ R5.A (whether notes are visible long enough to react) is judged with a formula t
 The item has input fields for each difficulty (①); enter the values from "Estimate difficulty" below.
 The values are remembered only while the app is open.
 
-![The ★ and Tech input fields of R5.A](images/tutorial-advanced/08-3-bl-stars.png)
+![The ★ and Tech input fields of R5.A](images/tutorial-advanced-en/08-3-bl-stars.png)
 
 ### Estimate difficulty (approximate BeatLeader ★)
 
@@ -838,7 +835,7 @@ If you have installed two or more versions, a field to choose the version appear
 
 #### Reading the results
 
-![The Estimate difficulty panel](images/tutorial-advanced/08-4-rating.png)
+![The Estimate difficulty panel](images/tutorial-advanced-en/08-4-rating.png)
 
 | No. | Name | Description |
 |---|---|---|
@@ -895,7 +892,7 @@ It measures every time you open the panel. If you fix the map with the panel ope
 In **Preferences** in the menu, you can adjust how the app feels and looks.
 The settings are divided into five tabs.
 
-![Preferences. ① Tabs ② Reset to defaults](images/tutorial-advanced/09-1-settings.png)
+![Preferences. ① Tabs ② Reset to defaults](images/tutorial-advanced-en/09-1-settings.png)
 
 > Slider changes take effect after restarting the app (the Preview settings take effect when you open PREVIEW).
 
@@ -907,7 +904,7 @@ The settings are divided into five tabs.
 | UI font size | The size of the text on screen (80–120%) |
 | Show shortcuts | Show or hide the floating shortcut windows by kind (Standard, NOTES, LIGHTING, NLE, INFO) |
 | Lane layout | The ratio of note lanes to light lanes in the NLE (6 in total). Applied to the current project and used as the default for new projects (it cannot be set if the top lane has a clip) |
-| Light color mode (ライト配色モード) | How lights are colored ([chapter 6](#6-advanced-lighting)) |
+| Light color mode | How lights are colored ([chapter 6](#6-advanced-lighting)) |
 | Previous notes display | Whether to show the helper display of [chapter 2](#previous-notes-display) (also toggled with the H key) |
 | Same-direction warning | Whether to show the warning of [chapter 2](#same-direction-warning) |
 | Update check | Whether to check for a new version at startup (connects to GitHub) |
@@ -942,7 +939,7 @@ Try lowering them if your PC is slow, or if the glow is so bright that notes are
 
 The wheel direction can be set separately for the 3D view and the 2D views (NLE, Music).
 
-### Shortcut editing (ショートカット編集)
+### Shortcuts
 
 Change the key assignments ([chapter 1](#customizing-shortcuts)).
 
@@ -983,7 +980,7 @@ Once you have selected them again, they are connected automatically from the nex
 
 Some "Required" items in the export node's checklist have a ✕.
 
-![① The checklist of the export node. "Required" items with a ✕ are missing](images/tutorial-advanced/10-1-export-blocked.png)
+![① The checklist of the export node. "Required" items with a ✕ are missing](images/tutorial-advanced-en/10-1-export-blocked.png)
 
 | Item | Fix |
 |---|---|
@@ -1014,7 +1011,7 @@ If it still sounds wrong, check "**Force re-convert song.egg**" on the export no
 ### Keys do nothing
 
 - Shortcuts apply to **the area under the mouse** (3D view, NLE, PREVIEW, etc.). Put the mouse over the area you want to operate, then press the key
-- If you changed shortcut assignments, check them in the shortcut editing tab (ショートカット編集) of **Preferences**. You can reset them all (全て既定に戻す)
+- If you changed shortcut assignments, check them in the **Shortcuts** tab of **Preferences**. **Reset all to default** returns them to the defaults
 - Note operations in the 3D view do not work if the lane is **locked** ([chapter 3](#adding-lanes-lock-solo-and-mute))
 
 ### An operation cannot be undone

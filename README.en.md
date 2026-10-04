@@ -17,7 +17,7 @@ helba kindly gave permission (in the comments on note) to publish, modify and re
 - **Tutorials for this fork** (with screenshots): [basic](docs/tutorial.en.md) — from loading a song to placing notes, exporting and saving /
   [advanced](docs/tutorial-advanced.en.md) — faster workflows, tempo, lights, the INFO screen and the checks before publishing
 
-The screenshots in the tutorials still show the Japanese UI for now; English screenshots will be added later.
+The English tutorials show the English UI; the Japanese tutorials ([basic](docs/tutorial.md) / [advanced](docs/tutorial-advanced.md)) show the Japanese UI.
 
 ## Highlights
 

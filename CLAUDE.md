@@ -37,6 +37,8 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   プッシュする前。そこで見つかった不具合は、その公開予定の版で直して一緒に出す。
 - 画面には要約だけが出る。失敗の詳細は`test-out/last.txt`を読む（画像を何枚も見て確かめる代わり）。使い方は`tests/README.md`。
 - 失敗したら直してから報告する。自分の変更と無関係に見える失敗も、黙って飛ばさず報告に書く。
+- 失敗・エラーのあった回は`test-out/history/<日時>/`に記録が残る（last.txtは次の実行で上書きされるため）。再現しない・
+  まれな失敗は、`tests/README.md`の「たまに出るエラーの記録」に調べた結果を書き足す（同じものが出た時の絞り込みに使う）。
 - 書き出しの中身を意図して変えた時だけ`--update-golden`。`git diff tests/golden/`で差分が意図どおりかを確かめ、報告に書く。
 - 画面の「要確認」は、まず`test-out/visual/review.png`（変化した画面だけのまとめ1枚）を見る。意図どおりと言い切れない時は
   ユーザーに`test-out/visual/report.html`を見てもらう。意図どおりなら`--accept`で基準画像を更新する。
@@ -214,6 +216,8 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - 最新リリースに添付した`update.json`（`tools/make_release.py`が作る）を読む。中身は zip の SHA-256・サイズと、
   `CHANGELOG.md`/`CHANGELOG.en.md`の各版の行頭の太字（`- **〜**`）＝更新のお知らせに出す見出し。
   **変更点は README ではなく CHANGELOG に日英両方で書く**（版の並び・見出しの数が日英で違うと make_release が止まる）。
+  README も日英2つ（`README.md`/`README.en.md`）あるので、片方を直したらもう片方も直す。GitHub のリリースノートも日英併記
+  （日本語の後ろに`## English`。v1.4.0-oz から）。表示言語の初期値は日本語なので、英語の案内では「環境設定」の位置で説明している。
 - 差し替えは**新しい版の exe**が行う: 旧版が zip を exe 隣の`_update/new/`へ展開 → その exe を
   `--apply-update --target <配布フォルダ> --pid <旧版のpid> --lang <ja|en>`で起動して自分は終了 → 新しい版が旧版の終了を待って
   `NonLinearMapper.exe`・`_internal`・案内文だけを入れ替え（前の版は`_previous_<版>/`に1世代）→ 起動し直し → `_update/`を片付け。
@@ -278,6 +282,22 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   - 許可済み出力フォルダ＝`pick_folder`（ネイティブのフォルダ選択ダイアログ）で選ばれたフォルダ。exe隣の
     `config/native_out_dirs.json`に保存され次回も自動接続できる。JS側から許可を足す口は作らないこと。
   - 読み込み: 音源/画像の拡張子、そのセッションでダイアログから選んだファイル、許可済み出力フォルダの中だけ。
+
+## 表示言語（日本語・英語・2026-10-04）
+
+- 訳の仕組みは5つ: JSの文言は`t('キー','日本語')`/`tf()`、HTMLは`data-i18n`（文字）/`data-i18n-t`（title）/`data-i18n-ph`（placeholder）、
+  画面下部のメッセージ（`stat()`/`showErr()`）は**日本語の文面そのものを`m:`キーにして**引く、画面に浮かぶショートカット一覧は
+  `sk:`（説明）/`skk:`（操作）、パネルの日本語の表は接頭辞＋キー（`mc.k.`・`bl.r.`・`act.`=ショートカット編集の操作名など）。
+  **新しい文言は日本語を直書きせず、`lang/ja.json`と`lang/en.json`の両方にキーを足す。**
+- `m:`キーは文面が変わると当たらなくなる（黙って日本語に戻る）。メッセージの日本語を直したら`en.json`の`m:`キーも直す。
+- 言語を切り替えた時に訳し直されるのは、`data-i18n`系の付いた要素と`loadLang()`が呼び直す描画だけ。
+  **一度だけ組み立てる画面（INFOのノードのカードなど）に文言を入れる時は`data-i18n`を付ける**（付けないと前の言語のまま残る）。
+- 訳し漏れは`tests/e2e_misc/test_english_ui.py`で見つける（英語で起動して主な画面を回り、画面の文字・ツールチップ・キャンバスに描いた文字・
+  メッセージから日本語を探す。見つけた全文は`test-out/english_ui.txt`）。画面・ダイアログを足したら`english_ui_helpers.tour()`にも足す。
+- exe版（app.py）は`config/settings.json`の`bsnm_lang`を`_ui_lang()`で読み、ファイル選択ダイアログの種類名・エクスプローラーの種類名を合わせる。
+  serve.py はエラーを文言ではなく種類（例: `exists`）で返し、JSが訳す。
+- 表示言語の初期値は日本語（`bsnm_lang`が無い時）。英語の案内では「左上の2つ目のメニュー『環境設定』→『言語 / Language』」と位置で説明する。
+- 英語版のチュートリアルの画像は`tools/make_tutorial_shots.py --en`・`make_advanced_shots.py --en`で`docs/images/tutorial-en/`・`tutorial-advanced-en/`へ撮る。
 
 ## 削除済み機能（意図的）
 

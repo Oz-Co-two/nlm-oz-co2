@@ -220,6 +220,7 @@ class Editor:
         self.ws = _WebSocket(page["webSocketDebuggerUrl"])
         self.call("Runtime.enable")
         self.call("Page.enable")
+        self.call("Log.enable")   # 通信の失敗（Failed to load resource）等も受け取る。errors() には入れない＝診断用（tests/visual の例外の記録）
         self.call("Emulation.setDeviceMetricsOverride", width=self.width, height=self.height, deviceScaleFactor=1, mobile=False)
         self.call("Emulation.setFocusEmulationEnabled", enabled=True)   # 常に前面・フォーカス中として扱う（描画ループを止めない）
         self.call("Page.bringToFront")

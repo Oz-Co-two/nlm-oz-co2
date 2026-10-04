@@ -339,7 +339,7 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 dp = os.path.join(ASSET_DIR, dst)
                 # 別クリップと同名になる改名は拒否＝黙って潰さない（監査 2026-07-14）
                 if os.path.abspath(sp) != os.path.abspath(dp) and os.path.exists(dp):
-                    return self._reply(200, {'ok': False, 'error': '同名のクリップが既にあります'})
+                    return self._reply(200, {'ok': False, 'error': 'exists'})   # 文言はJS側で訳す（msg.assetNameExists）
                 if os.path.isfile(sp):
                     try:
                         with open(sp, 'r', encoding='utf-8') as f:

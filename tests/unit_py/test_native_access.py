@@ -164,3 +164,21 @@ def test_open_file_arg(t):
         t.eq(os.path.normcase(app._open_file_arg()), os.path.normcase(str(good)), "実在する.nlmf")
     finally:
         sys.argv = old
+
+
+def test_ui_lang_from_settings(t):
+    '''exe版の表示言語（ファイル選択ダイアログの種類名・エクスプローラーの種類名に使う）は config/settings.json の bsnm_lang。
+    無い・壊れている・en以外なら日本語'''
+    app = _app()
+    base = Path(tempfile.mkdtemp(prefix="nlm_unitpy_lang_"))
+    t.eq(app._ui_lang(str(base)), "ja", "settings.json が無ければ日本語")
+    (base / "config").mkdir()
+    cfg = base / "config" / "settings.json"
+    cfg.write_text(json.dumps({"bsnm_lang": "en"}), encoding="utf-8")
+    t.eq(app._ui_lang(str(base)), "en", "English を選んでいれば英語")
+    cfg.write_text(json.dumps({"bsnm_lang": "ja"}), encoding="utf-8")
+    t.eq(app._ui_lang(str(base)), "ja", "日本語")
+    cfg.write_text("{壊れたjson", encoding="utf-8")
+    t.eq(app._ui_lang(str(base)), "ja", "壊れていたら日本語")
+    t.eq(sorted(app._DLG_TEXT), ["en", "ja"], "ダイアログの文言は日英")
+    t.ok(all(set(n) == {"ja", "en"} for _, _, n, _ in app._ASSOC), "ファイルの種類名も日英")

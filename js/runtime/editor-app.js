@@ -90,7 +90,7 @@ let dprScale=1;
 function applyDpr(){ renderer.setPixelRatio(Math.min(devicePixelRatio,2)*dprScale); }
 applyDpr();
 // 実際に使われているGPUを特定（SwiftShader=ソフトウェア描画なら重さの原因）
-let gpuName='GPU不明';
+let gpuName='';   // 取れなかった時は空（表示側で「GPU不明」）
 MAXANISO=renderer.capabilities.getMaxAnisotropy();
 { const gl=renderer.getContext(); const ext=gl.getExtension('WEBGL_debug_renderer_info');
   if(ext) gpuName=gl.getParameter(ext.UNMASKED_RENDERER_WEBGL); console.log('WebGL renderer:',gpuName); }
@@ -204,6 +204,9 @@ async function loadLang(){
   if(document.getElementById('tbDirPanel')) buildDirPanel();
   if(typeof updateModeIndicator==='function') updateModeIndicator();   // 配置/編集モード表示は動的管理（data-i18n非依存）＝言語切替でも現在モードの訳語を出す
   refreshJdInfo();   // JD/RT表示（差し込み穴つき）
+  try{ updateLightColorTB(); }catch(_){}   // 配置色ボタンの説明（ツールチップ）
+  try{ if(document.getElementById('keyEditBody')) renderKeyEditor(); }catch(_){}   // ショートカット編集の操作名
+  try{ if(typeof renderLibList==='function') renderLibList(); }catch(_){}   // MEDIAの「アセット」など
 }
 // ---- ペインモード（Tabで切替。マウスの乗っているペインが対象） ----
 let curTab='tabFolder', pvMode='media', nodeMode='edit', nodeColMode='nle', hoverPane='main';   // 起動時はMEDIAを先に表示（ヘルバ様指示）
@@ -224,7 +227,8 @@ function setNodeMode(m){ nodeMode='edit';   // INFOモードは廃止（ノー�
 // ノード列: NLE（レイヤー/Musicタイムライン＋ボリューム）⇄ INFO（曲情報バー）をTab/クリックで切替
 function setNodeColMode(m){ nodeColMode=m; const info=(m==='info'), gid=id=>document.getElementById(id);
   const ins=gid('inspcol'); if(ins) ins.style.display=info?'block':'none';
-  { const nk=gid('nodeKeys'), bd=nk&&(nk.querySelector('.mkbody')||nk); if(bd&&typeof KEYSHTML_NLE!=='undefined') bd.innerHTML=info?KEYSHTML_NODE:KEYSHTML_NLE; }   // INFO=旧NODE流儀のショートカット表示（ヘッダーは温存しボディだけ差し替え）
+  { const nk=gid('nodeKeys'), bd=nk&&(nk.querySelector('.mkbody')||nk); if(bd&&typeof KEYSHTML_NLE!=='undefined') bd.innerHTML=info?keysHtmlNode():KEYSHTML_NLE;
+    bd.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent=t(el.dataset.i18n,el.textContent); }); }   // KEYSHTML_NLE は起動時の日本語のHTML＝今の言語で訳し直す   // INFO=旧NODE流儀のショートカット表示（ヘッダーは温存しボディだけ差し替え）
   if(typeof applyShowKeys==='function') applyShowKeys();   // NLE/INFOで表示トグルが別（設定5分割）
   const np=gid('nodepane'), ov=gid('overview'), sp=gid('specPane'), vm=gid('vmcol');
   if(np) np.style.display=info?'none':''; if(ov) ov.style.display=info?'none':''; if(sp) sp.style.display=info?'none':''; if(vm) vm.style.display=info?'none':'flex';
@@ -331,6 +335,7 @@ const ACTIONS=[
   {id:'nleMute',     cat:'nle',    label:'レーン ミュート',       def:{k:'m'}},
 ];
 const ACT_BY_ID={}; for(const a of ACTIONS) ACT_BY_ID[a.id]=a;
+function actLabel(a){ return a&&a.id?t('act.'+a.id,a.label):((a&&a.label)||''); }   // ショートカット編集に出す操作名（言語に合わせる）
 const ACT_CATS=[['common','共通'],['notes','NOTES'],['light','LIGHTING'],['nle','NLE']];
 let _keymap={};   // ユーザー上書き {id:{k,c,a,s}}。既定と異なるものだけ保持
 try{ _keymap=JSON.parse(localStorage.getItem('bsnm_keymap')||'{}')||{}; }catch(_){ _keymap={}; }
@@ -362,10 +367,10 @@ function updateMainModeLabel(){
 function renderMetaList(){
   const el=document.getElementById('metaList');
   const ordered=[...sections].sort((a,b)=>a.beat-b.beat);
-  el.innerHTML=ordered.length?'':'<div style="color:#5d7596">セクション未作成（下部タイムラインをダブルクリック）</div>';
+  el.innerHTML=ordered.length?'':`<div style="color:#5d7596">${escHtml(t('ui.noSections','セクション未作成（下部タイムラインをダブルクリック）'))}</div>`;
   ordered.forEach((s,i)=>{ const d=document.createElement('div');
     const col=SEC_COLORS[sections.indexOf(s)%SEC_COLORS.length];
-    d.innerHTML=`<span style="color:${col}">■ ${escHtml(s.label)}</span><span style="color:#6f88ad">拍 ${escHtml(s.beat)}</span>`;
+    d.innerHTML=`<span style="color:${col}">■ ${escHtml(s.label)}</span><span style="color:#6f88ad">${escHtml(tf('ui.beatN','拍 {beat}',{beat:s.beat}))}</span>`;
     d.onclick=()=>{ cur=s.beat; offset=beatToTimeTM(cur); };
     el.appendChild(d); });
 }
@@ -887,14 +892,16 @@ function lightValue(kind){
   return 0;
 }
 const L_BEHAV_N=['オフ','ライト','フラッシュ','フェード','トランジション'];   // 旧 OFF/ON（ヘルバ様指定 2026-07-18）
+const L_BEHAV_K=['pie.lOff','pie.lOn','pie.lFlash','pie.lFade','pie.lTrans'];
+function lBehavN(i){ return t(L_BEHAV_K[i],L_BEHAV_N[i]); }   // 表示用（言語に合わせる）
 function lightDesc(kind,i,f,chroma){
-  if(kind==='speed') return `速度 ${i}`;
-  if(kind==='trigger') return 'トリガー';
-  if(kind==='boost') return i?'ブーストON':'ブーストOFF';
-  if(i===0) return L_BEHAV_N[0];   // 'オフ'（ボタン/パイの表記と揃える）
-  const c=i<=4?'青':i<=8?'赤':'白';
+  if(kind==='speed') return tf('ld.speed','速度 {i}',{i});
+  if(kind==='trigger') return t('ld.trigger','トリガー');
+  if(kind==='boost') return i?t('ld.boostOn','ブーストON'):t('ld.boostOff','ブーストOFF');
+  if(i===0) return lBehavN(0);   // 'オフ'（ボタン/パイの表記と揃える）
+  const c=i<=4?t('ld.blue','青'):i<=8?t('ld.red','赤'):t('word.white','白');
   const chr=chroma?` ★${rgb01ToHex(chroma)}`:'';
-  return `${c} ${L_BEHAV_N[(i-1)%4+1]} f=${(f??1).toFixed(2)}${chr}`;
+  return `${c} ${lBehavN((i-1)%4+1)} f=${(f??1).toFixed(2)}${chr}`;
 }
 const _lgMat=new THREE.MeshStandardMaterial({flatShading:true,metalness:0.1,roughness:0.65,transparent:true,opacity:0.45});   // 配置前ゴースト=フィル＋ワイヤーフレーム（薄すぎ修正 2026-07-14: 0.2→0.45）
 const _lgBody=new THREE.Mesh(CHIP_GEOS.on,_lgMat);
@@ -1027,8 +1034,8 @@ function setLightBehavSmart(b){
     sel.forEach(ev=>{
       if(b===0){ ev.i=0; }
       else{ const base=ev.i>=9?8:ev.i>=5?4:ev.i>=1?0:lightBrush.base; ev.i=base+b; } });
-    stat(tf('msg.lightBehavSel','選択ライトを{behav}に変更 ×{n}',{behav:L_BEHAV_N[b],n:sel.length})); }
-  else { setLightBehav(b); stat(tf('msg.lightBehav','ライト動作: {behav}',{behav:L_BEHAV_N[b]})); }
+    stat(tf('msg.lightBehavSel','選択ライトを{behav}に変更 ×{n}',{behav:lBehavN(b),n:sel.length})); }
+  else { setLightBehav(b); stat(tf('msg.lightBehav','ライト動作: {behav}',{behav:lBehavN(b)})); }
 }
 function flipLightColors(){
   const sel=[...lightSelection].filter(ev=>ev.i>=1&&ev.i<=8);
@@ -1052,7 +1059,7 @@ function setBrushChroma(hex){   // ブラシのクロマ色を設定＋色ライ
   let targets=[...lightSelection].filter(ev=>laneKind(ev.et)==='color');
   if(!targets.length){ const hv=hoverLightEvent(); if(hv&&laneKind(hv.et)==='color') targets=[hv]; }   // 選択が無ければマウス下のライトへ
   if(targets.length){ snapshot(); const rgb=hexToRgb01(hex); targets.forEach(ev=>setLightChroma(ev,rgb)); metaDirty=true; }
-  stat('クロマ: '+hex+(targets.length?` ×${targets.length}`:''));
+  stat(tf('msg.chromaSet','クロマ: {hex}{n}',{hex,n:targets.length?` ×${targets.length}`:''}));
 }
 function lightChromaSeq(){ return [cRED, cBLUE, WHITE_HEX, ...cpSaved()]; }   // 左ノーツ→右ノーツ→白→クロマ登録色（ヘルバ様指定 2026-07-13）
 function cycleLightChroma(){   // F(Chroma時)=左ノーツ→右ノーツ→白→クロマ登録色 を巡回
@@ -1066,14 +1073,14 @@ function applyLightBase(nb){   // バニラの配置色を nb（4=①赤/0=②�
   let targets=[...lightSelection].filter(ev=>laneKind(ev.et)==='color'&&ev.i>0);
   if(!targets.length){ const hv=hoverLightEvent(); if(hv&&laneKind(hv.et)==='color'&&hv.i>0) targets=[hv]; }
   if(targets.length){ snapshot(); targets.forEach(ev=>{ const behav=((ev.i-1)%4)+1; ev.i=nb+behav; setLightChroma(ev,null); }); metaDirty=true; }   // バニラはクロマ解除してベース色に
-  stat('ライト色: '+(nb===4?'①(赤)':nb===0?'②(青)':'白')+(targets.length?` ×${targets.length}`:''));
+  stat(tf('msg.lightColorSet','ライト色: {c}{n}',{c:nb===4?t('ld.c1','①(赤)'):nb===0?t('ld.c2','②(青)'):t('word.white','白'),n:targets.length?` ×${targets.length}`:''}));
 }
 // ライトモードのCパイ（色選択）: Chroma時=左ノーツ→右ノーツ→白→クロマ登録色（ヘルバ様指定 2026-07-13）。
 // バニラ時=①・②・白の3つだけ（F と同じ切替）。以前はバニラでもクロマ色を書き、画面の色は変わらないのに書き出しにだけ自由色が入っていた
 function lightColorPieDefs(){
   if(!chromaMode) return [{val:4,color:hexOf(LRED),angle:0,label:'①'},{val:0,color:hexOf(LBLUE),angle:120,label:'②'},{val:8,color:WHITE_HEX,angle:240,label:t('word.white','白')}];
   const cols=lightChromaSeq(), n=cols.length;
-  return cols.map((hex,i)=>({ val:hex, color:hex, angle:i*(360/n), label:(i===0?'左':i===1?'右':'') })); }
+  return cols.map((hex,i)=>({ val:hex, color:hex, angle:i*(360/n), label:(i===0?t('pie.left','左'):i===1?t('pie.right','右'):'') })); }
 function commitLightColorPie(v){ if(chromaMode) setBrushChroma(v); else applyLightBase(v); }
 function openLightColorPie(){ if(!pieOpen) openPie(lightColorPieDefs(), chromaMode?brushChromaHex():lightBrush.base, commitLightColorPie, 'c'); }
 // 現在ライティングで配置する色。ツールバーの1個の箱に表示（ヘルバ様指定 2026-07-14）
@@ -1099,7 +1106,7 @@ function updateChromaUI(){
 function updateLightColorTB(){
   const sw=document.getElementById('lcChromaSw'), host=document.getElementById('lcColsHost');
   if(sw){ sw.style.display=''; sw.innerHTML=chromaSwSvg(currentLightPlaceHex());
-    sw.title=chromaMode?'現在の配置色（クリックでカラーパレット）':'現在の配置色 ①②白（クリックでカラーパレット）'; }
+    sw.title=chromaMode?t('tb.colSwChroma','現在の配置色（クリックでカラーパレット）'):t('tb.colSw','現在の配置色 ①②白（クリックでカラーパレット）'); }
   if(host){ host.innerHTML=''; host.style.display='none'; }   // 5個の箱は廃止＝パレット内で選択（ヘルバ様指定 2026-07-14）
 }
 function chromaSwSvg(col){ return `<svg viewBox="0 0 64 64"><rect x="3" y="3" width="58" height="58" rx="13" fill="${safeHex(col)}"/></svg>`; }   // 色矩形を大きく＝ノーツ色スウォッチと同等の見た目（ヘルバ様指定 2026-07-13）
@@ -1545,7 +1552,7 @@ function autoDetectAllTempoParts(){
 function addMarkerAt(b){ b=Math.max(0,snapV(b??cur));
   if(markers.some(m=>Math.abs(m.beat-b)<1e-6)){ stat('この位置には既にマーカーがあります'); return; }
   snapshot('node');   // マーカー作成をUndo可能に
-  markers.push({beat:b,name:'マーカー'+(++_mkSeq)}); markers.sort((a,b2)=>a.beat-b2.beat);
+  markers.push({beat:b,name:tf('nle.markerN','マーカー{n}',{n:++_mkSeq})}); markers.sort((a,b2)=>a.beat-b2.beat);
   metaDirty=true; stat(tf('msg.markerAdd','マーカー追加: 拍 {beat}（名前はダブルクリックで変更・空にすると削除）',{beat:b})); }
 function markerMenuTop(){   // どのトラックの右クリックメニューでも先頭に置く「現在ポジション(再生ヘッド)にマーカー作成」＋区切り線
   return [[t('ctx.addMarkerHere','マーカーを作成'),()=>addMarkerAt(cur)],['---']]; }
@@ -2052,13 +2059,13 @@ function ndColorEdit(val,onCommit,wd,trigger){
   const WS=148, BW=16;   // 一回り小さく（ヘルバ様指定 2026-07-13）
   const _nIco=(typeof TB_ICONS!=='undefined'&&TB_ICONS.note)||'♪', _lIco=(typeof TB_ICONS!=='undefined'&&TB_ICONS.light_on)||'💡', _bIco=(typeof TB_ICONS!=='undefined'&&TB_ICONS.light_boost)||'💡';
   const _row=(ico,tip,cols)=>`<div class="cpColRow"><span class="cpRowIco" title="${tip}">${ico}</span><div class="cpCols" data-cols="${cols}"></div></div>`;
-  const _notesRow=_row(_nIco,'ノーツの色（左=赤 / 右=青・クリックで選択→円で編集）','note');
+  const _notesRow=_row(_nIco,t('cp.notesRow','ノーツの色（左=赤 / 右=青・クリックで選択→円で編集）'),'note');
   // Chroma版=ノーツ色＋Chromaパレット / バニラ版=ノーツ色＋ライト色＋ライトブースト色（ヘルバ様指定 2026-07-13）
   const _bottom = chromaMode
     ? _notesRow+`<div class="cpLightHdr" title="${t('cp.lightPal','ノーツ①②・白＋登録クロマ色（ライト中Fで巡回）')}">${_lIco}<span>${t('cp.lightPalL','Chroma パレット')}</span><span class="cpHint">${t('cp.palHint','右クリックで削除')}</span></div><div class="cpSaved" title="${t('cp.savedPal','ノーツ①②・白は固定 / 登録色はクリック=適用・右クリック=削除・Fで巡回')}"></div>`
     : _notesRow
-      +_row(_lIco,'ライト色 ①②（クリック=配置色に選択→円で編集 / 現在色をドロップで色変更）','lightvan')
-      +_row(_bIco,'ブースト色 ①②（クリック=選択→円で編集 / 現在色をドロップで色変更）','lightboost');
+      +_row(_lIco,t('cp.lightRow','ライト色 ①②（クリック=配置色に選択→円で編集 / 現在色をドロップで色変更）'),'lightvan')
+      +_row(_bIco,t('cp.boostRow','ブースト色 ①②（クリック=選択→円で編集 / 現在色をドロップで色変更）'),'lightboost');
   pn.innerHTML=`<div class="cpMain"><div class="cpTop"><canvas class="cw" width="${WS}" height="${WS}"></canvas>
       <canvas class="cv" width="${BW}" height="${WS}"></canvas></div>
     <div class="cpCur" draggable="true" title="${t('cp.dragCur','現在色（クリック=元の対象へ戻す / Chromaパレットへドラッグ=保存）')}"></div>
@@ -2203,7 +2210,7 @@ function ndColorEdit(val,onCommit,wd,trigger){
       bar.setAttribute('draggable','true');
       if(cols==='note'&&brush.c===idx){ bar.style.boxShadow='0 0 0 2px #e8f0ff'; }   // 現在の配置色(赤/青)を白リングで強調
       if(activeTgt===key) bar.classList.add('sel');
-      bar.title=hxc+(cols==='note'?'（クリック=配置色に選択＋円で編集 / 現在色をドロップで色変更）':'（クリック=選択して円で編集）');
+      bar.title=hxc+(cols==='note'?t('cp.barPlaceTip','（クリック=配置色に選択＋円で編集 / 現在色をドロップで色変更）'):t('cp.barSelTip','（クリック=選択して円で編集）'));
       bar.addEventListener('click',()=>{ if(cols==='note') setColor(idx,false); selectTarget(key); renderColorPair(cols); });
       bar.addEventListener('dragstart',e2=>{ e2.dataTransfer.setData('text/plain',TGT[key].get()); e2.dataTransfer.effectAllowed='copy'; });
       attachSwatchDrop(bar,key);
@@ -2218,7 +2225,7 @@ function ndColorEdit(val,onCommit,wd,trigger){
       if(isBase&&lightBrush.base===baseOf[key]){ bar.style.boxShadow='0 0 0 2px #e8f0ff'; }   // 現在の配置色を白リングで強調
       if(activeTgt===key) bar.classList.add('sel');
       bar.setAttribute('draggable','true');
-      bar.title=hxc+(isBase?'（クリック=配置色に選択＋円で編集 / 現在色をドロップで色変更）':'（クリック=選択して円で編集 / 現在色をドロップで色変更）');
+      bar.title=hxc+(isBase?t('cp.barPlaceTip','（クリック=配置色に選択＋円で編集 / 現在色をドロップで色変更）'):t('cp.barSelDropTip','（クリック=選択して円で編集 / 現在色をドロップで色変更）'));
       bar.addEventListener('click',()=>{ if(isBase) setLightColor(baseOf[key]); selectTarget(key); renderVanillaLights(); });
       bar.addEventListener('dragstart',e2=>{ e2.dataTransfer.setData('text/plain',TGT[key].get()); e2.dataTransfer.effectAllowed='copy'; });
       attachSwatchDrop(bar,key); return bar; };
@@ -2244,8 +2251,8 @@ function ndColorEdit(val,onCommit,wd,trigger){
       sw.dataset.hex=hxc; if(removable) sw.dataset.rm='1';   // 右クリックはコンテナ側で一括処理（下）＝固定色や余白でもブラウザメニューを出さない
       sw.addEventListener('pointerdown',e2=>{ if(e2.button!==0) return; e2.preventDefault(); applyHex(hxc); });   // クリック=この色を適用（ライトのクロマへ）
       savedEl.appendChild(sw); };
-    mk(cRED,false,'ノーツ①'); mk(cBLUE,false,'ノーツ②'); mk(WHITE_HEX,false,'白');   // 先頭固定=ノーツ①②・白（削除不可・ヘルバ様指定 2026-07-13）
-    for(const hxc of cpSaved()) mk(hxc,true,'登録色'); }
+    mk(cRED,false,t('cp.note1','ノーツ①')); mk(cBLUE,false,t('cp.note2','ノーツ②')); mk(WHITE_HEX,false,t('word.white','白'));   // 先頭固定=ノーツ①②・白（削除不可・ヘルバ様指定 2026-07-13）
+    for(const hxc of cpSaved()) mk(hxc,true,t('cp.saved','登録色')); }
   // 右クリックはパレット全体で受ける（以前は登録色にしか付いておらず、固定色・余白でブラウザメニューが出ていた＝ヘルバ様報告）
   if(savedEl) savedEl.addEventListener('contextmenu',e2=>{
     e2.preventDefault();                                        // パレット内ではブラウザメニューを出さない
@@ -2507,7 +2514,7 @@ async function pickCoverImage(startPath){   // →{fh,path}|null。ネイティ�
   const api=nativeApi();
   if(api){ let p=null; try{ p=await api.pick_image_file(startPath||''); }catch(e){} return p?{fh:mkNativeFile(p),path:p}:null; }
   let fh=null;
-  try{ [fh]=await showOpenFilePicker({id:'nlm-cover',types:[{description:'カバー画像',accept:{'image/*':['.png','.jpg','.jpeg','.webp','.gif','.bmp']}}]}); }catch(e){}
+  try{ [fh]=await showOpenFilePicker({id:'nlm-cover',types:[{description:t('fp.cover','カバー画像'),accept:{'image/*':['.png','.jpg','.jpeg','.webp','.gif','.bmp']}}]}); }catch(e){}
   return fh?{fh,path:''}:null;
 }
 async function pickOutFolder(){
@@ -2733,7 +2740,7 @@ async function openSongFile(){
   if(window.pywebview&&window.pywebview.api&&window.pywebview.api.pick_song_file) return openSongFileNative();
   let fh;
   _pickOpen='song';
-  try{ [fh]=await showOpenFilePicker({types:[{description:'音源ファイル',
+  try{ [fh]=await showOpenFilePicker({types:[{description:t('fp.audio','音源ファイル'),
     accept:{'audio/*':['.egg','.ogg','.oga','.opus','.mp3','.m4a','.aac','.wav','.flac','.weba','.webm']}}]}); }
   catch(e){ _pickOpen=null; return; }
   _pickOpen=null;
@@ -2766,7 +2773,7 @@ async function updateCoverThumb(){
 async function openCoverFile(n){
   let fh;
   _pickOpen='cover:'+n.id;
-  try{ [fh]=await showOpenFilePicker({id:'nlm-cover',types:[{description:'カバー画像',accept:{'image/*':['.png','.jpg','.jpeg','.webp','.gif','.bmp']}}]}); }
+  try{ [fh]=await showOpenFilePicker({id:'nlm-cover',types:[{description:t('fp.cover','カバー画像'),accept:{'image/*':['.png','.jpg','.jpeg','.webp','.gif','.bmp']}}]}); }
   catch(e){ _pickOpen=null; return; }
   _pickOpen=null;
   n.handle=fh; n.name=fh.name; metaDirty=true;
@@ -3009,7 +3016,7 @@ addEventListener('pointerup', e=>{
         ? graphEdges.filter(e2=>e2.sig===wd.sig&&e2.toId===wd.nodeId)
         : graphEdges.filter(e2=>e2.sig===wd.sig&&e2.fromId===wd.nodeId);   // 出力は全fan-out線
       if(kill.length){ graphOp(()=>{ graphEdges=graphEdges.filter(e2=>!kill.includes(e2)); });
-        stat(tf('msg.wireUnplugN','{sig}の配線を{cnt}はがしました',{sig:SIG_NAME[wd.sig],cnt:kill.length>1?kill.length+'本':''})); }
+        stat(tf('msg.wireUnplugN','{sig}の配線を{cnt}はがしました',{sig:SIG_NAME[wd.sig],cnt:kill.length>1?tf('word.wireCount','{n}本',{n:kill.length}):''})); }
       return;
     }
     // ドラッグ確定分（トランザクション中）: 有効ポートに落ちれば接続、外せばそのまま切断
@@ -3068,7 +3075,7 @@ ndcv.addEventListener('contextmenu',e=>{ e.preventDefault();
       ]); }
     else showMenu(e.clientX,e.clientY,[
       [t('ctx.tempoPartAddHere','＋ 拍で指定'),()=>addTempoPartAt(lXToBeat(sx))],
-      [t('ctx.tempoPartAddSec','＋ 秒で指定…'),()=>{ const sec=parseFloat(prompt('秒数')); if(isFinite(sec)&&sec>=0) addTempoPartAtSec(sec); }],
+      [t('ctx.tempoPartAddSec','＋ 秒で指定…'),()=>{ const sec=parseFloat(prompt(t('ctx.tempoPartSecPrompt','曲の頭からの秒数'))); if(isFinite(sec)&&sec>=0) addTempoPartAtSec(sec); }],
     ]);
     return; }
   if(sy>=LRULER-MKRH&&sy<LRULER){                        // マーカー帯: 右クリック=名前変更/削除
@@ -3354,7 +3361,8 @@ function drawLayers(curV){
     } else if(!isNull){
       const bars=(L/4), isL=lk==='l';
       ndg.fillStyle='#9fb8c8'; ndg.font='9px '+FONT; ndg.textAlign='left';
-      const pre=`${(Math.round(bars*10)/10).toString().replace(/\.0$/,'')}小節 ・ `;   // クリップ種別のカウントのみ＋種別アイコン
+      const bn=(Math.round(bars*10)/10).toString().replace(/\.0$/,'');
+      const pre=tf(bn==='1'?'nle.clipBar1':'nle.clipBars','{n}小節 ・ ',{n:bn});   // 英語は1小節だけ単数形（1 bar）   // クリップ種別のカウントのみ＋種別アイコン
       ndg.fillText(pre,x+6,y+24);
       const ix=x+6+ndg.measureText(pre).width, iy=y+24-7;
       if(isL) drawLightIco(ndg,ix,iy,8); else drawNoteIco(ndg,ix,iy,8);
@@ -3372,7 +3380,7 @@ function drawLayers(curV){
     ndg.beginPath(); ndg.moveTo(x+0.5,mkT); ndg.lineTo(x+0.5,ndH); ndg.stroke();
     ndg.fillStyle='#e8e8e8';
     ndg.beginPath(); ndg.moveTo(x,mkT+3.5); ndg.lineTo(x+4,mkT+MKRH/2); ndg.lineTo(x,mkT+MKRH-3.5); ndg.lineTo(x-4,mkT+MKRH/2); ndg.closePath(); ndg.fill();   // ◆
-    const nm=m.name||('マーカー'+(mi2+1));
+    const nm=m.name||tf('nle.markerN','マーカー{n}',{n:mi2+1});
     ndg.textAlign='left'; const tw=ndg.measureText(nm).width;
     ndg.fillStyle='#c9c9c9'; ndg.fillText(nm,x+8,mkT+MKRH/2+0.5);
     _mkRects.push({i:mi2,x:x+6,y:mkT+1,w:tw+6,h:MKRH-2});
@@ -3431,7 +3439,7 @@ function drawLayers(curV){
       } }
     if(!invalid){   // 不可時は中央1行の案内のみ（上部ラベルと重ねない）
       ndg.fillStyle='#eafff5'; ndg.font='bold 10.5px '+FONT; ndg.textAlign='left'; ndg.textBaseline='middle';
-      ndg.fillText((_dragMedia.name||'')+(glk==='n'?'（ノーツ）':'（ライト）'),gx+6,gy+8); }
+      ndg.fillText((_dragMedia.name||'')+(glk==='n'?t('nle.dropNotes','（ノーツ）'):t('nle.dropLights','（ライト）')),gx+6,gy+8); }
     ndg.restore(); ndg.restore();
   }
   ndg.fillStyle='#212121'; ndg.fillRect(0,0,LGUT,ndH);
@@ -4195,7 +4203,7 @@ prcv.addEventListener('dblclick', e=>{
   const r=prcv.getBoundingClientRect();
   if(e.clientY-r.top>=PR_TAG_H) return;
   const sc=secAtPr(e.clientX-r.left);
-  if(sc){ const nm=prompt('セクション名',sc.label); if(nm){ sc.label=nm; metaDirty=true; } }
+  if(sc){ const nm=prompt(t('pr.secName','セクション名'),sc.label); if(nm){ sc.label=nm; metaDirty=true; } }
 });
 prcv.addEventListener('contextmenu',e=>e.preventDefault());
 addEventListener('pointermove', e=>{ if(prSeek) prSeekTo(e.clientX); });
@@ -5416,7 +5424,8 @@ applyShowKeys();
     const bd=document.createElement('div'); bd.className='mkbody';
     while(el.firstChild) bd.appendChild(el.firstChild);   // 既存の中身はボディへ（レンダラはボディだけ書き換える）
     const hd=document.createElement('div'); hd.className='mkhead';
-    hd.innerHTML='<span style="flex:1"></span><button class="mkbtn mkFold" title="たたむ / ひらく">—</button><button class="mkbtn mkClose" title="閉じる（設定のショートカット表示で再表示）">✕</button>';
+    hd.innerHTML=`<span style="flex:1"></span><button class="mkbtn mkFold" data-i18n-t="mk.fold" title="${escHtml(t('mk.fold','たたむ / ひらく'))}">—</button>`
+      +`<button class="mkbtn mkClose" data-i18n-t="mk.close" title="${escHtml(t('mk.close','閉じる（設定のショートカット表示で再表示）'))}">✕</button>`;
     el.append(hd,bd);
     if(foldSaved[id]) el.classList.add('keysFolded');
     if(posSaved[id]&&isFinite(posSaved[id].x)){ const [x,y]=clampXY(el,posSaved[id].x,posSaved[id].y);
@@ -5655,8 +5664,8 @@ async function scanLibrary(dh){
   }
   await walk(dh,0);
   renderLibList(); if(!_restoringLibs) saveLibDirs();   // 復元中は保存しない（復元完了後に一括保存＝全フォルダ揃ってから）
-  const parts=[]; if(count) parts.push(`${count}曲`); if(mcount) parts.push(`音楽${mcount}件`); if(icount) parts.push(`画像${icount}件`);
-  stat(tf('msg.libLoaded','ライブラリ: {name} から {parts} 読み込みました',{name:dh.name,parts:parts.join('・')||t('word.zeroItems','0件')}));
+  const parts=[]; if(count) parts.push(tf('lib.songsN','{n}曲',{n:count})); if(mcount) parts.push(tf('lib.musicN','音楽{n}件',{n:mcount})); if(icount) parts.push(tf('lib.imagesN','画像{n}件',{n:icount}));
+  stat(tf('msg.libLoaded','ライブラリ: {name} から {parts} 読み込みました',{name:dh.name,parts:parts.join(t('word.listSep','・'))||t('word.zeroItems','0件')}));
   if(!count&&!mcount&&!icount) showErr(tf('msg.libNotFound','{name} に譜面フォルダ・音楽ファイルが見つかりませんでした',{name:dh.name}));
   // 埋め込みアートワークを背景で抽出（1件ずつ＝UIをブロックしない。無ければ波形アイコンのまま）
   extractArtworkBatch(musicItems, lib, ()=>lib.els.length>0);   // 背景でアートワーク抽出（フォルダが外れたら中断）
@@ -5730,7 +5739,7 @@ function renameAssetClip(item){
     const d=Object.assign(document.createElement('div'),{className:'libName'}); d.textContent=val||item.name; d.title=val||item.name; inp.replaceWith(d);
     if(val&&val!==item.name){
       try{ const res=await fetch('__asset/rename',{method:'POST',headers:{'Content-Type':'application/json','X-NLM-Request':'1'},body:JSON.stringify({from:item._fileName,to:val})});
-        const j=await res.json(); if(j&&j.ok){ await scanAssetLibrary(); showOk(tf('msg.clipRenamed','クリップ名を変更しました: {name}',{name:val})); } else showErr(tf('msg.renameFail','改名に失敗: {err}',{err:(j&&j.error)||''})); }catch(e){ showErr(tf('msg.renameFail','改名に失敗: {err}',{err:e})); } } };
+        const j=await res.json(); if(j&&j.ok){ await scanAssetLibrary(); showOk(tf('msg.clipRenamed','クリップ名を変更しました: {name}',{name:val})); } else showErr(tf('msg.renameFail','改名に失敗: {err}',{err:(j&&j.error==='exists')?t('msg.assetNameExists','同名のクリップが既にあります'):((j&&j.error)||'')})); }catch(e){ showErr(tf('msg.renameFail','改名に失敗: {err}',{err:e})); } } };
   nm.replaceWith(inp); inp.focus(); inp.select();
   inp.addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter') commit(); else if(e.key==='Escape') restore(); });
   inp.addEventListener('blur',commit);
@@ -5819,7 +5828,7 @@ const LIB_ALL_ICO='<svg viewBox="0 0 24 24" width="14" height="14" style="displa
 // アートワーク無しの音楽ファイル用: 緑枠＋波形（テーマ緑 #56ffc1）
 const LIB_WAVE_ICO='<svg viewBox="0 0 48 48" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block"><g fill="none" stroke="#56ffc1" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="21" x2="9" y2="27"/><line x1="14" y1="16" x2="14" y2="32"/><line x1="19" y1="12" x2="19" y2="36"/><line x1="24" y1="9" x2="24" y2="39"/><line x1="29" y1="14" x2="29" y2="34"/><line x1="34" y1="17" x2="34" y2="31"/><line x1="39" y1="20" x2="39" y2="28"/></g></svg>';
 function libLabels(){ try{ return JSON.parse(localStorage.getItem('bsnm_libLabels')||'{}'); }catch(_){ return {}; } }   // フォルダの表示名（実フォルダ名→カスタム名）
-function libDisp(lib){ if(lib.asset) return lib.name||'アセット'; return libLabels()[lib.dh.name]||lib.dh.name; }
+function libDisp(lib){ if(lib.asset) return t('lib.assets','アセット'); return libLabels()[lib.dh.name]||lib.dh.name; }
 function setLibLabel(key,label){ const m=libLabels(); if(label&&label!==key) m[key]=label; else delete m[key]; localStorage.setItem('bsnm_libLabels',JSON.stringify(m)); }
 function renderLibList(){   // 左カタログ列（Blender風）: All＋各フォルダ。クリックでグリッドを絞り込み
   const box=document.getElementById('libList'); if(!box) return; box.innerHTML='';
@@ -5834,12 +5843,12 @@ function renderLibList(){   // 左カタログ列（Blender風）: All＋各フ�
   libDirs.forEach(lib=>{
     if(lib.asset){   // アセット=常時接続の固定カテゴリ（CustomLevelsの上・削除/改名なし）
       const c=mkCat('<span style="display:inline-block;width:14px;text-align:center;font-size:13px;color:#9a9aa2">›</span>', libDisp(lib), lib);   // 他フォルダと同じ「›」（緑キューブは分かりづらい・ヘルバ様指示）
-      c.title='アセット（常時接続: assetフォルダ）';
+      c.title=t('lib.assetsTip','アセット（常時接続: assetフォルダ）');
       c.onclick=(e)=>{ _libActiveCat=lib; updateLibCatSel(); applyLibFilter(); };
       return;
     }
     const c=mkCat('<span style="display:inline-block;width:14px;text-align:center;font-size:13px;color:#9a9aa2">›</span>', libDisp(lib), lib);   // フォルダ項目の左に「›」（ヘルバ様指示）
-    if(lib.pending){ c.querySelector('.libCatIco').style.opacity=.4; c.title=libDisp(lib)+'（クリックで再接続）'; }   // 未接続=フォルダを薄く
+    if(lib.pending){ c.querySelector('.libCatIco').style.opacity=.4; c.title=libDisp(lib)+t('lib.reconnectTip','（クリックで再接続）'); }   // 未接続=フォルダを薄く
     c.querySelector('.libCatName').addEventListener('dblclick',ev=>{ ev.stopPropagation();   // ダブルクリックで表示名を変更
       const span=ev.currentTarget;
       const inp=document.createElement('input'); inp.type='text'; inp.value=libDisp(lib);
@@ -5851,7 +5860,7 @@ function renderLibList(){   // 左カタログ列（Blender風）: All＋各フ�
         else if(e2.key==='Escape'){ renderLibList(); } });
       inp.addEventListener('blur',()=>{ setLibLabel(lib.dh.name,inp.value.trim()); renderLibList(); }); });
     const del=document.createElement('button'); del.className='libDel'; del.textContent='−';
-    del.title='このフォルダをライブラリから外す';
+    del.title=t('lib.removeTip','このフォルダをライブラリから外す');
     del.onclick=(e)=>{ e.stopPropagation();
       for(const el of lib.els) el.remove();
       for(const u of lib.urls) URL.revokeObjectURL(u);
@@ -5927,7 +5936,7 @@ async function loadSongFromItem(item,beat){
     songDeleted=false; ensureGraphIO();
     if(songNode){ songNode.name=f.name; songNode.handle=fh; songNode.nativePath=''; }
     musicBeat=Math.max(0,beat); musicSegs=null; musicSelSet=new Set([0]); metaDirty=true;
-    showOk(tf('msg.audioPlaced','音源を配置しました: {name}（拍 {beat}{bpm}）',{name:f.name,beat:musicBeat,bpm:bpm>0?`・BPM ${BPM}`:''}));
+    showOk(tf('msg.audioPlaced','音源を配置しました: {name}（拍 {beat}{bpm}）',{name:f.name,beat:musicBeat,bpm:bpm>0?`${t('word.midDot','・')}BPM ${BPM}`:''}));
   }catch(err){ showErr(tf('msg.loadAudioFail','音源の読込に失敗: {err}',{err})); }
 }
 // INFO画面へのドロップ = 曲情報を「未接続のノード3枚」として配置（書き出しへは自分で繋ぐ=ヘルバ様指定）
@@ -6488,7 +6497,7 @@ async function applyOpenedProject(pj,fh){
 async function openProjectFile(){
   if(!await confirmDiscard('switch')) return;
   let fh;
-  try{ [fh]=await showOpenFilePicker({types:[{description:'Non-Linear Mapperプロジェクト',accept:{'application/octet-stream':['.nlmf','.bslm','.bsnm']}}]}); }
+  try{ [fh]=await showOpenFilePicker({types:[{description:t('fp.project','Non-Linear Mapperプロジェクト'),accept:{'application/octet-stream':['.nlmf','.bslm','.bsnm']}}]}); }
   catch(e){ return; }
   try{
     const pj=JSON.parse(await (await fh.getFile()).text());
@@ -6738,7 +6747,7 @@ async function saveProject(saveAs=false){   // 戻り値: 保存できたら tru
   if(saveAs) _nativeSavePath='';   // 名前を付けて保存＝以後は選んだ保存先へ
   if(saveAs||(!projFileHandle&&!dirHandle)){
     try{ projFileHandle=await showSaveFilePicker({suggestedName:'project.nlmf',
-      types:[{description:'Non-Linear Mapperプロジェクト',accept:{'application/octet-stream':['.nlmf']}}]}); }
+      types:[{description:t('fp.project','Non-Linear Mapperプロジェクト'),accept:{'application/octet-stream':['.nlmf']}}]}); }
     catch(e){ return false; }                 // キャンセル
   }
   try{
@@ -8549,7 +8558,7 @@ function lightPieDefs(){ return [
 ]; }
 function lightPieCurVal(){ return lightBrush.behav; }   // 現在の武装状態（ハイライト用）
 function commitLightPie(val){
-  setLightBehav(val); stat(tf('msg.lightBehav','ライト動作: {behav}',{behav:L_BEHAV_N[val]}));
+  setLightBehav(val); stat(tf('msg.lightBehav','ライト動作: {behav}',{behav:lBehavN(val)}));
 }
 function openLightPie(){ if(!pieOpen) openPie(lightPieDefs(),lightPieCurVal(),commitLightPie,'w'); }
 document.addEventListener('pointerdown', e=>{ if(pieOpen){ e.stopPropagation(); e.preventDefault(); closePie(true); } }, true);
@@ -9087,6 +9096,7 @@ function sanitizeFolderName(v){ return v.replace(/[^A-Za-z0-9 \-_.()\[\]&'!+,]/g
 // ---- INFO画面のノード化（Phase1・ヘルバ様指示）: 既存カード=ノード（フィールドの配線は無変更）。ドラッグ/パン/ズーム/右クリック追加削除＋OUTPUTへの配線表示 ----
 // 各ノード=独立したデータ箱。書き出しノードに接続されている箱だけが「確定情報」としてアプリへ反映される
 // （未接続=保管のみ・切断=右下表示等からも消える・繋ぎ替え=即差し替え。旧ノードシステムのaltIns/activeUidsと同じ思想）
+function infoNodeName(k){ return TL('node.'+k,(INFO_NODE_DEFS[k]||[k])[0]); }   // メッセージに出すノード名（言語に合わせる）
 const INFO_NODE_DEFS={meta:['曲情報','#e36ea8'],set:['設定','#9a9aa6'],cover:['カバー画像','#4dc8ff'],prev:['試聴','#5fcf7a']};   // 曲情報=ピンク/設定=灰/カバー=青（ヘルバ様指示）/試聴=緑（2026-09-28）
 const INFO_SRCS=['meta','cover','set','prev'];   // 書き出しノードの入力ポート順＝ピンク(曲情報)→青(カバー)→灰(設定)→緑(試聴)
 // 試聴=Beat Saberの選曲画面で流れる区間（Info.datの_previewStartTime/_previewDuration）。
@@ -9297,9 +9307,9 @@ function renderOutCards(){
       el.innerHTML=`<h3 data-i18n="node.export">${TL('node.export','書き出し')}</h3>
         <button class="iBtn folder oPick">📁 ${TL('ui.selectOutFolder','出力フォルダを選択')}</button>
         <div class="iRow"><label data-i18n="ui.outFolderName">${TL('ui.outFolderName','出力フォルダ名')}</label><input type="text" class="oName" data-i18n-ph="ph.folderName" placeholder="${TL('ph.folderName','半角英数のみ')}"></div>
-        <label class="iRow" style="font-size:10.5px;color:#9a9aa2;" title="${TL('ui.forceEggTip','チェックすると次の書き出しでsong.eggを未変更でも強制的に再変換します（音源変換のやり直し用）')}"><input type="checkbox" class="oForceEgg" style="margin-right:5px;">${TL('ui.forceEgg','song.eggを強制再変換')}</label>
+        <label class="iRow" style="font-size:10.5px;color:#9a9aa2;" data-i18n-t="ui.forceEggTip" title="${TL('ui.forceEggTip','チェックすると次の書き出しでsong.eggを未変更でも強制的に再変換します（音源変換のやり直し用）')}"><input type="checkbox" class="oForceEgg" style="margin-right:5px;"><span data-i18n="ui.forceEgg">${TL('ui.forceEgg','song.eggを強制再変換')}</span></label>
         <div class="oChk" style="padding:0 11px;font-size:11px;display:flex;flex-direction:column;gap:2px;"></div>
-        <button class="iBtn oReconnect" style="display:none;margin:2px 11px 0;width:calc(100% - 22px);">🔌 ${TL('ui.reconnect','出力フォルダ/カバー画像を再接続')}</button>`;
+        <button class="iBtn oReconnect" style="display:none;margin:2px 11px 0;width:calc(100% - 22px);">🔌 <span data-i18n="ui.reconnect">${TL('ui.reconnect','出力フォルダ/カバー画像を再接続')}</span></button>`;
       INFO_SRCS.forEach(k=>{ const pd=document.createElement('div'); pd.className='oPort'; pd.dataset.oport=oid+'|'+k;
         pd.innerHTML='<i></i>'; el.appendChild(pd); });   // 3色の入力ポート（カードの子・位置はrefreshで縦中央に追従）
       el.style.zIndex=String(++_inZTop);   // 新規生成は最前面に出す
@@ -9361,18 +9371,18 @@ function srcCardHTML(t){
       </div></div>
     <div class="nDiffs" style="display:grid;grid-template-columns:auto;gap:3px 14px;padding:6px 11px 0;">`+
     OUT_DIFFS.map(d=>`<label class="iDiff"><input type="checkbox" data-d="${d}">${d==='ExpertPlus'?'Expert+':d}</label>`).join('')+`</div>`;
-  if(t==='prev'){ const fld=(k,lb)=>`<div class="iRow"><label>${lb}</label>
+  if(t==='prev'){ const fld=(k,lb,key)=>`<div class="iRow"><label data-i18n="${key}">${lb}</label>
       <div class="bfField pvF" data-f2="${k}" style="flex:1;height:24px;justify-content:space-between;"><span class="bfA" data-k="dn">‹</span><span class="bfV" style="cursor:text;"></span><span class="bfA" data-k="up">›</span></div></div>`;
     return `<h3 data-i18n="node.prev">${TL('node.prev','試聴')}</h3>
-    ${fld('start',TL('f.pvStart','開始'))}${fld('dur',TL('f.pvDur','長さ'))}
+    ${fld('start',TL('f.pvStart','開始'),'f.pvStart')}${fld('dur',TL('f.pvDur','長さ'),'f.pvDur')}
     <button class="iBtn pvPlay"></button>
-    <div style="font-size:10px;color:#8a8a92;padding:0 11px;line-height:1.5;">${TL('ui.pvHint','Beat Saberの選曲画面で流れる区間（元の音源の秒）。無音追加ぶんは書き出し時に自動で足します')}</div>`; }
+    <div style="font-size:10px;color:#8a8a92;padding:0 11px;line-height:1.5;" data-i18n="ui.pvHint">${TL('ui.pvHint','Beat Saberの選曲画面で流れる区間（元の音源の秒）。無音追加ぶんは書き出し時に自動で足します')}</div>`; }
   return `<h3 data-i18n="node.cover">${TL('node.cover','カバー画像')}</h3>
-    <button class="iBtn nPick" style="text-align:left">📁 ${TL('ui.selImage','画像を選択…')}</button>
+    <button class="iBtn nPick" style="text-align:left">📁 <span data-i18n="ui.selImage">${TL('ui.selImage','画像を選択…')}</span></button>
     <img class="nThumb" style="width:calc(100% - 22px);height:auto;border-radius:6px;margin:0 11px;display:none;object-fit:contain;" alt="">
     <div class="nCovName" style="font-size:10px;color:#8a8a8a;padding:0 11px;">${TL('ui.noneSelected','（未選択）')}</div>
     <div class="nCovFit" style="display:none;font-size:10px;color:#7fd3ff;padding:0 11px;line-height:1.5;"><span></span>
-      <button class="nCovFitOff" style="margin-left:4px;padding:0 6px;font:inherit;font-size:10px;color:#cfd3da;background:#2d2d2d;border:1px solid #44444c;border-radius:4px;cursor:pointer;">${TL('cf.off','補正をやめる')}</button></div>`;
+      <button class="nCovFitOff" style="margin-left:4px;padding:0 6px;font:inherit;font-size:10px;color:#cfd3da;background:#2d2d2d;border:1px solid #44444c;border-radius:4px;cursor:pointer;" data-i18n="cf.off">${TL('cf.off','補正をやめる')}</button></div>`;
 }
 function renderInfoCards(){
   for(const el of [...infoWorldEl.querySelectorAll('.iGrp[data-t]')]) if(!infoGraph.nodes[el.dataset.node]) el.remove();
@@ -9648,13 +9658,13 @@ addEventListener('pointerup',e=>{
             infoGraph.edges=(infoGraph.edges||[]).filter(ed=>!(ed.o===target&&infoNodeT(ed.s)===wi.t));   // 同タイプは1本=差し替え
             infoGraph.edges.push({s:wi.k,o:target});
             applyInfoGraph(); metaDirty=true;
-            stat(tf('msg.infoConnected','「{node}」を書き出し（{target}）へ接続{rep}しました',{node:INFO_NODE_DEFS[wi.t][0],target,rep:rep?t('word.replaced','（差し替え）'):''})); }
+            stat(tf('msg.infoConnected','「{node}」を書き出し（{target}）へ接続{rep}しました',{node:infoNodeName(wi.t),target,rep:rep?t('word.replaced','（差し替え）'):''})); }
           else stat('既に接続されています'); }
         else {   // 空きへ捨てる=この口の線を全部はがす（Comfy/Blender/Fusion流）
           const cut=(infoGraph.edges||[]).filter(ed=>ed.s===wi.k);
           if(cut.length){ infoGraph.edges=(infoGraph.edges||[]).filter(ed=>ed.s!==wi.k);
             applyInfoGraph(); metaDirty=true;
-            stat(tf('msg.infoUnplugN','「{node}」の配線を{cnt}はがしました',{node:INFO_NODE_DEFS[wi.t][0],cnt:cut.length>1?cut.length+'本':''})); } }
+            stat(tf('msg.infoUnplugN','「{node}」の配線を{cnt}はがしました',{node:infoNodeName(wi.t),cnt:cut.length>1?tf('word.wireCount','{n}本',{n:cut.length}):''})); } }
       }   // クリックのみ=何もしない
     } else {   // mode 'in'（書き出し側から引き抜いた線）
       if(!wi.moved){   // クリックのみ=引き抜きを取り消して元へ戻す（元の位置へ=並び順不変で空Undoを積まない）
@@ -9668,8 +9678,8 @@ addEventListener('pointerup',e=>{
           infoGraph.edges=(infoGraph.edges||[]).filter(ed=>!(ed.o===wi.oid&&infoNodeT(ed.s)===wi.t));
           infoGraph.edges.push({s:src,o:wi.oid});
           applyInfoGraph(); metaDirty=true;
-          stat(tf('msg.infoRewired','「{node}」を書き出し（{oid}）へ繋ぎ直しました',{node:INFO_NODE_DEFS[wi.t][0],oid:wi.oid})); }
-        else if(src){ stat(tf('msg.infoTypeMismatch','タイプが違います（このポートは{node}用）',{node:INFO_NODE_DEFS[wi.t][0]}));
+          stat(tf('msg.infoRewired','「{node}」を書き出し（{oid}）へ繋ぎ直しました',{node:infoNodeName(wi.t),oid:wi.oid})); }
+        else if(src){ stat(tf('msg.infoTypeMismatch','タイプが違います（このポートは{node}用）',{node:infoNodeName(wi.t)}));
           if(wi.held) applyInfoGraph(); }
         else if(wi.held){ applyInfoGraph(); metaDirty=true; stat(tf('msg.infoUnplug','「{node}」の配線をはがしました',{node:INFO_NODE_DEFS[wi.t][0]})); }   // 空き=はがれたまま
       }
@@ -9716,13 +9726,13 @@ setInterval(()=>{ if(nodeColMode==='info') drawInfoEdges(); },400);   // カー�
 layoutInfoNodes(); applyInfoGraph();
 // INFOモード時のショートカット表示（旧NODE流儀）。NLEに戻したら元の表示へ
 const KEYSHTML_NLE=(document.querySelector('#nodeKeys .mkbody')||document.getElementById('nodeKeys')).innerHTML;
-const KEYSHTML_NODE=[['新規ノード','🖱️ 右クリック'],['全ノードの中央へ','.']]
-  .map(([d,k])=>`<div class="mkrow"><span class="mkd">${d}</span><span class="mk">${k}</span></div>`).join('');
+const KEYS_NODE=[['新規ノード','🖱️ 右クリック'],['全ノードの中央へ','.']];
+function keysHtmlNode(){ return KEYS_NODE.map(([d,k])=>`<div class="mkrow"><span class="mkd">${escHtml(t('sk:'+d,d))}</span><span class="mk">${escHtml(t('skk:'+k,k))}</span></div>`).join(''); }   // 言語に合わせて毎回作る
 document.getElementById('iMapCheck').addEventListener('click',()=>mapCheckPanel.open());
 document.getElementById('iRating').addEventListener('click',()=>ratingPanel.open());
 document.getElementById('iExport').onclick=()=>{   // 必須項目（音源/ノーツ/フォルダー名/出力先）が揃うまで書き出しは止める
   const miss=exportReadiness().filter(x=>x.req&&!x.ok);
-  if(miss.length){ showErr(tf('msg.exportMissing','書き出せません: {list} が足りません',{list:miss.map(m=>m.label.replace(/（.*/,'')).join('・')})); return; }
+  if(miss.length){ showErr(tf('msg.exportMissing','書き出せません: {list} が足りません',{list:miss.map(m=>m.label.replace(/（.*/,'').replace(/ \(.*/,'')).join(t('word.listSep','・'))})); return; }
   const fEl=infoWorldEl.querySelector(`.iGrp[data-out="${infoGraph.activeOut}"] .oForceEgg`);
   exportMap(!!(fEl&&fEl.checked)); };
 // ---- ノーツ色スウォッチ（設定グループ。クリック→カラーピッカー→3D/2Dへ即反映） ----
@@ -9741,9 +9751,9 @@ setInterval(refreshInspector,400);
     if(!n&&!l){ if(dupEl.style.display!=='none'){ dupEl.style.display='none'; _dupKey=''; } return; }
     const key=n+'|'+l;
     if(key!==_dupKey){ _dupKey=key;
-      dupEl.innerHTML=(n?`⚠ 重複ノーツ <b>${n}</b><span class="dj" data-act="np">‹</span><span class="dj" data-act="nn">›</span>`:'')
+      dupEl.innerHTML=(n?`⚠ ${escHtml(t('ui.dupNotes','重複ノーツ'))} <b>${n}</b><span class="dj" data-act="np">‹</span><span class="dj" data-act="nn">›</span>`:'')
         +(n&&l?'<span style="color:#5a5a5a;padding:0 4px">｜</span>':'')
-        +(l?`⚠ 重複ライト <b>${l}</b><span class="dj" data-act="lp">‹</span><span class="dj" data-act="ln">›</span>`:'');
+        +(l?`⚠ ${escHtml(t('ui.dupLights','重複ライト'))} <b>${l}</b><span class="dj" data-act="lp">‹</span><span class="dj" data-act="ln">›</span>`:'');
       dupEl.style.display='flex'; }
     dupEl.style.left='14px'; dupEl.style.bottom='14px'; dupEl.style.top='auto';   // 一番左下（#main=3D編集ペインの左下に固定。chartInfoは右インスペクタへ移設済みのため基準にしない）
   },400); }
@@ -9773,7 +9783,7 @@ function pvFillEnvSel(){   // ステージ選択ドロップダウン（pv4）
   const sel=document.getElementById('pvEnvSel'); if(!sel) return;
   if(!sel.dataset.filled){ sel.dataset.filled='1';
     const short=n=>n.replace(/Environment$/,'');
-    sel.innerHTML='<option value="">自動（譜面の環境）</option>'+PV_ENVS.map(n=>`<option value="${n}">${short(n)}</option>`).join('');
+    sel.innerHTML=`<option value="">${escHtml(t('pv.envAuto','自動（譜面の環境）'))}</option>`+PV_ENVS.map(n=>`<option value="${n}">${short(n)}</option>`).join('');
     sel.onchange=()=>{ pv4EnvOverride=sel.value;   // '' = 自動
       if(pv4On) pv4SyncEnv(); };
   }
@@ -10030,7 +10040,7 @@ function _tick(){
   if(nodeColMode!=='info'){ drawOverview(curV); drawSpecPane(curV); drawLayers(curV); }   // INFO表示中は nodepane/overview が display:none＝毎フレームの描画を丸ごとスキップ
   drawPRoll(curV);
   if(curTab==='bodyPv') pv4Frame();   // pv4エンジン（現行プレビュー）
-  document.getElementById('time').textContent=`${fmt(beatToTimeTM(cur))} / ${fmt(songDur)} ・ beat ${cur.toFixed(2)} ・ ♪ ${notes.length}${selection.size?` ・ 選択${selection.size}`:''}`;
+  document.getElementById('time').textContent=`${fmt(beatToTimeTM(cur))} / ${fmt(songDur)} ・ beat ${cur.toFixed(2)} ・ ♪ ${notes.length}${selection.size?` ・ ${tf('ui.selN','選択{n}',{n:selection.size})}`:''}`;
   // 診断HUD: FPS / フレーム時間 / 音声レイテンシ
   perfFrames++; const nowMs=performance.now();
   if(nowMs-perfLast>500){
@@ -10038,7 +10048,7 @@ function _tick(){
     const ft=1000/Math.max(fps,1);
     const lat=((actx.outputLatency||actx.baseLatency||0)*1000);
     const inf=renderer.info.render;
-    const gpuShort=/SwiftShader/i.test(gpuName)?'⚠SwiftShader(CPU描画!)':gpuName.replace(/^ANGLE \(([^,]+),\s*([^,)]+).*/,'$2').slice(0,28);
+    const gpuShort=!gpuName?t('ui.gpuUnknown','GPU不明'):/SwiftShader/i.test(gpuName)?t('ui.gpuSwiftShader','⚠SwiftShader(CPU描画!)'):gpuName.replace(/^ANGLE \(([^,]+),\s*([^,)]+).*/,'$2').slice(0,28);
     { const si=document.getElementById('songInfo');
       applyInfoChain();                                          // 書き出しと同じ最終値（infoBase+INFOノード合成=infoJson）を表示に使う
       const ij=infoJson||infoBase||{};
@@ -10115,7 +10125,7 @@ async function saveProjectCopy(){
   const text=buildProjectText();
   let fh;
   try{ fh=await showSaveFilePicker({suggestedName:'project_copy.nlmf',
-    types:[{description:'Non-Linear Mapperプロジェクト',accept:{'application/octet-stream':['.nlmf']}}]}); }
+    types:[{description:t('fp.project','Non-Linear Mapperプロジェクト'),accept:{'application/octet-stream':['.nlmf']}}]}); }
   catch(e){ return; }
   try{ const w=await fh.createWritable(); await w.write(text); await w.close();
     showOk(tf('msg.copySaved','コピーを保存: {name}',{name:fh.name}));
@@ -10466,19 +10476,19 @@ function renderKeyEditor(){
   host.innerHTML='';
   for(const [cat,catLabel] of ACT_CATS){
     const acts=ACTIONS.filter(a=>a.cat===cat); if(!acts.length) continue;
-    const h=document.createElement('div'); h.textContent=catLabel;
+    const h=document.createElement('div'); h.textContent=t('act.cat.'+cat,catLabel);
     h.style.cssText='color:#8a8a92;font-weight:700;margin:18px 0 7px;font-size:11px;letter-spacing:.1em;text-transform:uppercase'; host.appendChild(h);
     for(const a of acts){
       const b=effBind(a.id), overridden=!!_keymap[a.id], capturing=_keyCapture&&_keyCapture.id===a.id;
       const row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12.5px';
-      const lbl=document.createElement('span'); lbl.textContent=a.label; lbl.style.cssText='flex:1;color:#cfd6de';
-      const cur=document.createElement('kbd'); cur.textContent=capturing?'キーを押す…':comboStr(b);
+      const lbl=document.createElement('span'); lbl.textContent=actLabel(a); lbl.style.cssText='flex:1;color:#cfd6de';
+      const cur=document.createElement('kbd'); cur.textContent=capturing?t('key.press','キーを押す…'):comboStr(b);
       cur.style.cssText='min-width:96px;text-align:center;background:'+(capturing?'#8160e3':'#2d2d2d')+';border:1px solid '+(_kfConflict(a.id,b)?'#ff8a94':'#000')+';border-radius:5px;padding:2px 8px;color:#fff;font-weight:700';
-      if(_kfConflict(a.id,b)) cur.title='「'+(ACT_BY_ID[_kfConflict(a.id,b)]||{}).label+'」と重複しています';
-      const chg=document.createElement('button'); chg.textContent=capturing?'取消':'変更'; chg.style.cssText='padding:3px 10px;font-size:11px';
+      if(_kfConflict(a.id,b)) cur.title=tf('key.conflict','「{name}」と重複しています',{name:actLabel(ACT_BY_ID[_kfConflict(a.id,b)]||{})});
+      const chg=document.createElement('button'); chg.textContent=capturing?t('key.cancel','取消'):t('key.change','変更'); chg.style.cssText='padding:3px 10px;font-size:11px';
       chg.onclick=()=>{ _keyCapture=capturing?null:{id:a.id}; renderKeyEditor(); };
       row.append(lbl,cur,chg);
-      if(overridden){ const rs=document.createElement('button'); rs.textContent='既定'; rs.title='既定に戻す'; rs.style.cssText='padding:3px 8px;font-size:11px';
+      if(overridden){ const rs=document.createElement('button'); rs.textContent=t('key.default','既定'); rs.title=t('key.defaultTip','既定に戻す'); rs.style.cssText='padding:3px 8px;font-size:11px';
         rs.onclick=()=>{ delete _keymap[a.id]; saveKeymap(); renderKeyEditor(); }; row.append(rs); }
       host.appendChild(row);
     }
@@ -10584,7 +10594,7 @@ wirePv('pvAmb','amb'); wirePv('pvEms','ems'); wirePv('pvRefl','refl');
 document.querySelectorAll('#settingsBox .slRow').forEach(row=>{
   const range=row.querySelector('input[type=range]'), valSpan=row.querySelector('.t span[id]');
   if(!range||!valSpan) return;
-  valSpan.style.cursor='text'; valSpan.title='ダブルクリックで数値入力';
+  valSpan.style.cursor='text'; valSpan.title=t('ui.dblClickInput','ダブルクリックで数値入力'); valSpan.dataset.i18nT='ui.dblClickInput';   // 起動直後（言語の読込前）に作る＝言語の読込・切替で訳し直す
   valSpan.addEventListener('dblclick',()=>{
     if(valSpan.querySelector('input')) return;
     const inp=document.createElement('input'); inp.type='text'; inp.value=range.value;
@@ -11191,7 +11201,7 @@ let perfFrames=0, perfLast=performance.now();
   try { rt._inBand = _inBand; } catch (_) {}
   try { rt._bandEl = _bandEl; } catch (_) {}
   try { rt.KEYSHTML_NLE = KEYSHTML_NLE; } catch (_) {}
-  try { rt.KEYSHTML_NODE = KEYSHTML_NODE; } catch (_) {}
+  try { rt.KEYS_NODE = KEYS_NODE; rt.keysHtmlNode = keysHtmlNode; } catch (_) {}
   try { rt.pv4On = pv4On; } catch (_) {}
   try { rt._PV4 = _PV4; } catch (_) {}
   try { rt._pv4Hist = _pv4Hist; } catch (_) {}

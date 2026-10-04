@@ -7,8 +7,9 @@
 UIが変わったらこれを実行し直せば画像が追従する（座標は要素の位置から計算しているので、多少の配置変更には強い）。
 ファイル選択ダイアログは撮れない（ブラウザの showOpenFilePicker をテスト素材を返す関数に差し替えている）。
 
-使い方: .venv-build/Scripts/python.exe tools/make_tutorial_shots.py [撮る番号...]
+使い方: .venv-build/Scripts/python.exe tools/make_tutorial_shots.py [--en] [撮る番号...]
         番号を省略すると全部撮る（例: make_tutorial_shots.py 05 06 で05と06だけ）
+        --en: 英語表示で撮って docs/images/tutorial-en/ へ保存する（英語版チュートリアル docs/tutorial.en.md 用）
 """
 import sys
 from pathlib import Path
@@ -17,12 +18,41 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from cdp import Editor  # noqa: E402
 
-OUT = HERE.parent / "docs" / "images" / "tutorial"
+LANG = "en" if "--en" in sys.argv else "ja"
+OUT = HERE.parent / "docs" / "images" / ("tutorial-en" if LANG == "en" else "tutorial")
 W, H = 1920, 1080
 # 右端のレベルメーター目盛りの位置に、ヘッドレスEdgeが時々ページ外の丸いアイコンを重ねて描く
 # （DOMに無くページ側から消せない）。メーターは説明に不要なので、その手前で切って撮る
 RIGHT = 1838
-ONLY = set(sys.argv[1:])
+ONLY = set(a for a in sys.argv[1:] if not a.startswith("--"))
+
+# 画面の文言で要素を探す所の、英語表示での文言（lang/en.json と同じ）
+TEXT_EN = {
+    "カスタム曲書き出し": "Export custom song",
+    "テンポパートを追加": "Add tempo part here",
+    "左右反転": "Flip horizontally",
+    "試聴の開始に転送": "Set as song preview start",
+    "自動判定": "Auto-detect",
+    "ノーツを受信": "Receive notes",
+    "書き出しノード": "Export node",
+}
+
+
+def L(ja):
+    """画面の文言（日本語）を、撮影する言語の文言にする"""
+    return TEXT_EN[ja] if LANG == "en" else ja
+
+
+def use_lang(ed):
+    """英語で撮る時は、環境設定の言語を English にしてページを開き直す（起動時から英語＝作り済みの画面に日本語が残らない）"""
+    if LANG != "en":
+        return
+    ed.js("localStorage.setItem('bsnm_lang','en');true")
+    ed.wait(0.8)   # 環境設定のミラー（config/settings.json）へ書き戻されるのを待つ
+    ed.reload(clear_storage=False)
+    ed.wait(2.0)
+    if ed.js("document.getElementById('mFileBtn').textContent.trim()") != "File":
+        raise SystemExit("英語表示に切り替わりません")
 
 # 撮影用の印（赤枠＋番号）と、ショートカット表示の非表示
 MARK_JS = r"""
@@ -150,6 +180,7 @@ def stub_pickers(ed):
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     with Editor(width=W, height=H) as ed:
+        use_lang(ed)
         t = Tut(ed)
         stub_pickers(ed)
         ed.wait(0.5)
@@ -286,7 +317,7 @@ def main():
           {t:'#infoWorld button.nPick',n:3,at:'l'},{t:'#infoWorld button.oPick',n:4,at:'tr'},
           {t:'#infoWorld input.oName',n:5,at:'r'}]""", clip=(580, 30, 1340, 530))
         # 書き出しボタンを撮ってから押し、実際に仮想フォルダへ書き出されたことを確かめる
-        ed.js("(()=>{const b=[...document.querySelectorAll('#infoWorld button')].find(x=>x.textContent.includes('カスタム曲書き出し'));b.id='tutExportBtn';return 1})()")
+        ed.js("(()=>{const b=[...document.querySelectorAll('#infoWorld button')].find(x=>x.textContent.includes(" + repr(L('カスタム曲書き出し')) + "));b.id='tutExportBtn';return 1})()")
         r = t.rect("#tutExportBtn"); o = t.rect("#infoWorld button.oPick")
         t.shot("14-export", marks="[{t:'#tutExportBtn',n:1,at:'l'}]",
                clip=(round(o["x"]) - 60, round(o["y"]) - 60, round(o["w"]) + 120, round(r["y"] + r["h"] - o["y"]) + 90))

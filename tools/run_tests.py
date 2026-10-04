@@ -8,12 +8,14 @@
 
 グループ（tests/ 直下のフォルダ）は別プロセスで並列に動く。画面には要約だけを出し、
 失敗の詳細は test-out/last.txt、全結果は test-out/summary.json に書く。
+失敗・エラーがあった回は、その記録を test-out/history/<日時>/ にも残す（last.txt は次の実行で上書きされるため。新しい順に30回分）。
 終了コード: 0=失敗なし（要確認はあってもよい）/ 1=失敗あり
 """
 import argparse
 import concurrent.futures as cf
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -32,6 +34,8 @@ OUT = ROOT / "test-out"
 VENV_PY = ROOT / ".venv-build" / "Scripts" / "python.exe"
 NOT_GROUPS = {"golden", "fixtures"}
 MARK = {"pass": "OK", "fail": "失敗", "error": "エラー", "skip": "飛ばし", "review": "要確認"}
+HIST = OUT / "history"
+KEEP_HISTORY = 30
 
 
 def _reexec_with_venv_py():
@@ -67,6 +71,22 @@ def run_one(group, a):
     if a.verbose and p.stdout.strip():
         print(p.stdout.rstrip())
     return group, res, secs
+
+
+def save_history(groups):
+    """失敗・エラーのあった回の記録を test-out/history/<日時>/ に写す。まれにしか起きない失敗は、
+    次の実行で last.txt が上書きされると手がかりが消えるため（tests/README.md「たまに出るエラーの記録」）。新しい順に KEEP_HISTORY 回分"""
+    d = HIST / time.strftime("%Y%m%d_%H%M%S")
+    d.mkdir(parents=True, exist_ok=True)
+    for f in ("last.txt", "summary.json"):
+        shutil.copyfile(OUT / f, d / f)
+    (d / "command.txt").write_text(" ".join(["tools/run_tests.py", *sys.argv[1:]]) + "\n", encoding="utf-8")
+    err = OUT / "visual" / "errors"   # 画面テストの準備・撮影で例外が出た時の状況（tests/visual/vislib.py）。今回 visual を回した時だけ
+    if "visual" in groups and err.is_dir() and any(err.iterdir()):
+        shutil.copytree(err, d / "visual_errors")
+    for old in sorted(p for p in HIST.iterdir() if p.is_dir())[:-KEEP_HISTORY]:
+        shutil.rmtree(old, ignore_errors=True)
+    return d
 
 
 def main():
@@ -125,6 +145,8 @@ def main():
     print("\n".join(lines))
     (OUT / "last.txt").write_text("\n".join(lines) + "\n\n" + "\n".join(detail), encoding="utf-8")
     (OUT / "summary.json").write_text(json.dumps(allres, ensure_ascii=False, indent=1), encoding="utf-8")
+    if nf:
+        print(f"失敗の記録を残しました: {save_history(groups).relative_to(ROOT).as_posix()}/")
     return 1 if nf else 0
 
 

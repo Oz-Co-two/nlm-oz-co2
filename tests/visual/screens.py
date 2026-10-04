@@ -84,6 +84,7 @@ def rclick(at, wait_s=0.4):
         x, y = _pos(ed, at(ed) if callable(at) else at)
         ed.click(x, y, button='right')
         ed.wait(wait_s)
+    f.__name__ = f'rclick({getattr(at, "__name__", at)})'
     return f
 
 
@@ -95,6 +96,7 @@ def key(k, at=None, wait_s=0.25, **mods):
             ed.wait(0.15)
         ed.key(k, **mods)
         ed.wait(wait_s)
+    f.__name__ = f'key({k!r}' + (f', at={at}' if at is not None else '') + ''.join(f', {m}' for m, v in mods.items() if v) + ')'
     return f
 
 
@@ -109,17 +111,22 @@ def tab(pane, wait_s=1.0):
         ed.wait(0.2)
         ed.key('Tab')
         ed.wait(wait_s)
+    f.__name__ = f'tab({pane})'
     return f
 
 
 def wait(s):
-    return lambda ed: ed.wait(s)
+    def f(ed):
+        ed.wait(s)
+    f.__name__ = f'wait({s})'
+    return f
 
 
-def js(expr, wait_s=0.2):
+def js(expr, wait_s=0.2, name=None):
     def f(ed):
         ed.js(expr)
         ed.wait(wait_s)
+    f.__name__ = name or f'js({" ".join(expr.split())[:70]})'
     return f
 
 
@@ -131,6 +138,7 @@ def until(expr, timeout=15, what=None):
                 return
             ed.wait(0.25)
         raise AssertionError(f"準備の手順: {what or expr} が {timeout} 秒以内に満たされません")
+    f.__name__ = f'until({what or expr})'
     return f
 
 
@@ -150,6 +158,11 @@ def bulk_load_start_js():
     spec.loader.exec_module(mf)
     js = mf.bulk_load_js("tools/fixtures/rich_map/", list(mf.rich_map_files()), "tools/fixtures/basic.wav")
     return f"window.__bulkP={js};true"
+
+
+def start_bulk_load(ed):
+    """「曲データを読み込む」を始める（終わりを待たない）"""
+    ed.js(bulk_load_start_js())
 
 
 AUDIO_ONLY_JS = """(async()=>{ const blob=await (await fetch('tools/fixtures/basic.wav',{cache:'no-store'})).blob();
@@ -200,7 +213,7 @@ SCENES = [
     ]),
     Scene('曲データの読込', None, [
         Screen('tempo_import_dialog', '曲データを読み込む: BPM変化の取り込みの確認（音源が既にある時）',
-               steps=[js(AUDIO_ONLY_JS, 0.5), lambda ed: ed.js(bulk_load_start_js()), until("!!document.getElementById('dirtyDlg')")]),
+               steps=[js(AUDIO_ONLY_JS, 0.5, name='音源だけを読む(AUDIO_ONLY_JS)'), start_bulk_load, until("!!document.getElementById('dirtyDlg')")]),
     ]),
     Scene('難易度を測る', FIXTURE, [
         Screen('rating', '難易度を測るのパネル（プラグイン未導入）',

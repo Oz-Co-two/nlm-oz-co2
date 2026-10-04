@@ -101,7 +101,7 @@ def test_asset_save_rename_delete(t):
     t.ok((ad / "改名後.nlmclip").is_file() and not (ad / "テスト (2).nlmclip").exists(), "改名の結果")
     t.eq(json.loads((ad / "改名後.nlmclip").read_text(encoding="utf-8"))["name"], "改名後", "nameも更新")
     st, obj = H.post_json("/__asset/rename", {"from": "改名後.nlmclip", "to": "テスト"})
-    t.eq(obj.get("ok"), False, "別クリップと同名への改名は拒否")
+    t.eq((obj.get("ok"), obj.get("error")), (False, "exists"), "別クリップと同名への改名は拒否（文言ではなく種類を返し、JSが表示言語で訳す）")
     st, obj = H.post_json("/__asset/delete", {"name": "改名後.nlmclip"})
     t.eq(obj, {"ok": True}, "削除")
     t.ok(not (ad / "改名後.nlmclip").exists(), "消えた")

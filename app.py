@@ -106,12 +106,26 @@ def _free_port():
 # .nlmf ファイル自体にアイコンは埋め込めない＝配布先で何もしないと真っ白な書類になる。
 # そこで初回起動時に、同梱の .ico をユーザー領域へコピーし HKCU に関連付けを登録する。
 # 管理者不要（HKCU のみ）・アイコンだけ（ダブルクリックの動作は変えない）・登録済みなら何もしない。
-_ASSOC = [
-    ('.nlmf',    'NonLinearMapper.Project', 'Non-Linear Mapper プロジェクト',    'nlmfile.ico'),
-    ('.nlmclip', 'NonLinearMapper.Clip',    'Non-Linear Mapper アセットクリップ', 'nlmclip.ico'),
+_ASSOC = [   # 種類名（エクスプローラーの「種類」欄）は表示言語に合わせる
+    ('.nlmf',    'NonLinearMapper.Project', {'ja': 'Non-Linear Mapper プロジェクト', 'en': 'Non-Linear Mapper Project'}, 'nlmfile.ico'),
+    ('.nlmclip', 'NonLinearMapper.Clip',    {'ja': 'Non-Linear Mapper アセットクリップ', 'en': 'Non-Linear Mapper Asset Clip'}, 'nlmclip.ico'),
 ]
 
-def _register_file_icons(app_root):
+# ネイティブのファイル選択ダイアログの種類名（表示言語に合わせる）
+_DLG_TEXT = {
+    'ja': {'audio': '音源ファイル', 'image': '画像ファイル', 'all': 'すべてのファイル'},
+    'en': {'audio': 'Audio files', 'image': 'Image files', 'all': 'All files'},
+}
+
+def _ui_lang(data_root):
+    # 表示言語＝環境設定の「言語 / Language」（JSが config/settings.json の bsnm_lang に保存）。読めなければ日本語
+    try:
+        with open(os.path.join(data_root, 'config', 'settings.json'), encoding='utf-8') as f:
+            return 'en' if json.load(f).get('bsnm_lang') == 'en' else 'ja'
+    except (OSError, ValueError, AttributeError):
+        return 'ja'
+
+def _register_file_icons(app_root, lang='ja'):
     if sys.platform != 'win32':
         return
     try:
@@ -120,7 +134,8 @@ def _register_file_icons(app_root):
                                 'NonLinearMapper', 'icons')
         os.makedirs(icon_dst, exist_ok=True)
         changed = False
-        for ext, progid, friendly, icofile in _ASSOC:
+        for ext, progid, names, icofile in _ASSOC:
+            friendly = names.get(lang) or names['ja']
             src = os.path.join(app_root, 'icons', icofile)
             if not os.path.isfile(src):
                 continue
@@ -152,7 +167,8 @@ def _register_file_icons(app_root):
                 with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                                     r'Software\Classes\%s\DefaultIcon' % progid) as k:
                     cur = winreg.QueryValueEx(k, '')[0]
-                if cur == dst and _ext_points_to(ext, progid) and _open_cmd_is(progid, open_cmd):
+                if (cur == dst and _ext_points_to(ext, progid) and _open_cmd_is(progid, open_cmd)
+                        and _friendly_is(progid, friendly)):   # 表示言語を変えた後の初回起動で種類名も直す
                     continue
             except FileNotFoundError:
                 pass
@@ -181,6 +197,14 @@ def _ext_points_to(ext, progid):
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Classes\%s' % ext) as k:
             return winreg.QueryValueEx(k, '')[0] == progid
+    except OSError:
+        return False
+
+def _friendly_is(progid, expected):
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Classes\%s' % progid) as k:
+            return winreg.QueryValueEx(k, '')[0] == expected
     except OSError:
         return False
 
@@ -277,7 +301,7 @@ def main():
     os.environ['NLM_DATA_DIR'] = data_root
     os.environ['NLM_OPEN_FILE'] = _open_file_arg()   # ダブルクリックで開くファイル（serve.py が /__openarg で提供）
 
-    _register_file_icons(app_root)   # 配布先でも .nlmf/.nlmclip にアイコンが出るよう初回登録
+    _register_file_icons(app_root, _ui_lang(data_root))   # 配布先でも .nlmf/.nlmclip にアイコンが出るよう初回登録
 
     sys.path.insert(0, app_root)
     import serve  # 既存の開発サーバをそのままライブラリとして使う
@@ -310,10 +334,11 @@ def main():
         # pywebviewのネイティブダイアログは実パスを返すので、音源だけこちら経由にして
         # そのパスをプロジェクトJSONへ保存 → 次回はダイアログ無しでPythonが直接読み込む。
         def pick_song_file(self):
+            tx = _DLG_TEXT[_ui_lang(data_root)]
             paths = webview.windows[0].create_file_dialog(
                 webview.FileDialog.OPEN,
-                file_types=('音源ファイル (*.egg;*.ogg;*.oga;*.opus;*.mp3;*.m4a;*.aac;*.wav;*.flac;*.weba;*.webm)',
-                            'すべてのファイル (*.*)'))
+                file_types=(tx['audio'] + ' (*.egg;*.ogg;*.oga;*.opus;*.mp3;*.m4a;*.aac;*.wav;*.flac;*.weba;*.webm)',
+                            tx['all'] + ' (*.*)'))
             if paths:
                 access.picked_files.add(_npath(paths[0]))
             return paths[0] if paths else None
@@ -347,9 +372,10 @@ def main():
         def pick_image_file(self, start=''):
             d = os.path.dirname(start) if start else ''
             kw = {'directory': d} if d and os.path.isdir(d) else {}
+            tx = _DLG_TEXT[_ui_lang(data_root)]
             paths = webview.windows[0].create_file_dialog(
                 webview.FileDialog.OPEN,
-                file_types=('画像ファイル (*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp)', 'すべてのファイル (*.*)'), **kw)
+                file_types=(tx['image'] + ' (*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp)', tx['all'] + ' (*.*)'), **kw)
             if paths:
                 access.picked_files.add(_npath(paths[0]))
             return paths[0] if paths else None

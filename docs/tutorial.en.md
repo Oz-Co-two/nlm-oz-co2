@@ -4,10 +4,9 @@
 
 This tutorial walks you step by step through loading a song, placing notes, exporting the map so it can be played in Beat Saber, and saving your project.
 
-> **About the screenshots**
-> The screenshots currently show the **Japanese UI** (Oz-Co2 edition v1.1.0-oz); English screenshots will be added later.
-> The numbers (①, ②, …) in the screenshots match the tables in the text, and the names in **bold** are the English UI labels.
-> To switch the UI to English, click **環境設定** (Preferences — the second menu at the top left) and set **言語 / Language** to **English**.
+> **Switching the UI to English**
+> NLM starts in Japanese. Click **環境設定** (Preferences — the second menu at the top left, next to ファイル)
+> and set **言語 / Language** to **English** on the first tab. The screenshots in this tutorial show the English UI (v1.4.1-oz).
 
 This tutorial covers only the basic flow. For the details of each panel, see the original
 [reference manual](https://helba.flashhub.net/nlm/manual/) (Japanese).
@@ -35,7 +34,7 @@ Faster workflows and the checks before publishing are covered in the [advanced t
 
 ## 1. The screen layout
 
-![The screen right after startup. The numbered frames are the areas](images/tutorial/01-overview.png)
+![The screen right after startup. The numbered frames are the areas](images/tutorial-en/01-overview.png)
 
 | No. | Name | What it is for |
 |---|---|---|
@@ -59,7 +58,7 @@ They are closed in the rest of the images to keep them easy to read.
 
 Choose **File → Load music file…** from the menu and open your song file.
 
-![The "Load music file…" item in the File menu](images/tutorial/02-file-menu.png)
+![The "Load music file…" item in the File menu](images/tutorial-en/02-file-menu.png)
 
 Supported formats include ogg / egg / mp3 / wav / flac / m4a.
 Songs in formats other than ogg are converted to the Beat Saber format (song.egg) with ffmpeg when you export.
@@ -67,7 +66,7 @@ If you have not installed ffmpeg, install it first as described in the "ffmpeg" 
 
 After loading, the waveform of the song appears in the **Music** row at the bottom of the NLE.
 
-![The NLE after loading a song](images/tutorial/03-song-loaded.png)
+![The NLE after loading a song](images/tutorial-en/03-song-loaded.png)
 
 | No. | Name | Description |
 |---|---|---|
@@ -83,7 +82,7 @@ After loading, the waveform of the song appears in the **Music** row at the bott
 Music files do not contain the BPM, so you set it yourself.
 Press the **Detect BPM** button (③) to get candidates, and pick the one that fits.
 
-![BPM candidates](images/tutorial/04-bpm-detect.png)
+![BPM candidates](images/tutorial-en/04-bpm-detect.png)
 
 The candidates also include half and double the real BPM. Listen to the song and choose the one that feels natural.
 If you know the BPM, you can also type it directly into ②.
@@ -101,7 +100,7 @@ If they are off by the same amount from the very start, shift the start of the s
 Right after startup, the 3D view is in **Place mode**.
 The red frame in the middle is **the current beat (playhead)**, and you place notes on its 4×3 grid.
 
-![Place mode and the toolbar](images/tutorial/05-place-mode.png)
+![Place mode and the toolbar](images/tutorial-en/05-place-mode.png)
 
 | No. | Name | Description |
 |---|---|---|
@@ -123,7 +122,7 @@ Use them to check that the next swing flows naturally from the previous note (to
 3. Choose the cut direction with **▾** on the note button in the toolbar (you can also rotate it with **Alt + wheel**)
 4. When you point at a cell, a semi-transparent note with a white frame (where it will be placed) appears. **Left-click** to place it
 
-![Choosing the cut direction](images/tutorial/06-direction.png)
+![Choosing the cut direction](images/tutorial-en/06-direction.png)
 
 - **Right-click** to delete a note you placed by mistake. **Ctrl + Z** undoes (**Shift + Ctrl + Z** redoes)
 - Placing on the same cell at the same beat overwrites the color and direction
@@ -133,7 +132,7 @@ As you place notes, colored bands (clips) called "Sheet" are created automatical
 The notes you place go into these clips. Clips can be moved, copied and split later,
 but you don't need to worry about them at first.
 
-![After placing notes. Clips have been created in the NLE](images/tutorial/07-notes-placed.png)
+![After placing notes. Clips have been created in the NLE](images/tutorial-en/07-notes-placed.png)
 
 ---
 
@@ -144,7 +143,7 @@ but you don't need to worry about them at first.
 To select and edit notes you have placed, press **Q** to switch to **Camera-lock mode**.
 The view looks down at the map from the side, and you can click notes to select them.
 
-![Two notes selected in Camera-lock mode](images/tutorial/08-select.png)
+![Two notes selected in Camera-lock mode](images/tutorial-en/08-select.png)
 
 - **Left-click**: select. **Shift + left-click**: add to the selection
 - **Left-drag** from an empty spot: select everything inside the box
@@ -162,7 +161,7 @@ Select **two or more notes of the same color**, then press
 
 The two buttons at the right end of the toolbar do the same.
 
-![A red arc and a blue chain](images/tutorial/09-arc-chain.png)
+![A red arc and a blue chain](images/tutorial-en/09-arc-chain.png)
 
 You can change how much an arc curves and how many slices a chain has with the wheel while it is selected
 (for the key combinations, see the shortcut list on the screen or the NOTES section of the original manual).
@@ -174,7 +173,7 @@ You can change how much an arc curves and how many slices a chain has with the w
 In Place mode, choose **Bomb** (①) or **Wall** (②) in the toolbar, then place them.
 Pressing **W** also opens a circular menu (pie menu) to choose select / note / bomb / wall.
 
-![Bombs and a wall (at the back)](images/tutorial/10-bomb-wall.png)
+![Bombs and a wall (at the back)](images/tutorial-en/10-bomb-wall.png)
 
 - **Bomb**: click a cell to place it, just like a note
 - **Wall**: click four times to set its shape
@@ -193,7 +192,7 @@ To resize a wall after placing it, select it in Camera-lock mode and press **S**
 Put the mouse over the 3D view and press **Tab** to switch to **LIGHTING** (light editing) (①).
 There are 10 lanes, one for each kind of light (RING ZOOM, CENTER, L LASER, etc.).
 
-![Lights placed in LIGHTING mode](images/tutorial/11-lighting.png)
+![Lights placed in LIGHTING mode](images/tutorial-en/11-lighting.png)
 
 1. Choose the behavior (off / on / flash / fade / transition) with ②
 2. Choose the color with the color box ③
@@ -211,7 +210,7 @@ A map can be played without lights. You can make the notes first and add lights 
 Put the mouse over the top-left area and press **Tab** to switch to **PREVIEW** (①).
 You can check notes and lights in a view close to Beat Saber.
 
-![Switched to PREVIEW](images/tutorial/12-preview.png)
+![Switched to PREVIEW](images/tutorial-en/12-preview.png)
 
 Press **Space** (or the play button ②) to play / stop.
 The buttons at the top right of PREVIEW toggle the notes, lights and stage.
@@ -224,7 +223,7 @@ Choose the stage (environment) in the "Default" field at the top right of the NL
 Put the mouse over the NLE and press **Tab** to switch to the **INFO** screen.
 This is where you set the song name and the export folder.
 
-![The INFO screen](images/tutorial/13-info.png)
+![The INFO screen](images/tutorial-en/13-info.png)
 
 | No. | Place | What to set |
 |---|---|---|
@@ -245,7 +244,7 @@ The lines between the nodes show which settings are used for the export. Everyth
 When every "Required" item in the export node's checklist has a ✓, you are ready.
 Press **▶ Export custom song**.
 
-![The export node. The required items have a ✓](images/tutorial/14-export.png)
+![The export node. The required items have a ✓](images/tutorial-en/14-export.png)
 
 The following files are created in the folder named ⑤ inside CustomLevels:
 
@@ -269,11 +268,11 @@ Save with **Ctrl + S** (or File → Save). The first time, you are asked for the
 
 When there are unsaved changes, **UNSAVED** at the top right of the NLE lights up in red.
 
-![The UNSAVED lamp (lit)](images/tutorial/15-dirty-lamp.png)
+![The UNSAVED lamp (lit)](images/tutorial-en/15-dirty-lamp.png)
 
 It goes off when you save.
 
-![After saving (off)](images/tutorial/15b-saved.png)
+![After saving (off)](images/tutorial-en/15b-saved.png)
 
 If you close the app, or choose New or Open, with unsaved changes, you are asked to choose "Save and quit (continue) / Quit without saving (continue) / Cancel".
 

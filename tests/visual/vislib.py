@@ -12,11 +12,18 @@
   画素: R・G・B のどれかの差が PIX_THR（32/255）を超えたら「変化した画素」（文字のにじみ・描画の揺らぎを吸収）
   画面: 比較から除く所を除いて、変化した画素が MIN_PX（25）個以上なら「変化あり」（カーソル1本ぶん程度は無視）
   まとまり: 8px のマスに区切り、近い（32px 以内）変化をまとめて1つの領域にする。まとめ画像には大きい順に6か所まで
+
+■ 準備・撮影の途中で例外が出た時
+  test-out/visual/errors/<名前>.txt（どの手順で止まったか・例外の全文・ページ内のエラー・通信の失敗・ページの状態）と
+  <名前>.png（その時の画面）を残す。まれにしか起きない失敗の原因を追うため（tests/README.md「たまに出るエラーの記録」）。
+  失敗・エラーのあった回は tools/run_tests.py がこのフォルダごと test-out/history/ へ写す。
 """
 import base64
+import datetime
 import html
 import json
 import shutil
+import traceback
 from pathlib import Path
 
 import screens as S
@@ -26,6 +33,7 @@ ROOT = HERE.parents[1]
 BASE = HERE / "baseline"
 OUT = ROOT / "test-out" / "visual"
 CUR, BEFORE, DIFF, LAY, TMP = OUT / "current", OUT / "before", OUT / "diff", OUT / "layout", OUT / "_tmp"
+ERR = OUT / "errors"   # 準備・撮影の途中で例外が出た時の状況
 PAGE_JS = (HERE / "vis_page.js").read_text(encoding="utf-8")
 
 PIX_THR = 32        # 画素の色差（0〜255）。これを超えたら変化
@@ -80,13 +88,14 @@ class Runner:
         self.known = _load_list("layout_known.json")
         self.index = {}
         self._tool = None       # 画像の比較・合成をする補助タブ（エディタのページは描画ループで重いので分ける）
+        self._where = ""        # いま何をしているか（例外が出た時の記録用）
         for sc in S.SCENES:
             for i, s in enumerate(sc.screens):
                 if s.name in self.index:
                     raise ValueError(f"screens.py: 画面の名前が重複しています: {s.name}")
                 self.index[s.name] = (sc, i)
         # 前回の出力を片付ける（古いまとめ画像を見てしまわないように）
-        for d in (CUR, BEFORE, DIFF, LAY, TMP):
+        for d in (CUR, BEFORE, DIFF, LAY, TMP, ERR):
             shutil.rmtree(d, ignore_errors=True)
             d.mkdir(parents=True, exist_ok=True)
         for f in ("review.png", "report.html"):
@@ -95,6 +104,7 @@ class Runner:
 
     # ---- 場面を進める ----
     def _start(self, sc):
+        self._where = f"場面「{sc.title}」の準備（開き直し・素材の読込）"
         w, h = sc.size
         for attempt in range(2):
             try:
@@ -125,10 +135,12 @@ class Runner:
         try:
             while self.at < idx:
                 if self.at >= 0:
-                    for st in sc.screens[self.at].leave:
+                    for j, st in enumerate(sc.screens[self.at].leave):
+                        self._where = f"画面「{sc.screens[self.at].name}」の後始末 {j + 1}番目: {_step_name(st)}"
                         st(ed)
                 self.at += 1
-                for st in sc.screens[self.at].steps:
+                for j, st in enumerate(sc.screens[self.at].steps):
+                    self._where = f"画面「{sc.screens[self.at].name}」の準備の手順 {j + 1}番目: {_step_name(st)}"
                     st(ed)
         except Exception:
             self.scene = None   # 途中で失敗した場面は、次の画面で最初からやり直す
@@ -167,8 +179,16 @@ class Runner:
     def capture(self, name):
         if name in self.results:
             return self.results[name]
+        try:
+            return self._capture(name)
+        except Exception as e:
+            self._save_error(name, e)
+            raise
+
+    def _capture(self, name):
         sc, s = self.goto(name)
         ed = self.t.ed
+        self._where = "撮影の準備（部品の注入・マウスの移動・隠す所の設定）"
         self._inject(ed)
         mx, my = s.mouse or S.MOUSE
         ed.move(mx, my)
@@ -179,11 +199,14 @@ class Runner:
             masks = self._masks(ed, S.COMMON_MASK + sc.mask + s.mask)
             # 揺れの確認: 2回撮って同じになるまで（最大 STABLE_TRIES 回）
             shots = [TMP / f"{name}_{k}.png" for k in range(STABLE_TRIES + 1)]
+            self._where = "撮影（1枚目）"
             a = self._shot(ed, shots[0])
             unstable = None
             for k in range(STABLE_TRIES):
                 ed.wait(0.35)
+                self._where = f"撮影（{k + 2}枚目）"
                 b = self._shot(ed, shots[k + 1])
+                self._where = f"揺れの確認（{k + 1}枚目と{k + 2}枚目を補助タブで比較）"
                 r = self._compare(ed, a, b, masks)
                 if r["n"] < MIN_PX:
                     unstable = None
@@ -192,6 +215,7 @@ class Runner:
                 a = b
                 ed.wait(0.6)
             last = shots[k + 1]
+            self._where = "崩れの検出"
             cfg = {"popups": S.COMMON_POPUPS + s.popups, "ignore": S.COMMON_IGNORE + s.ignore}
             issues = ed.js(f"__vis.layout({json.dumps(cfg)})") or []
             # 崩れの仕分け
@@ -212,6 +236,7 @@ class Runner:
                 ed.js("__vis.unmark()")
         finally:
             ed.js("__vis.hide([])")
+        self._where = "結果の保存"
         cur = CUR / f"{name}.png"
         shutil.copyfile(last, cur)
         res = dict(name=name, title=s.title, png=cur, masks=masks, unstable=unstable,
@@ -220,6 +245,36 @@ class Runner:
         res["fixed_known"] = unused_known
         self.results[name] = res
         return res
+
+    def _save_error(self, name, exc):
+        """準備・撮影の途中で例外が出た時の状況を ERR に残す。記録の途中の失敗は書き留めるだけで、元の例外を優先する"""
+        lines = [f"時刻: {datetime.datetime.now():%Y-%m-%d %H:%M:%S}", f"画面: {name}", f"どこで: {self._where}", "",
+                 "■ 例外", "".join(traceback.format_exception(exc)).rstrip()]
+        ed = getattr(self.t, "_ed", None)   # t.ed だと、ブラウザが無い時に起動してしまう
+        png = None
+        if ed is not None:
+            for title, fn in (("ページ内の例外・console.error（開き直してから）", ed.errors),
+                              ("通信の失敗・ブラウザの警告（開き直してから）", lambda: _log_entries(ed)),
+                              ("ページ・ブラウザの出来事（開き直してから）", lambda: _notable_events(ed)),
+                              ("ページの状態", lambda: [json.dumps(ed.js(_STATE_JS), ensure_ascii=False)])):
+                try:
+                    items = fn()
+                    lines += ["", f"■ {title}: {len(items)}件"] + [f"  {x}"[:800] for x in items]
+                except Exception as e2:
+                    lines += ["", f"■ {title}: 取れませんでした（{type(e2).__name__}: {e2}）"[:400]]
+            try:
+                ERR.mkdir(parents=True, exist_ok=True)
+                png = ed.shot(ERR / f"{name}.png")
+            except Exception as e2:
+                lines += ["", f"■ その時の画面: 撮れませんでした（{type(e2).__name__}: {e2}）"[:400]]
+        else:
+            lines += ["", "■ ブラウザが起動していませんでした（ページの記録なし）"]
+        try:
+            ERR.mkdir(parents=True, exist_ok=True)
+            (ERR / f"{name}.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            self.t.info(f"例外の時の状況: test-out/visual/errors/{name}.txt" + (" と .png" if png else "") + f"（{self._where}）")
+        except Exception:
+            pass
 
     # ---- テストの中身 ----
     def check_layout(self, name):
@@ -374,6 +429,50 @@ for(const s of document.querySelectorAll('.scr')){{
 
 def _url(path):
     return "/" + Path(path).resolve().relative_to(ROOT).as_posix()
+
+
+# ---- 例外が出た時の記録用 ----
+def _step_name(st):
+    """screens.py の手順の名前（click(...) 等は名前付き。名前の無い lambda は場所だけ）"""
+    n = getattr(st, "__name__", "") or repr(st)
+    if n == "<lambda>":
+        c = getattr(st, "__code__", None)
+        return f"lambda（{Path(c.co_filename).name} {c.co_firstlineno}行目）" if c else n
+    return n
+
+
+def _log_entries(ed):
+    """CDP の Log 領域（通信の失敗「Failed to load resource」、ブラウザの介入・警告など）。cdp.py が Log.enable している"""
+    out = []
+    for e in ed._events:
+        if e.get("method") == "Log.entryAdded":
+            en = e.get("params", {}).get("entry", {})
+            if en.get("level") in ("error", "warning"):
+                out.append(f"{en.get('level')} [{en.get('source')}] {en.get('text', '')} {en.get('url', '')}".rstrip())
+    return out
+
+
+# 開き直した後に起きると怪しい出来事（ページの入れ替わり・クラッシュ・ダイアログ・実行コンテキストの破棄）
+_NOTABLE = ("Page.frameNavigated", "Page.javascriptDialogOpening", "Inspector.targetCrashed", "Inspector.detached",
+            "Runtime.executionContextDestroyed", "Runtime.executionContextsCleared", "Target.targetCrashed")
+
+
+def _notable_events(ed):
+    out = []
+    for e in ed._events:
+        m = e.get("method", "")
+        if m in _NOTABLE:
+            p = e.get("params", {})
+            detail = p.get("frame", {}).get("url") or p.get("message") or p.get("reason") or p.get("executionContextId") or ""
+            out.append(f"{m} {detail}".rstrip())
+    return out
+
+
+_STATE_JS = """(()=>{ const o={href:location.href,ready:document.readyState,vis:!!window.__vis,
+  dialog:!!document.getElementById('dirtyDlg'),hidden:document.hidden};
+  try{ if(window._dbgApp){ o.booted=window._dbgApp.booted(); const s=window._dbgApp.state();
+    o.state={cur:s.cur,camMode:s.camMode,lightMode:s.lightMode,playing:s.playing,diff:s.diff,counts:s.counts}; } }catch(e){ o.stateErr=String(e); }
+  return o; })()"""
 
 
 _RUNNERS = {}

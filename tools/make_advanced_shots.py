@@ -10,8 +10,9 @@ make_tutorial_shots.py のものを使う。NLE の帯の位置は _dbgApp.nleSc
 環境変数 NLM_RATING_DIR で指定する。省略時は配布フォルダ NLM-app/plugins/rating を探し、
 無ければ「プラグイン未導入」の画面を撮る。
 
-使い方: .venv-build/Scripts/python.exe tools/make_advanced_shots.py [章番号...]
+使い方: .venv-build/Scripts/python.exe tools/make_advanced_shots.py [--en] [章番号...]
         例: make_advanced_shots.py 03 08 で3章と8章の画像だけ保存（操作は最初から全部行う）
+        --en: 英語表示で撮って docs/images/tutorial-advanced-en/ へ保存する（英語版 docs/tutorial-advanced.en.md 用）
 """
 import json
 import os
@@ -24,7 +25,7 @@ sys.path.insert(0, str(HERE))
 import make_tutorial_shots as mts  # noqa: E402
 from cdp import Editor  # noqa: E402
 
-mts.OUT = HERE.parent / "docs" / "images" / "tutorial-advanced"
+mts.OUT = HERE.parent / "docs" / "images" / ("tutorial-advanced-en" if mts.LANG == "en" else "tutorial-advanced")
 W, H = mts.W, mts.H
 RIGHT = mts.RIGHT
 PLUGIN_DIR = Path(os.environ.get("NLM_RATING_DIR") or HERE.parent / "NLM-app" / "plugins" / "rating")
@@ -101,6 +102,7 @@ def key_release(ed, key, code, vk):
 def main():
     mts.OUT.mkdir(parents=True, exist_ok=True)
     with Editor(width=W, height=H) as ed:
+        mts.use_lang(ed)
         t = mts.Tut(ed)
         mts.stub_pickers(ed)
         ed.wait(0.5)
@@ -140,7 +142,7 @@ def main():
         for b in (4, 8):   # マーカーはマウスの位置に置かれる
             g = nle(ed, b); ed.move(g["x"], g["notes"][0] + 5); ed.wait(0.3); ed.key("e", ctrl=True); ed.wait(0.3)
         g = nle(ed, 12); ed.click(g["x"], g["tempo"] + 7, button="right"); ed.wait(0.4)
-        menu_click(ed, "テンポパートを追加")
+        menu_click(ed, mts.L("テンポパートを追加"))
         g = nle(ed)
         x4, x12 = nle(ed, 4)["x"], nle(ed, 12)["x"]
         ed.move(g["left"] + g["w"] - 40, g["notes"][0] + 5); ed.wait(0.5)
@@ -157,7 +159,7 @@ def main():
         found = False
         for y in nle(ed, 3)["notes"]:
             g = nle(ed, 3); ed.click(g["x"], y + g["laneH"] / 2, button="right"); ed.wait(0.4)
-            if ed.js("document.getElementById('ctxmenu').textContent.includes('左右反転')"):
+            if ed.js(f"document.getElementById('ctxmenu').textContent.includes({mts.L('左右反転')!r})"):
                 found = True; break
             hide_menu(ed)
         if not found:
@@ -167,14 +169,14 @@ def main():
 
         # ---- 1章: マーカーの右クリックメニュー ----
         g = nle(ed, 4); ed.click(g["x"], g["marker"] + 8, button="right"); ed.wait(0.4)
-        menu_mark(ed, "試聴の開始に転送", "tutMkPrev")
+        menu_mark(ed, mts.L("試聴の開始に転送"), "tutMkPrev")
         t.shot("01-2-marker-menu", marks="[{t:'#tutMkPrev',n:1,at:'r'}]",
                clip=box(ed, ["#ctxmenu", [g["x"] - 200, g["ruler"], 400, 80]], pad=24))
         hide_menu(ed)
 
         # ---- 5章: テンポパートの右クリックメニュー ----
         g = nle(ed, 12); ed.click(g["x"] + 1, g["tempo"] + 7, button="right"); ed.wait(0.4)
-        if not ed.js("document.getElementById('ctxmenu').textContent.includes('自動判定')"):
+        if not ed.js(f"document.getElementById('ctxmenu').textContent.includes({mts.L('自動判定')!r})"):
             raise SystemExit("テンポパートのメニューが出ません")
         t.shot("05-1-tempo-menu", marks="[{t:'#ctxmenu',pad:3},{t:'#tempoDetectAllBtn',n:1,at:'b'}]",
                clip=box(ed, ["#ctxmenu", [g["x"] - 200, g["ruler"], 400, 60], "#tempoDetectAllBtn"], pad=24))
@@ -182,7 +184,7 @@ def main():
 
         # ---- 4章: 難易度のメニュー（選択中のボタンをもう一度クリック → 受信のサブメニュー） ----
         t.click_el("#diffBar .dfSeg.on"); ed.wait(0.5)
-        if not menu_mark(ed, "ノーツを受信", "tutRecv"):
+        if not menu_mark(ed, mts.L("ノーツを受信"), "tutRecv"):
             raise SystemExit("難易度のメニューが出ません")
         r = t.rect("#tutRecv"); ed.move(r["x"] + 20, r["y"] + r["h"] / 2); ed.wait(0.6)
         t.shot("04-1-diff-menu", marks="[{t:'#diffBar .dfSeg.on',n:1,at:'l'},{t:'#tutRecv',n:2,at:'l'}]",
@@ -236,7 +238,7 @@ def main():
                 break
             ed.wheel(cx, cy, 120); ed.wait(0.3)
         ed.click(o["x"] + o["w"] + 30, o["y"] + 10, button="right"); ed.wait(0.4)
-        menu_click(ed, "書き出しノード")
+        menu_click(ed, mts.L("書き出しノード"))
         ed.js("""(()=>{document.querySelectorAll('#infoWorld .iGrp[data-t]').forEach(e=>{ if(!document.getElementById('tutN_'+e.dataset.t)) e.id='tutN_'+e.dataset.t; });
           const outs=[...document.querySelectorAll('#infoWorld .iGrp[data-out]')]; outs.forEach((e,i)=>e.id='tutOut'+i); return outs.length})()""")
         ed.move(ir["x"] + 10, ir["y"] + ir["h"] - 10); ed.wait(0.4)

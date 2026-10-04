@@ -148,6 +148,9 @@ Pythonから使う場合（検証スクリプトの書き方）はファイル�
 
 決まった確認はテスト（`tests/`・`tools/run_tests.py`）にする。使い方は `tests/README.md`。
 
+テストがまれに落ちる時の切り分けには `test_diag.py`（開き直しの食い違い `reload`・ファイルのロック `files`・
+ローカルサーバーの接続のあふれ `burst` の3つの実験）。経緯と過去の結果は `tests/README.md` の「たまに出るエラーの記録」。
+
 ## 譜面チェックを原作と突き合わせる（mapcheck_difftest.py）
 
 `js/mapcheck/mapcheck.js`（譜面チェック・BeatLeader基準）は BS Map Check の移植。原作の判定が変わった時や
@@ -180,7 +183,11 @@ basic.wav を読み込み、実際のクリック・キー入力でノーツや�
 ```
 .venv-build/Scripts/python.exe tools/make_tutorial_shots.py          # 全部撮る（約3分）
 .venv-build/Scripts/python.exe tools/make_tutorial_shots.py 05 06    # 番号を指定するとその画像だけ保存（操作は最初から全部行う）
+.venv-build/Scripts/python.exe tools/make_tutorial_shots.py --en     # 英語表示で撮って docs/images/tutorial-en/ へ（英語版 docs/tutorial.en.md 用）
 ```
+
+- 画面の文言で要素を探す所（書き出しボタン・右クリックメニューの項目など）は、`TEXT_EN` の表で英語の文言に置き換えて探す。
+  画面の文言を変えた時は、この表（lang/en.json と同じ文言）も直す。
 
 - 赤枠と番号は撮影直前にページへ重ねた印。対象はCSSセレクタで指定しているので、配置が多少変わっても追従する。
 - ファイル/フォルダ選択は差し替えてある（音源=basic.wav、画像=その場で描いたカバー、出力先・保存先=ブラウザ内の仮想フォルダOPFS）。
@@ -199,6 +206,7 @@ basic.wav に赤青のノーツを置き、マーカー・テンポパート・�
 ```
 .venv-build/Scripts/python.exe tools/make_advanced_shots.py          # 全部撮る（約3分）
 .venv-build/Scripts/python.exe tools/make_advanced_shots.py 03 08    # 章番号を指定するとその章の画像だけ保存（操作は最初から全部行う）
+.venv-build/Scripts/python.exe tools/make_advanced_shots.py --en     # 英語表示で撮って docs/images/tutorial-advanced-en/ へ
 ```
 
 - NLE の帯（目盛り・テンポパート・マーカー・レーン）はキャンバスに直接描くので、位置は `_dbgApp.nleScreen(拍)` で取る。

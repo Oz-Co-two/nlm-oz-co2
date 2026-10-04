@@ -109,7 +109,7 @@
           <div id="njsField" class="bfField" data-i18n-t="ui.njs" title="ノーツ飛来速度 NJS（難易度別・‹›=±1・Shift+‹›=±0.1・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.njsL">飛来速度 (NJS)</span><span class="bfV">16</span><span class="bfA" data-k="up">›</span></div>
           <div id="offField" class="bfField" data-i18n-t="ui.offset" title="飛来オフセット（難易度別・‹›=±0.01・Shift+‹›=±0.001・値クリック=手打ち）"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.offsetL">オフセット</span><span class="bfV">0.000</span><span class="bfA" data-k="up">›</span></div>
           <div id="leadInField" class="bfField" data-i18n-t="ui.leadIn" title="曲の先頭に無音を追加（ms・書き出し時にsong.eggへ実際に反映されます）。‹›=±10ms・Shift+‹›=±1ms・値クリック=手打ち"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.leadInL">無音追加</span><span class="bfV">0 ms</span><span class="bfA" data-k="up">›</span></div>
-          <button id="tempoDetectAllBtn" class="bfField" style="cursor:pointer" title="拍番号の下のテンポパート帯（紫の◆）にある全パートのBPMを、区間ごとの音声解析で一括推定します。境界の追加/削除・BPM手入力は帯を右クリック/ダブルクリック">🎯 <span data-i18n="ui.tempoDetectAll">全パート自動判定</span></button>
+          <button id="tempoDetectAllBtn" class="bfField" style="cursor:pointer" data-i18n-t="ui.tempoDetectAllTip" title="拍番号の下のテンポパート帯（紫の◆）にある全パートのBPMを、区間ごとの音声解析で一括推定します。境界の追加/削除・BPM手入力は帯を右クリック/ダブルクリック">🎯 <span data-i18n="ui.tempoDetectAll">全パート自動判定</span></button>
         </div>
         <div id="inspcol">
         <div id="infoWorld"><div id="infoGrid"></div><svg id="infoEdgeSvg" width="4000" height="3000"></svg><svg id="infoPortSvg" width="4000" height="3000"></svg>
@@ -156,7 +156,7 @@
       </div>
       <div id="maintb">
         <div id="tbgDiff" style="display:none"><select id="diff"></select></div><!-- 内部状態のみ（表示は#diffBarの5ボタン） -->
-        <div class="tbg" id="camModeInd" title="Q=配置/カメラ固定モード切替"><span id="camModeLbl">配置モード</span></div>
+        <div class="tbg" id="camModeInd" data-i18n-t="ui.camModeTip" title="Q=配置/カメラ固定モード切替"><span id="camModeLbl">配置モード</span></div>
         <div class="tbg"><span id="tbSnapIcon" class="tbi" style="pointer-events:none"></span><button id="tbSnapBtn" class="tbi snapNum" data-i18n-t="tb.snap" title="スナップ"><span id="tbSnapLabel">1/2</span><span class="snapCaret">▼</span></button>
           <div class="tbpanel" id="tbSnapPanel"><div id="snaps"></div></div></div>
         <div class="tbg tbgNoteGrp" id="tbgNote">
@@ -169,7 +169,7 @@
           <button id="tbModeWall" class="tbi tbmode" data-i18n-t="tb.mWall" title="壁"></button>
         </div>
         <div class="tbg tbgNoteGrp" id="tbgColor">
-          <button id="tbColSw" class="colSw" title="現在の配置色（クリックでカラーパレット）"></button>
+          <button id="tbColSw" class="colSw" data-i18n-t="tb.colSwChroma" title="現在の配置色（クリックでカラーパレット）"></button>
         </div>
         <div class="tbg tbgNoteGrp" id="tbgArcChain">
           <button id="tbArcBtn" class="tbi" data-i18n-t="tb.arc" title="アーク（A）"></button>
@@ -179,11 +179,11 @@
         <div class="tbg tbgLightGrp" id="tbgLBehav" style="display:none">
           <!-- セレクトツールは廃止（ヘルバ様指定）: 配置済みライトをクリック=選択・空きをクリック=配置・Shiftドラッグ=範囲選択 -->
           <!-- ON/OFFのドロップダウン一体化を廃止＝オフ/ライトを独立ボタンに分割（ヘルバ様指定 2026-07-18）。順=オフ・ライト・フラッシュ・フェード・トランジション -->
-          <button class="tbi lbBehavItem" data-b="0" title="オフ"><span class="lbIco"></span></button>
-          <button class="tbi lbBehavItem" data-b="1" title="ライト"><span class="lbIco"></span></button>
-          <button class="tbi lbBehavItem" data-b="2" title="フラッシュ"><span class="lbIco"></span></button>
-          <button class="tbi lbBehavItem" data-b="3" title="フェード"><span class="lbIco"></span></button>
-          <button class="tbi lbBehavItem" data-b="4" title="トランジション"><span class="lbIco"></span></button>
+          <button class="tbi lbBehavItem" data-b="0" data-i18n-t="pie.lOff" title="オフ"><span class="lbIco"></span></button>
+          <button class="tbi lbBehavItem" data-b="1" data-i18n-t="pie.lOn" title="ライト"><span class="lbIco"></span></button>
+          <button class="tbi lbBehavItem" data-b="2" data-i18n-t="pie.lFlash" title="フラッシュ"><span class="lbIco"></span></button>
+          <button class="tbi lbBehavItem" data-b="3" data-i18n-t="pie.lFade" title="フェード"><span class="lbIco"></span></button>
+          <button class="tbi lbBehavItem" data-b="4" data-i18n-t="pie.lTrans" title="トランジション"><span class="lbIco"></span></button>
         </div>
         <div class="tbg tbgLightGrp" id="tbgLColor" style="display:none">
           <button id="lcChromaSw" class="colSw" data-i18n-t="ui.chromaSwTip" title="現在のクロマ色（クリックでピッカー）"></button>
@@ -194,7 +194,7 @@
         </div>
       </div>
       <div id="statChip">
-    <div class="legend" id="stat" style="margin-top:8px;color:var(--accent)">フォルダ未読込</div>
+    <div class="legend" id="stat" style="margin-top:8px;color:var(--accent)"></div>
       </div>
       <div id="selrect"></div>
       <div id="chainCpSlide" style="position:absolute;display:none;z-index:9;flex-direction:column;gap:4px;
@@ -334,9 +334,9 @@
     <label class="slRow" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="invert2DScroll" type="checkbox"><span data-i18n="set.invertScroll2D">2D画面（NLE・Music）のホイール操作（時間移動）を反転</span></label>
   </div>
   <div class="setPanel" data-panel="keys">
-    <div class="t" style="color:#c9a24a;margin-bottom:8px">キーの割り当てを変更できます。「変更」を押して、割り当てたいキー（修飾キー可）を押してください。マウス/ホイール操作は変更できません（参考表示）。</div>
+    <div class="t" style="color:#c9a24a;margin-bottom:8px" data-i18n="set.keysHint">キーの割り当てを変更できます。「変更」を押して、割り当てたいキー（修飾キー可）を押してください。マウス/ホイール操作は変更できません（参考表示）。</div>
     <div id="keyEditBody"></div>
-    <div style="margin-top:10px"><button id="keysResetAll" style="background:#3a2226;border:1px solid #5a3038;color:#ff8a94">全て既定に戻す</button></div>
+    <div style="margin-top:10px"><button id="keysResetAll" data-i18n="set.keysResetAll" style="background:#3a2226;border:1px solid #5a3038;color:#ff8a94">全て既定に戻す</button></div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;border-top:1px solid #ffffff14;padding-top:12px">
     <button id="settingsReset" style="background:#3a2226;border:1px solid #5a3038;color:#ff8a94" data-i18n-t="set.resetTip" title="画面比率・音量・カメラ速度など全ての環境設定を初回起動時の状態に戻します"><span data-i18n="set.reset">初期設定に戻す</span></button>

@@ -8,6 +8,18 @@ For basic usage, see the [tutorial](docs/tutorial.en.md), the [advanced tutorial
 <!-- Format: one "## v1.2.3-oz" heading per version. Top-level bold items ("- **...**") are the headlines shown in the in-app
 update notice (tools/make_release.py puts them into update.json). Keep the same versions and the same number of headlines as CHANGELOG.md. -->
 
+## v1.4.1-oz
+
+- **Fixed text that was not translated in the English UI**
+  Text that was still shown in Japanese in the English UI is now in English (the bar count in NLE clips, the action names and buttons in the shortcut editor,
+  light behavior names, color palette hints, "Assets" in MEDIA, the duplicate notes indicator, some Preferences items, messages at the bottom of the screen, etc.).
+  - When the UI language was switched, the INFO screen nodes and the shortcut lists could keep showing the previous language.
+  - In the exe version, the file type names in the file dialogs and the type names of .nlmf / .nlmclip shown in Explorer now follow the UI language.
+  - Added an English section to the bundled "はじめにお読みください.txt" (Read me first).
+- **Added English versions of the README and the tutorials**
+  [README.en.md](README.en.md), [basic tutorial](docs/tutorial.en.md) and [advanced tutorial](docs/tutorial-advanced.en.md). You can switch between Japanese and English at the top of each tutorial.
+  The screenshots in the English tutorials show the English UI.
+
 ## v1.4.0-oz
 
 - **Added auto lighting**

@@ -1,4 +1,5 @@
 ﻿Non-Linear Mapper Oz-Co2版
+（English: see the second half of this file / 英語の説明はこのファイルの後半にあります）
 NonLinearMapper.exe をダブルクリックで起動（_internalとセット・書き込める場所へ）。
 初回に SmartScreen 警告が出たら「詳細情報」→「実行」。Windows 10/11 対応。
 .nlmf をダブルクリックするとその譜面が開いた状態で起動します。
@@ -37,3 +38,49 @@ zipファイルを右クリック→プロパティ→「許可する」にチ�
 NLMを起動したまま導入した場合は、NLMを一度閉じて起動し直してください。
 
 ※大切なデータはバックアップの上でご利用ください。
+
+------------------------------------------------------------
+Non-Linear Mapper (Oz-Co2 edition) — English
+
+Double-click NonLinearMapper.exe to start (keep it together with the _internal folder, in a place you can write to).
+If SmartScreen warns on the first launch, click "More info" → "Run anyway". Windows 10/11.
+Double-clicking a .nlmf file starts NLM with that map open.
+The version number (e.g. v1.4.0-oz) is shown in the window title and at the top right of the screen.
+
+* Switching the UI to English
+The UI starts in Japanese. Click 環境設定 (Preferences — the second menu at the top left, next to ファイル)
+and set 言語 / Language to English on the first tab. The setting is kept for the next launch.
+Tutorials and the full README (English): https://github.com/Oz-Co-two/nlm-oz-co2/blob/master/README.en.md
+
+* Updating (v1.3.0 or later)
+When a new version is available, its changes are shown at startup. Choose "Update" and the app downloads it
+and restarts to finish the update (you can also use "Check for updates…" in the File menu).
+config, asset, lang and plugins are kept. The previous version is kept (one generation only) in the _previous_<version> folder
+(if something goes wrong, copy NonLinearMapper.exe and _internal from that folder back to the original place).
+The startup check can be turned off in Preferences.
+
+* Updating manually (from v1.2.0 or earlier, or when the app cannot update itself)
+Preferences are saved in the config folder and clips saved with "Save to assets" in the asset folder, next to the exe.
+Projects (.nlmf) are saved wherever you chose, so they are not affected.
+ 1. Close the app and back up the folder you are using now (copy the whole folder)
+ 2. Extract the new zip to a different place from your current folder (do not extract it over the old one)
+ 3. Copy config and asset from the old folder to the new folder (next to the exe)
+    (copy lang only if you edited a translation yourself)
+ 4. Start the new NonLinearMapper.exe and check that the version number (title / top right) is the new one
+ 5. If everything works, you can delete the old folder
+* When updating from v1.1.0 or earlier: select the export folder of each existing project once again with
+  "Reconnect output folder / cover image" on the export node of the INFO screen
+  (for safety, NLM only writes to folders you have selected on this PC).
+
+* If "Failed to resolve Python.Runtime.Loader.Initialize ..." appears at startup
+Files extracted from a downloaded zip can be blocked as "downloaded from the internet", and loading a DLL fails.
+NLM normally works around this automatically; if it still happens,
+right-click the zip file → Properties → check "Unblock" → extract it again.
+
+* Exporting song.egg (converting audio) needs ffmpeg
+It is not installed automatically. Install it beforehand with:
+  winget install Gyan.FFmpeg
+If it is missing when you export, NLM shows how to install it.
+If you install it while NLM is running, close NLM and start it again.
+
+* Please back up important data before use.
