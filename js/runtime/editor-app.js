@@ -29,6 +29,8 @@ import { installEditorRuntimeHelpers } from '../runtime/editor-runtime.js';
 import { installMapCheckPanel } from '../mapcheck/mapcheck-panel.js';
 import { installRatingPanel } from '../rating/rating-panel.js';
 import { installUpdater } from '../update/update-dialog.js';
+import { generateAutoLights, showAutoLightDialog } from '../lighting/auto-light.js';
+import { fitCoverImage, measureCoverFit, coverNeedsFix, coverFitSize, showCoverFitDialog } from '../media/cover-fit.js';
 
 /**
  * Editor runtime — original closure (behavior-preserving).
@@ -941,16 +943,16 @@ function placeLight(){
   if(!sigConnected('lights')){ stat('⚠ ライティングの配線が切断中です（ノードエディタで再接続してから）'); return; }
   if(inNullRange(lightHover.beat)){ stat('⚠ NULLノードの範囲には配置できません'); return; }
   const ln=LIGHT_LANES[lightHover.lane], b=lightHover.beat, kind=laneKind(ln.t);
-  snapshot();
   const i=lightValue(kind), f=kind==='color'?lightBrush.f:1;
   const chroma=(chromaMode&&kind==='color'&&i>0)?hexToRgb01(brushChromaHex()):null;   // クロマ色を付与（バニラモードOFF時はnull＝customData.colorを書かない＝バニラ配色・ヘルバ様指定 2026-07-13）
   const ex=lightEvents.find(ev=>ev.et===ln.t&&Math.abs(ev.beat-b)<1e-4);
-  if(ex){ ex.i=i; ex.f=f; setLightChroma(ex,chroma); }
-  else { const tr=clipTrackForBeat(b,'l');   // EDIT配置ルールでライトクリップを決定（無→作成／選択優先／一番下／全ロック→上）
-    if(tr<0){ stat('⚠ ライトを置けません（ライトレーンが全てロック/最大です）'); return; }
+  if(ex){ snapshot('light'); ex.i=i; ex.f=f; setLightChroma(ex,chroma); }
+  else { const {tr,made}=placeTrackHist(b,'l','light');   // EDIT配置ルールでライトクリップを決定（無→作成／選択優先／一番下／全ロック→上）。自動で作る時はクリップ・レーンごと1つの履歴（placeAtと同じ）
+    if(tr<0){ stat('⚠ ライトを置けません（ライトレーンが全てロック/最大です）'); return; }   // 置けない時は履歴も積まない（以前は先に積んでいて Undo が空振りした）
     const nev={beat:b,et:ln.t,i,f,_tr:tr,raw:null};
     if(chroma) setLightChroma(nev,chroma);
-    lightEvents.push(nev); lightEvents.sort((a,b2)=>a.beat-b2.beat); }
+    lightEvents.push(nev); lightEvents.sort((a,b2)=>a.beat-b2.beat);
+    placeHistDone(made); }
   gizmoMode=null;   // 置いた直後はギズモを出さない＝連続配置中にハンドルが次のクリックを奪わない（ノーツのplaceAtと同じ流儀）
   stat(tf('msg.lightPlaced','{lane} 拍{beat}: {desc}',{lane:ln.n,beat:b,desc:lightDesc(kind,i,f)}));
 }
@@ -1008,9 +1010,9 @@ function cancelLightMove(){
   if(!lightMove) return;
   if(lightMove.pasted){   // 貼り付け由来の追従＝位置を戻すのではなく貼り付けた実体ごと消す（ノーツ側 cancelPasteFollow と同じ流儀）
     const gone=new Set(lightMove.pasted);
-    lightEvents=lightEvents.filter(ev=>!gone.has(ev));
     for(const ev of gone) lightSelection.delete(ev);
-    lightMove=null; _flatDirty=true; metaDirty=true; undoStack.pop();
+    if(!dropPasteHist(lightMove.he,'light')){ lightEvents=lightEvents.filter(ev=>!gone.has(ev)); _flatDirty=true; }   // 自動でクリップを作っていれば構造ごと戻す
+    lightMove=null; metaDirty=true;
     stat('貼り付けを取り消しました'); return;
   }
   for(const o of lightMove.orig){ o.ev.beat=o.beat; o.ev.et=LIGHT_LANES[o.lane].t; }
@@ -1057,17 +1059,23 @@ function cycleLightChroma(){   // F(Chroma時)=左ノーツ→右ノーツ→白
   const seq=lightChromaSeq(); _lightPalIdx=(_lightPalIdx+1)%seq.length; setBrushChroma(seq[_lightPalIdx]);
 }
 function cycleLightBase(){   // F(バニラ時)=配置色①(赤/base4)→②(青/base0)→白(base8) を巡回＋選択/マウス下の色ライトのiベースも変更（ヘルバ様指定 2026-07-13）
-  const order=[4,0,8], nb=order[(order.indexOf(lightBrush.base)+1)%3]; setLightColor(nb);
+  const order=[4,0,8]; applyLightBase(order[(order.indexOf(lightBrush.base)+1)%3]);
+}
+function applyLightBase(nb){   // バニラの配置色を nb（4=①赤/0=②青/8=白）にし、選択中→無ければマウス下の色ライトも同じ色へ（F と Cパイ共通）
+  setLightColor(nb);
   let targets=[...lightSelection].filter(ev=>laneKind(ev.et)==='color'&&ev.i>0);
   if(!targets.length){ const hv=hoverLightEvent(); if(hv&&laneKind(hv.et)==='color'&&hv.i>0) targets=[hv]; }
   if(targets.length){ snapshot(); targets.forEach(ev=>{ const behav=((ev.i-1)%4)+1; ev.i=nb+behav; setLightChroma(ev,null); }); metaDirty=true; }   // バニラはクロマ解除してベース色に
   stat('ライト色: '+(nb===4?'①(赤)':nb===0?'②(青)':'白')+(targets.length?` ×${targets.length}`:''));
 }
-// ライトモードのCパイ（色選択）: 左ノーツ→右ノーツ→クロマ登録色（ヘルバ様指定 2026-07-13）
-function lightColorPieDefs(){ const cols=lightChromaSeq(), n=cols.length;
+// ライトモードのCパイ（色選択）: Chroma時=左ノーツ→右ノーツ→白→クロマ登録色（ヘルバ様指定 2026-07-13）。
+// バニラ時=①・②・白の3つだけ（F と同じ切替）。以前はバニラでもクロマ色を書き、画面の色は変わらないのに書き出しにだけ自由色が入っていた
+function lightColorPieDefs(){
+  if(!chromaMode) return [{val:4,color:hexOf(LRED),angle:0,label:'①'},{val:0,color:hexOf(LBLUE),angle:120,label:'②'},{val:8,color:WHITE_HEX,angle:240,label:t('word.white','白')}];
+  const cols=lightChromaSeq(), n=cols.length;
   return cols.map((hex,i)=>({ val:hex, color:hex, angle:i*(360/n), label:(i===0?'左':i===1?'右':'') })); }
-function commitLightColorPie(hex){ setBrushChroma(hex); }
-function openLightColorPie(){ if(!pieOpen) openPie(lightColorPieDefs(), brushChromaHex(), commitLightColorPie, 'c'); }
+function commitLightColorPie(v){ if(chromaMode) setBrushChroma(v); else applyLightBase(v); }
+function openLightColorPie(){ if(!pieOpen) openPie(lightColorPieDefs(), chromaMode?brushChromaHex():lightBrush.base, commitLightColorPie, 'c'); }
 // 現在ライティングで配置する色。ツールバーの1個の箱に表示（ヘルバ様指定 2026-07-14）
 function lightBaseHex(){   // 素の配置色（ブースト無視・パレットの起点色に使う）
   return lightBrush.base===0?hexOf(LBLUE):lightBrush.base===8?WHITE_HEX:hexOf(LRED);
@@ -1443,7 +1451,7 @@ function drawOverview(curV){
       const bx0=beatToX(sg.beat), bx1=beatToX(sg.beat+segBeats);
       const cx0=Math.max(TLGUT,bx0), cx1=Math.min(ovW,bx1), hdr=13;
       if(cx1<=cx0) return;
-      _musicBoxes.push({i,cx0,cx1,hdr});
+      _musicBoxes.push({i,cx0,cx1,bx0,bx1,hdr});   // cx=表示窓で切った見かけの範囲（本体の当たり判定）／bx=本当の端（トリムのつまみ＝musicEdgeAt）
       const seld=musicSelSet.has(i);
       // 角丸は実位置（px0/px1）で描き、溝より左は後から描く左溝が覆う＝NLEのボックスと同じ「下に潜り込む」見え方
       const px0=Math.max(TLGUT-24,bx0), px1=Math.min(ovW+24,bx1);
@@ -1505,13 +1513,22 @@ function tempoPartRangeSec(idx){   // idx番目のテンポパートが対象と
   const b0=tempoParts[idx].beat, b1=(idx+1<tempoParts.length)?tempoParts[idx+1].beat:timeToBeatTM(songDur-off);
   return [off+beatToTimeTM(b0), off+beatToTimeTM(Math.max(b0+0.01,b1))];
 }
+// 倍・半分の取り違えを直前のテンポで選び分ける。拍位置の強さで採点すると、強い拍だけを拾う半分のテンポや、8分音符の刻みに合う倍のテンポが
+// ほぼ同点になり、どちらが先頭になるかは偶然に近い（120BPMのクリックで60、84BPMの曲で168 等）。テンポの変化は普通は小さいので、
+// 先頭の候補とその倍・半分のうち直前のテンポに一番近いものを採る。倍・半分の関係だけを比べる＝4/3倍などの本当の変化はそのまま
+function pickTempoOctave(cands,prev){
+  const top=cands[0]; if(!(prev>0)) return top;
+  const rel=f=>cands.find(c=>Math.abs(c.bpm/(top.bpm*f)-1)<0.04)||{bpm:Math.round(top.bpm*f*100)/100,conf:top.conf};
+  const opts=[top, ...(top.bpm*2<=220?[rel(2)]:[]), ...(top.bpm/2>=55?[rel(0.5)]:[])];
+  return opts.reduce((a,b)=>Math.abs(Math.log(b.bpm/prev))<Math.abs(Math.log(a.bpm/prev))?b:a);
+}
 function autoDetectTempoPart(idx){
   if(!audioBuf||!tempoParts[idx]) return;
   const [t0,t1]=tempoPartRangeSec(idx);
   try{
-    const r=estimateBPM(t0,t1);
-    tempoParts[idx].bpm=r.cands[0].bpm; metaDirty=true;
-    stat(tf('msg.tempoPartDetect','テンポパート（拍{beat}）を自動判定: BPM {bpm}（一致度 {conf}%）',{beat:tempoParts[idx].beat,bpm:r.cands[0].bpm.toFixed(2),conf:r.cands[0].conf}));
+    const r=estimateBPM(t0,t1), c=pickTempoOctave(r.cands,bpmAtBeat(tempoParts[idx].beat-1e-6));
+    tempoParts[idx].bpm=c.bpm; metaDirty=true;
+    stat(tf('msg.tempoPartDetect','テンポパート（拍{beat}）を自動判定: BPM {bpm}（一致度 {conf}%）',{beat:tempoParts[idx].beat,bpm:c.bpm.toFixed(2),conf:c.conf}));
   }catch(err){ showErr(tf('msg.bpmAnalyzeFail','BPM解析に失敗: {err}',{err:err.message})); }
 }
 function autoDetectAllTempoParts(){
@@ -1521,7 +1538,7 @@ function autoDetectAllTempoParts(){
   let ok=0;
   for(let i=0;i<tempoParts.length;i++){
     const [t0,t1]=tempoPartRangeSec(i);
-    try{ const r=estimateBPM(t0,t1); tempoParts[i].bpm=r.cands[0].bpm; ok++; }catch(_){}
+    try{ const r=estimateBPM(t0,t1); tempoParts[i].bpm=pickTempoOctave(r.cands,bpmAtBeat(tempoParts[i].beat-1e-6)).bpm; ok++; }catch(_){}   // 前から順＝直前のテンポは判定し終えた前のパート
   }
   metaDirty=true; stat(tf('msg.tempoPartDetectAll','全パートを自動判定しました（{n}/{total}件）',{n:ok,total:tempoParts.length}));
 }
@@ -1572,6 +1589,8 @@ function mergeMusicSel(){   // 選択中のMusicセグメントを結合（M。�
   musicSelSet=new Set(); metaDirty=true; stat('Musicセグメントを結合しました');
 }
 function musicHit(sx,sy){ for(const b of _musicBoxes){ if(sx>=b.cx0&&sx<=b.cx1) return {i:b.i,part:sy<=b.hdr?'header':'body'}; } return null; }
+// セグメント端±4px=トリムハンドル。本当の端が見えている時だけ（表示窓の右端・溝の境目で切れた見かけの端はつまみにしない＝ノーツのクリップの clipEdgeAt と同じ。以前は窓の端を掴むとトリムになっていた）
+function musicEdgeAt(sx){ for(const b of _musicBoxes){ if(b.bx0>=TLGUT-0.5&&Math.abs(sx-b.bx0)<=4) return {i:b.i,side:'l'}; if(b.bx1<=ovW+0.5&&Math.abs(sx-b.bx1)<=4) return {i:b.i,side:'r'}; } return null; }
 ovcv.addEventListener('pointerdown', e=>{
   selWatch('node');   // Musicセグメント選択の変化も1動作として履歴へ
   const r=ovcv.getBoundingClientRect(), sx=e.clientX-r.left, sy=e.clientY-r.top;
@@ -1581,12 +1600,10 @@ ovcv.addEventListener('pointerdown', e=>{
   if(e.button!==0) return;
   if(sx<TLGUT) return;                       // 左溝（BPMフィールドはNLEヘッダー右端へ移設済み）
   if(!ovBeats) return;   // 空タイムライン=クリックしても何もしない（ファイル→音楽ファイルを読み込む…／MEDIAから。ヘルバ様指示）
-  { let eh=null;                             // セグメント端±4px=トリムハンドル
-    for(const b of _musicBoxes){ if(Math.abs(sx-b.cx0)<=4){ eh={i:b.i,side:'l'}; break; } if(Math.abs(sx-b.cx1)<=4){ eh={i:b.i,side:'r'}; break; } }
+  { const eh=musicEdgeAt(sx);                // セグメント端±4px=トリムハンドル（見えている本当の端だけ）
     if(eh){ const pre=dumpDomain('node');   // 履歴は確定時に「実際に変化した場合だけ」積む
-      if(!musicSegs) musicSegs=msegs().map(s=>({...s}));   // 未分割ならセグメント化してから
-      const sg=musicSegs[eh.i];
-      musicResize={i:eh.i,side:eh.side,origBeat:sg.beat,origOff:sg.off,origDur:sg.dur,pre};
+      const sg=msegs()[eh.i];               // 未分割の区間化は実際に動かした時（pointermove）に行う＝端をクリックしただけでは状態を変えない（以前は押した時点で1区間の分割状態になり未保存ランプが点いた）
+      musicResize={i:eh.i,side:eh.side,origBeat:sg.beat,origOff:sg.off,origDur:sg.dur,pre,wasNull:!musicSegs};
       tlFrozen=tlWindow(cur);
       try{ovcv.setPointerCapture(e.pointerId);}catch(_){} return; } }
   const hit=musicHit(sx,sy);
@@ -1594,7 +1611,8 @@ ovcv.addEventListener('pointerdown', e=>{
     if(e.shiftKey){ musicSelSet.has(hit.i)?musicSelSet.delete(hit.i):musicSelSet.add(hit.i); }   // Shift=追加（レイヤー選択は維持＝同時選択）
     else if(!musicSelSet.has(hit.i)){ musicSelSet=new Set([hit.i]); layerSel=new Set(); }   // 単独クリック=このsongのみ（レイヤー選択も解除）。既選択の掴み直しはグループ維持
     tlFrozen=tlWindow(cur);                  // 本体/ヘッダーどちらを掴んでもドラッグ開始（ノーツ/ライトのクリップと同じ）
-    musicDrag={i:hit.i,sx,starts:msegs().map(s=>s.beat)};
+    let lmin=Infinity; for(const x of sections) if(layerSel.has(x.id)) lmin=Math.min(lmin,x.beat||0);   // 同時選択のクリップの先頭（掴んだ時）。0拍止めは掴んだ時の位置どうしで計算する
+    musicDrag={i:hit.i,sx,starts:msegs().map(s=>s.beat),lmin};
     try{ovcv.setPointerCapture(e.pointerId);}catch(_){}
     return; }
   if(!e.shiftKey){ musicSelSet=new Set(); layerSel=new Set(); }     // 空クリック=全選択解除（song/レイヤー両方。シークはNLE上部のルーラーのみ）
@@ -1602,34 +1620,37 @@ ovcv.addEventListener('pointerdown', e=>{
 addEventListener('pointermove', e=>{
   if(ovPan){ const r=ovcv.getBoundingClientRect(), sx=e.clientX-r.left, ppb=(ovW-TLGUT)/tlWindow(cur).span;
     tlViewB0=Math.max(0,ovPan.startB0-(sx-ovPan.sx)/ppb); return; }
-  if(musicResize){ const r=ovcv.getBoundingClientRect(), sx=e.clientX-r.left;
-    const sg=musicSegs&&musicSegs[musicResize.i]; if(!sg) return;
+  if(musicResize){ const r=ovcv.getBoundingClientRect(), sx=e.clientX-r.left, R=musicResize;
     const mn=Math.max(snap,0.25);
-    let tb=Math.max(0,snapV(xToBeat(sx)));
-    if(musicResize.side==='r'){
-      const lenBeats=Math.max(mn,tb-sg.beat);
-      sg.dur=beatToTimeTM(sg.beat+lenBeats)-beatToTimeTM(sg.beat);   // 右へ伸ばす=音源末尾を越えたぶんは無音／縮める=窓が狭まるだけで内容保持
+    let tb=Math.max(0,snapV(xToBeat(sx))), nv;
+    if(R.side==='r'){
+      const lenBeats=Math.max(mn,tb-R.origBeat);
+      nv={beat:R.origBeat,off:R.origOff,dur:beatToTimeTM(R.origBeat+lenBeats)-beatToTimeTM(R.origBeat)};   // 右へ伸ばす=音源末尾を越えたぶんは無音／縮める=窓が狭まるだけで内容保持
     } else {
-      tb=Math.min(tb,segEndBeat({beat:musicResize.origBeat,dur:musicResize.origDur})-mn);
-      const d=tb-musicResize.origBeat, dSec=beatToTimeTM(musicResize.origBeat+d)-beatToTimeTM(musicResize.origBeat);
-      sg.beat=tb; sg.off=musicResize.origOff+dSec; sg.dur=musicResize.origDur-dSec;   // offは負も可=先頭無音
+      tb=Math.min(tb,segEndBeat({beat:R.origBeat,dur:R.origDur})-mn);
+      const dSec=beatToTimeTM(tb)-beatToTimeTM(R.origBeat);
+      nv={beat:tb,off:R.origOff+dSec,dur:R.origDur-dSec};   // offは負も可=先頭無音
     }
+    const now=msegs()[R.i]; if(!now) return;
+    if(Math.abs(now.beat-nv.beat)<1e-9&&Math.abs(now.off-nv.off)<1e-9&&Math.abs(now.dur-nv.dur)<1e-9) return;   // 値が変わらない＝状態を変えない
+    if(!musicSegs) musicSegs=msegs().map(s=>({...s}));   // 未分割は実際に動かした時に区間化
+    Object.assign(musicSegs[R.i],nv);
     metaDirty=true; return; }
   if(musicDrag){ const r=ovcv.getBoundingClientRect(), sx=e.clientX-r.left, w=tlWindow(cur), ppb=(ovW-TLGUT)/w.span;
-    if(!musicDrag.moved){ snapshot('node'); musicDrag.moved=true; }   // Music移動もUndo対象に（未記録だとCtrl+Zで位置が巻き戻ったまま保存される事故が起きる）
     let nb=snapV(musicDrag.starts[musicDrag.i]+(sx-musicDrag.sx)/ppb);   // 移動は常にスナップ幅（Shiftスムーズ移動は廃止）。0クランプはグループ単位で下記
     let d=nb-musicDrag.starts[musicDrag.i];                         // 掴んだセグメント基準の移動量を選択全体へ
-    // 0拍より左はグループ全体で停止＝先頭が0に達したら止める（旧: 個別クランプで2個目以降が0に重なる不具合）
-    { let minB=Infinity;
+    // 0拍より左はグループ全体で停止＝先頭が0に達したら止める（旧: 個別クランプで2個目以降が0に重なる不具合）。
+    // 同時選択のクリップも掴んだ時の先頭（lmin）で数える＝移動量 d と同じ基準（以前はクリップだけ今の位置で数え、拍0の手前で止まっていた）
+    { let minB=musicDrag.lmin;
       if(musicSegs){ for(const j of musicSelSet) if(musicSegs[j]) minB=Math.min(minB,musicDrag.starts[j]??0); }
-      else minB=musicDrag.starts[0]??0;
-      if(layerSel.size) for(const x of sections) if(layerSel.has(x.id)) minB=Math.min(minB,x.beat||0);   // 同時選択のクリップも含めて止める
+      else minB=Math.min(minB,musicDrag.starts[0]??0);
       if(minB!==Infinity&&minB+d<0) d=-minB; }
-    if(layerSel.size){                                             // songと同時選択したレイヤークリップも同じ拍だけ連動
-      const grabPrev=musicSegs?((musicSegs[musicDrag.i]||{}).beat||0):musicBeat;
-      const dInc=(musicDrag.starts[musicDrag.i]+d)-grabPrev;
-      if(dInc&&!shiftSelLayersBeat(dInc)) return;                  // 重なるならこのステップは不適用（音楽も動かさず同期維持）
-    }
+    const grabPrev=musicSegs?((musicSegs[musicDrag.i]||{}).beat||0):musicBeat;
+    const dInc=(musicDrag.starts[musicDrag.i]+d)-grabPrev;
+    if(!dInc) return;                                              // 位置が変わらない（拍0で止まっている等）＝状態も履歴も変えない
+    const pre=musicDrag.moved?null:dumpDomain('node');             // Music移動もUndo対象に。最初に実際に動く直前の状態を1回だけ（動かなければ積まない）
+    if(layerSel.size&&!shiftSelLayersBeat(dInc)) return;           // songと同時選択したレイヤークリップも同じ拍だけ連動。重なるならこのステップは不適用（音楽も動かさず同期維持）
+    if(pre){ pushHist('node',pre); musicDrag.moved=true; }
     if(musicSegs){ for(const j of musicSelSet) if(musicSegs[j]) musicSegs[j].beat=musicDrag.starts[j]+d; }
     else musicBeat=musicDrag.starts[0]+d;
     metaDirty=true; return; }
@@ -1640,6 +1661,7 @@ addEventListener('pointerup', ()=>{ const _mDragged=musicDrag&&musicDrag.moved; 
     const changed=sg&&(Math.abs(sg.beat-musicResize.origBeat)>1e-9||Math.abs(sg.dur-musicResize.origDur)>1e-9||Math.abs(sg.off-musicResize.origOff)>1e-9);
     if(changed){ pushHist('node',musicResize.pre);
       stat('Musicをトリムしました'); }
+    else if(musicResize.wasNull&&musicSegs&&musicSegs.length===1) musicSegs=null;   // 動かして元の位置へ戻した＝未分割のまま（区間化だけが残って未保存になるのを防ぐ）
     musicResize=null; }
   if(!prSeek) tlFrozen=null; });
 // Music（音源）はノート/ライト群と独立して削除可能: Musicレーンを右クリック
@@ -2016,10 +2038,15 @@ function ndColorEdit(val,onCommit,wd,trigger){
     light0:{get:()=>hexOf(LRED), set:h=>setLightColorHex(0,h)}, light1:{get:()=>hexOf(LBLUE), set:h=>setLightColorHex(1,h)},
     boost0:{get:()=>hexOf(LRED_B), set:h=>setLightBoostHex(0,h)}, boost1:{get:()=>hexOf(LBLUE_B), set:h=>setLightBoostHex(1,h)} };
   let activeTgt=null;   // null=元(onCommit) / それ以外=TGTのキー
-  const commit=()=>{ const [r2,g2,b2]=hsv2rgb(st.h,st.s,st.v); const hex='#'+hx2(r2)+hx2(g2)+hx2(b2);
-    if(activeTgt&&TGT[activeTgt]){ TGT[activeTgt].set(hex);
-      const sw=pn.querySelector('.cpNoteBar[data-tgt="'+activeTgt+'"]'); if(sw) sw.style.background=hex; }   // 選択中の色を直接変更＋スウォッチ即更新
-    else onCommit(hex); };
+  // gest=ドラッグ1回ぶんの Set（円・明るさの帯・数値の帯の pointerdown ごとに作る）。渡された時は onCommit 内の履歴を領域ごとに最初の1回だけにする（pushHist の _histGest）。
+  // Hex入力・スポイト・パレットのクリックは1回で終わる操作なので渡さない
+  const commit=gest=>{ const [r2,g2,b2]=hsv2rgb(st.h,st.s,st.v); const hex='#'+hx2(r2)+hx2(g2)+hx2(b2);
+    const hold=_histGest; _histGest=gest||null;
+    try{
+      if(activeTgt&&TGT[activeTgt]){ TGT[activeTgt].set(hex);
+        const sw=pn.querySelector('.cpNoteBar[data-tgt="'+activeTgt+'"]'); if(sw) sw.style.background=hex; }   // 選択中の色を直接変更＋スウォッチ即更新
+      else onCommit(hex);
+    } finally { _histGest=hold; } };
   // ---- パネル ----
   const pn=document.createElement('div'); pn.id='cpanel';
   const WS=148, BW=16;   // 一回り小さく（ヘルバ様指定 2026-07-13）
@@ -2101,9 +2128,9 @@ function ndColorEdit(val,onCommit,wd,trigger){
         <span class="lb">${lb}</span><span class="vl">${v2.toFixed(3)}</span>`;
       row.addEventListener('pointerdown',e2=>{
         e2.preventDefault(); row.setPointerCapture(e2.pointerId);
-        const rc=row.getBoundingClientRect();
+        const rc=row.getBoundingClientRect(), gest=new Set();   // このドラッグ1回ぶん＝履歴1つ
         const mv=e3=>{ const f=Math.max(0,Math.min(1,(e3.clientX-rc.left)/rc.width));
-          setr(f); commit(); refresh(); };
+          setr(f); commit(gest); refresh(); };
         mv(e2);
         row.onpointermove=e3=>{ if(e3.buttons&1) mv(e3); };
         row.onpointerup=()=>{ row.onpointermove=null; };
@@ -2117,21 +2144,23 @@ function ndColorEdit(val,onCommit,wd,trigger){
     { const ce=pn.querySelector('.cpCur'); if(ce){ const [r3,g3,b3]=hsv2rgb(st.h,st.s,st.v); ce.style.background='#'+hx2(r3)+hx2(g3)+hx2(b3); } }   // ドラッグ元チップに現在色を反映
   }
   // ホイール/Vバーのドラッグ
-  function wheelPick(e2){
+  function wheelPick(e2,gest){
     const rc=cw.getBoundingClientRect();
     const dx=e2.clientX-rc.left-CX, dy=e2.clientY-rc.top-CY;
     st.h=(Math.atan2(dy,dx)*180/Math.PI-90+360)%360;
     let sat=Math.min(1,Math.hypot(dx,dy)/R);
     st.s=st.wheel==='perceptual'?sat*sat:sat;
-    commit(); refresh();
+    commit(gest); refresh();
   }
   cw.addEventListener('pointerdown',e2=>{ e2.preventDefault(); cw.setPointerCapture(e2.pointerId);
-    wheelPick(e2); cw.onpointermove=e3=>{ if(e3.buttons&1) wheelPick(e3); };
+    const gest=new Set();   // このドラッグ1回ぶん＝履歴1つ
+    wheelPick(e2,gest); cw.onpointermove=e3=>{ if(e3.buttons&1) wheelPick(e3,gest); };
     cw.onpointerup=()=>{ cw.onpointermove=null; }; });
-  function vPick(e2){ const rc=cv2.getBoundingClientRect();
-    st.v=Math.max(0,Math.min(1,1-(e2.clientY-rc.top)/WS)); commit(); refresh(); }
+  function vPick(e2,gest){ const rc=cv2.getBoundingClientRect();
+    st.v=Math.max(0,Math.min(1,1-(e2.clientY-rc.top)/WS)); commit(gest); refresh(); }
   cv2.addEventListener('pointerdown',e2=>{ e2.preventDefault(); cv2.setPointerCapture(e2.pointerId);
-    vPick(e2); cv2.onpointermove=e3=>{ if(e3.buttons&1) vPick(e3); };
+    const gest=new Set();   // このドラッグ1回ぶん＝履歴1つ
+    vPick(e2,gest); cv2.onpointermove=e3=>{ if(e3.buttons&1) vPick(e3,gest); };
     cv2.onpointerup=()=>{ cv2.onpointermove=null; }; });
   // タブ（RGB/HSV。リニア/知覚的トグルは廃止＝リニア固定）
   pn.querySelector('.cpt').addEventListener('pointerdown',e2=>{ const d=e2.target.dataset.v;
@@ -2431,8 +2460,10 @@ function deleteMultiSel(){   // 範囲選択したノードをまとめて削除
 }
 const OUT_DIFFS=['Easy','Normal','Hard','Expert','ExpertPlus'];
 const _coverImgs=new Map();   // coverノードid → {key,bmp} プレビュー用ImageBitmap
+const _coverHid=new WeakMap(); let _coverHidSeq=0;   // handle → 通し番号（同じファイル名の別画像に替えても読み直すため）
 async function loadCoverPreview(n){
-  const key=n.handle?('h:'+n.name):('f:'+(n.name||'').toLowerCase());
+  if(n.handle&&!_coverHid.has(n.handle)) _coverHid.set(n.handle,++_coverHidSeq);
+  const key=n.handle?('h:'+_coverHid.get(n.handle)+':'+n.name):('f:'+(n.name||'').toLowerCase());
   const c=_coverImgs.get(n.id);
   if(c&&c.key===key) return;
   _coverImgs.set(n.id,{key,bmp:(c&&c.bmp)||null});   // 先にkeyを立てて多重ロード防止
@@ -2443,7 +2474,9 @@ async function loadCoverPreview(n){
   }catch(e){}
   let bmp=null;
   if(file){ try{ bmp=await createImageBitmap(file); }catch(e){} }
+  const now=_coverImgs.get(n.id); if(now&&now.key!==key) return;   // 読込中に別の画像へ替わった＝古い結果で上書きしない
   _coverImgs.set(n.id,{key,bmp});
+  if(String(n.id).startsWith('ig:')) refreshInfoCards();   // INFOのカードは読込完了で描き直す（読込中は前の画像のまま＝ここで追いつかせる）
 }
 let outDirHandle=null;   // 書き出し先（セッション中のみ。名前はgraphIO.outに保存）
 // ---- ネイティブ(pywebview)のフォルダ/ファイルを FileSystemHandle 互換の薄い代役で包む ----
@@ -2674,12 +2707,14 @@ function buildDefaultGraph(){
 // 音源ファイルを開く（主要な音楽形式に対応）
 function b64ToBuf(b64){ const bin=atob(b64); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i); return a.buffer; }
 // デコード後の共通後処理（ネイティブパス経由/ブラウザピッカー経由どちらからも呼ぶ）
-async function applyLoadedSong(buf,name){
+// keep=true: プロジェクトを開いた時の自動読込（同じ音源）＝保存したMusicの配置（分割・トリム）と再生位置を残す。
+// 以前は常に消していて、Musicを分割・トリムして保存したプロジェクトを開き直すと1本に戻っていた。ファイルを選び直す時は別の曲かもしれないので消す
+async function applyLoadedSong(buf,name,keep=false){
   if(playing) pause();
   audioBuf=await actx.decodeAudioData(buf);
   songDur=audioBuf.duration; buildWaveData();
   document.getElementById('tbgTime').style.display='';
-  cur=0; offset=0; musicSegs=null; musicSelSet=new Set();
+  if(!keep){ cur=0; offset=0; musicSegs=null; musicSelSet=new Set(); }
   songDeleted=false; ensureGraphIO(); if(songNode) songNode.name=name; metaDirty=true;
 }
 // pywebviewのネイティブダイアログ経由: 実パスをsongNode.nativePathへ保存＝次回はダイアログ無しで自動読込できる
@@ -3044,7 +3079,7 @@ ndcv.addEventListener('contextmenu',e=>{ e.preventDefault();
       showMenu(e.clientX,e.clientY,[
         [t('ctx.rename','名前を変更…'),()=>{ const r2=_mkRects.find(q=>q.i===hit.i)||{x:sx,y:LRULER-MKRH+1,w:60};
           ndInlineEdit({x:r2.x-2,y:r2.y,w:Math.max(90,(r2.w||60)+24),h:MKRH-2},mk.name,v=>{ v=(v||'').trim();
-            if(v){ mk.name=v; metaDirty=true; stat(tf('msg.markerName','マーカー名: {name}',{name:v})); } },false,ndcv); }],
+            if(v&&v!==mk.name){ snapshot('node'); mk.name=v; metaDirty=true; stat(tf('msg.markerName','マーカー名: {name}',{name:v})); } },false,ndcv); }],
         [t('ctx.mkToPrev','▶ 試聴の開始に転送'),()=>{ const sec=audioPosAtBeat(mk.beat);   // マーカー拍→元の音源の秒を、アクティブ書き出しの試聴ノードの開始へ
           if(sec==null){ showErr(t('msg.mkToPrevNoAudio','このマーカーの位置には音源がありません')); return; }
           infoSnapshot(); setConnectedPrev(sec,null);
@@ -3077,7 +3112,7 @@ ndcv.addEventListener('contextmenu',e=>{ e.preventDefault();
   const s=clipAtLayer(sx,sy);
   if(s){                                                   // クリップ上: ラベル変更 / 色変更 / 削除
     showMenu(e.clientX,e.clientY,[
-      [t('ctx.editLabel','ラベルを変更…'),()=>{ const lh=laneHt(), t=s.track||0, x=lBeatToX(s.beat||0), w=(s.len||4)*lPPB(), y=LRULER+t*lh+4;
+      [t('ctx.editLabel','ラベルを変更…'),()=>{ const x=lBeatToX(s.beat||0), w=(s.len||4)*lPPB(), y=laneY(secLk(s),s.track||0)+4;   // ダブルクリックの改名と同じ位置（以前はノーツのレーン前提の計算で、ライトのクリップだとノーツのレーンに出ていた）
         const gx=Math.max(LGUT,x);
         ndInlineEdit({x:gx+2,y,w:Math.min(x+w,ndW)-gx-4,h:16},s.label||'',nm=>{
           if(nm.trim()){ snapshot('node'); if(!s.gid) s.gid='g'+(++_nid); const r0=clipRef(s);
@@ -3124,6 +3159,13 @@ function laneShiftAll(lk,d){   // レーン増減時: 全難易度のクリッ�
   for(const k in projDiffs){ if(k===curK) continue; const st=projDiffs[k]; if(!st) continue;
     apply(st.sections,[[st.notes,'n'],[st.bombs,'n'],[st.walls,'n'],[st.arcs,'n'],[st.chains,'n'],[st.lightEvents,'l']]); }
   layerSoloS.clear(); layerMuteS.clear();   // S/Mはレーン位置キーのため増減でリセット（誤ミュートの防止）
+  shiftLocks(lk,d);   // ロックは同じレーン（中身）に付いたままずらす（以前は溝の右クリックでの増減でずれず、ロックが別のレーンへ移っていた）
+}
+function shiftLocks(lk,d){   // ロック（'n2' 等＝グループ＋レーン位置）を d 段ずらす。0未満（消えたレーン）は外す
+  if(!d) return;
+  const next=new Set();
+  for(const key of layerLockS){ if(key[0]!==lk){ next.add(key); continue; } const tr=+key.slice(1)+d; if(tr>=0) next.add(lk+tr); }
+  layerLockS.clear(); for(const k of next) layerLockS.add(k);
 }
 function laneHt(){ const total=Math.max(1,notesLanes+lightLanes);   // 合計6本以下: 隙間なくぴったり埋める（レーンを太く）／7本以上: 6本ぶんの固定厚でスクロール
   return Math.max(34,(ndH-LRULER-2*LDIV)/Math.min(6,total)); }   // 継ぎ目はNotes/Light間と最下部(Light/Music間)の2本ぶん確保
@@ -3540,17 +3582,22 @@ function alignNoteGroupTracks(arr){
     if(cov.some(s=>(s.track||0)===(o._tr||0))) continue;
     o._tr=cov.reduce((a,c)=>((c.track||0)>(a.track||0)?c:a)).track||0; }
 }
+// クリップ群 → フラット配列（各クリップの内容をそのクリップのbeat位置に合成）。副作用なし＝退避中の難易度(projDiffs)にも使える
+function flatFromSections(secs){
+  const f={notes:[],bombs:[],walls:[],arcs:[],chains:[],lightEvents:[]};
+  for(const s of secs||[]){ if(s.kind==='null') continue; const c=s.content||{}, L=s.len||4, off=s.beat||0, tr=s.track||0;
+    (c.notes||[]).forEach(n=>{ if(n.beat>=0&&n.beat<L) f.notes.push({...n,beat:n.beat+off,_tr:tr}); });   // 負の拍=左トリムで隠れた分（保持・非出力）
+    (c.bombs||[]).forEach(n=>{ if(n.beat>=0&&n.beat<L) f.bombs.push({...n,beat:n.beat+off,_tr:tr}); });
+    (c.walls||[]).forEach(o=>{ if(o.beat>=0&&o.beat<L) f.walls.push({...o,beat:o.beat+off,_tr:tr}); });
+    (c.arcs||[]).forEach(a=>{ if(a.b>=0&&a.b<L) f.arcs.push({...a,b:a.b+off,tb:a.tb+off,_tr:tr}); });
+    (c.chains||[]).forEach(cc=>{ if(cc.b>=0&&cc.b<L) f.chains.push({...cc,b:cc.b+off,tb:cc.tb+off,_tr:tr}); });
+    (c.lights||[]).forEach(ev=>{ if(ev.beat>=0&&ev.beat<L) f.lightEvents.push({...ev,beat:ev.beat+off,_tr:tr}); }); }
+  f.lightEvents.sort((a,b)=>a.beat-b.beat);
+  return f;
+}
 function compileLayersToFlat(){   // 各セクションの内容を、そのセクションのbeat位置に合成（チェーン順でなく位置が真実）
   if(_flatDirty) flushFlatEdits();   // 未同期の3D編集を消さない（compile前にcontentへ確定）
-  notes=[];bombs=[];walls=[];arcs=[];chains=[];lightEvents=[];
-  for(const s of sections){ if(s.kind==='null') continue; const c=s.content||{}, L=s.len||4, off=s.beat||0, tr=s.track||0;
-    (c.notes||[]).forEach(n=>{ if(n.beat>=0&&n.beat<L) notes.push({...n,beat:n.beat+off,_tr:tr}); });   // 負の拍=左トリムで隠れた分（保持・非出力）
-    (c.bombs||[]).forEach(n=>{ if(n.beat>=0&&n.beat<L) bombs.push({...n,beat:n.beat+off,_tr:tr}); });
-    (c.walls||[]).forEach(o=>{ if(o.beat>=0&&o.beat<L) walls.push({...o,beat:o.beat+off,_tr:tr}); });
-    (c.arcs||[]).forEach(a=>{ if(a.b>=0&&a.b<L) arcs.push({...a,b:a.b+off,tb:a.tb+off,_tr:tr}); });
-    (c.chains||[]).forEach(cc=>{ if(cc.b>=0&&cc.b<L) chains.push({...cc,b:cc.b+off,tb:cc.tb+off,_tr:tr}); });
-    (c.lights||[]).forEach(ev=>{ if(ev.beat>=0&&ev.beat<L) lightEvents.push({...ev,beat:ev.beat+off,_tr:tr}); }); }
-  lightEvents.sort((a,b)=>a.beat-b.beat);
+  ({notes,bombs,walls,arcs,chains,lightEvents}=flatFromSections(sections));
   applyInfoChain(); selection.clear(); lightSelection.clear(); gizmoMode=null; rebuild(); }
 // 逆同期: 3D編集で変わったフラット(notes[]等)を各クリップのcontentへ書き戻す。範囲外(トリムで隠れた分=負の拍/はみ出し)は保持
 let _flatDirty=false;   // 3D(NOTES/LIGHT)でフラットを編集した→contentへ未反映
@@ -3727,7 +3774,7 @@ ndcv.addEventListener('pointerdown', e=>{ if(ndView!=='layers') return;
     cur=Math.max(0,snapV(lXToBeat(sx))); offset=beatToTimeTM(cur);
     try{ndcv.setPointerCapture(e.pointerId);}catch(_){} return; }
   const s=clipAtLayer(sx,sy);
-  if(layerRazor){ if(s) splitSectionAt(s,lXToBeat(sx)); return; }
+  if(layerRazor){ if(s) splitSectionAt(s,snapV(lXToBeat(sx))); return; }   // 分割位置はスナップ幅に揃える（C＝再生ヘッドでのカットと同じ。以前はクリック位置そのままで拍4.15等の半端な所で切れた）
   if(e.button!==0) return;
   { const sw=_clipSw.find(r2=>sx>=r2.x&&sx<=r2.x+r2.w&&sy>=r2.y&&sy<=r2.y+r2.h);   // 色スウォッチ=既存ピッカーで色変更
     if(sw){ const sec=sections.find(x2=>x2.id===sw.id);
@@ -3751,7 +3798,10 @@ ndcv.addEventListener('pointermove', e=>{ if(ndView!=='layers') return;
   const r=ndcv.getBoundingClientRect(), sx=e.clientX-r.left, sy=e.clientY-r.top;
   _ndMouseY=sy;   // L/M/Sショートカット用にマウスyを記録
   if(layerPaste){ tlHoverBeat=(sx>=LGUT&&sy>=LRULER)?Math.max(0,snapV(lXToBeat(sx))):null; if(tlHoverBeat!=null) updateLayerPaste(tlHoverBeat); return; }   // ゴースト追従
-  if(markerDrag){ markerDrag.m.beat=Math.max(0,snapV(lXToBeat(sx))); markerDrag.moved=true; metaDirty=true; return; }   // マーカードラッグ中は拍だけ更新
+  if(markerDrag){ const nb=Math.max(0,snapV(lXToBeat(sx)));   // マーカードラッグ中は拍だけ更新
+    if(nb!==markerDrag.m.beat){ if(!markerDrag.moved) snapshot('node');   // 最初に実際に動く直前に1回だけ履歴（以前は積まず、Undoで前の操作が取り消されていた）
+      markerDrag.m.beat=nb; markerDrag.moved=true; metaDirty=true; }
+    return; }
   tlHoverBeat=(sx>=LGUT&&sy>=LRULER)?Math.max(0,snapV(lXToBeat(sx))):null;   // 黄ライン（マウス拍）
   _ndEdgeHover=!layerDrag&&!layerBand&&!layerSeek&&(layerResize!=null||!!clipEdgeAt(sx,sy));   // 端ホバー=ew-resize
   _ndClipHover=!layerBand&&!layerSeek&&!_ndEdgeHover&&!!clipAtLayer(sx,sy);   // 本体ホバー=掌
@@ -3774,7 +3824,7 @@ ndcv.addEventListener('pointermove', e=>{ if(ndView!=='layers') return;
   if(layerSeek){ cur=Math.max(0,snapV(lXToBeat(sx))); offset=beatToTimeTM(cur); return; }
   if(layerBand){ layerBand.x1=sx; layerBand.y1=sy;
     if(Math.abs(sx-layerBand.x0)+Math.abs(sy-layerBand.y0)>3) layerBand.moved=true; return; }
-  if(layerDrag){ if(!layerDrag.moved) snapshot('node');
+  if(layerDrag){
     let nb=snapV(lXToBeat(sx)-layerDrag.grabBeat);   // 移動は常にスナップ幅（Shiftスムーズ移動は廃止=1/60拍等の事故防止）。0クランプはグループ単位で下記
     const la=laneAtY(sy), lk0=secLk(layerDrag.s);
     let d=nb-(layerDrag.s.beat||0);
@@ -3796,6 +3846,8 @@ ndcv.addEventListener('pointermove', e=>{ if(ndView!=='layers') return;
       // 移動対象クリップ範囲のフラットも同時に平行移動 → 3Dビューがドラッグ中リアルタイム追従（全再構築なしで軽量）
       const moves=grp.map(x=>({x,ob:x.beat||0,ot:x.track||0,L:x.len||4,
         nb:(x.beat||0)+d,nt:clampT(x)}));
+      if(!moves.some(m2=>m2.nb!==m2.ob||m2.nt!==m2.ot)) return;   // 位置もレーンも変わらない（拍0で止まっている等）＝状態も履歴も変えない
+      if(!layerDrag.moved){ snapshot('node'); layerDrag.moved=true; }   // 最初に実際に動く直前に1回だけ履歴（以前は動かなくても積み、Undoが空振りした）
       const shift=(arr,f,f2)=>{ for(const it of arr){ const t=it[f]??0;
         for(const m2 of moves){ if((it._tr||0)===m2.ot&&t>=m2.ob-1e-6&&t<m2.ob+m2.L-1e-6){
           it[f]=t+(m2.nb-m2.ob); if(f2&&it[f2]!=null) it[f2]+=(m2.nb-m2.ob); it._tr=m2.nt; break; } } } };
@@ -3804,7 +3856,7 @@ ndcv.addEventListener('pointermove', e=>{ if(ndView!=='layers') return;
       for(const m2 of moves){ m2.x.beat=m2.nb; m2.x.track=m2.nt; }
       if(musicSelSet.size) shiftMusicSelBeat(d);   // songを同時選択している場合は同じ拍だけ連動（レーン移動時も拍dのみ適用）
     }
-    layerDrag.moved=true; return; }
+    return; }
   if(layerPan){ tlViewB0=Math.max(0,layerPan.startB0-(sx-layerPan.sx)/lPPB());   // 掴んだ方向へ表示窓を移動
     if(layerPan.lk) setScr(layerPan.lk,layerPan.sc0-(sy-layerPan.sy)); } });      // 上下パン=そのグループのスクロール
 ndcv.addEventListener('pointerup', e=>{ if(ndView!=='layers') return;
@@ -3878,7 +3930,7 @@ for(const g of [['n','sbN'],['l','sbL']]){ const lk=g[0], el=document.getElement
   } }
 ovcv.addEventListener('pointermove',e=>{ const r=ovcv.getBoundingClientRect(), sx=e.clientX-r.left, sy=e.clientY-r.top;
   tlHoverBeat=(sx>=TLGUT)?Math.max(0,snapV(xToBeat(sx))):null;   // Musicレーン上でも黄ライン追従
-  _ovEdgeHover=musicResize!=null||_musicBoxes.some(b=>Math.abs(sx-b.cx0)<=4||Math.abs(sx-b.cx1)<=4);   // 端=ew-resize
+  _ovEdgeHover=musicResize!=null||!!musicEdgeAt(sx);   // 本当の端=ew-resize（押した時のトリムと同じ判定）
   _ovClipHover=_musicBoxes.some(b=>sx>=b.cx0&&sx<=b.cx1);   // クリップ本体上=grab
 });
 ovcv.addEventListener('mouseleave',()=>{ tlHoverBeat=null; });
@@ -3895,8 +3947,10 @@ ndcv.addEventListener('dblclick', e=>{ if(ndView!=='layers') return;   // クリ
     const hit=_mkRects.find(r2=>sx>=r2.x&&sx<=r2.x+r2.w&&sy>=r2.y&&sy<=r2.y+r2.h);
     if(hit){ const mk=markers[hit.i];
       ndInlineEdit({x:hit.x-2,y:hit.y,w:Math.max(90,hit.w+24),h:MKRH-2},mk.name,v=>{ v=(v||'').trim();
-        if(!v){ markers.splice(hit.i,1); stat('マーカーを削除しました'); }
-        else { mk.name=v; stat(tf('msg.markerName','マーカー名: {name}',{name:v})); }
+        // 改名・削除も履歴に積む（以前は積まず Undo で戻せなかった）。名前が同じなら何もしない
+        if(!v){ const i2=markers.indexOf(mk); if(i2<0) return; snapshot('node'); markers.splice(i2,1); stat('マーカーを削除しました'); }
+        else if(v!==mk.name){ snapshot('node'); mk.name=v; stat(tf('msg.markerName','マーカー名: {name}',{name:v})); }
+        else return;
         metaDirty=true; },false,ndcv); }
     return; }
   if(sx<LGUT||sy<LRULER) return;
@@ -3913,6 +3967,10 @@ function setNdView(v){ ndView=v; if(v==='layers') layerFit(); }   // ビュー�
 
 // ============ M1: 区間操作 + パターンライブラリ ============
 const MIR_D={0:0,1:1,2:3,3:2,4:5,5:4,6:7,7:6,8:8};   // 左右ミラーの向き変換
+const MIR_M={1:2,2:1};   // アークの巻き方向（V3 sliders の m=midAnchorMode: 0=まっすぐ/1=時計回り/2=反時計回り）。鏡に映すと回る向きが逆になる（0はそのまま＝Beat Saber本体のミラーと同じ）
+// ノーツの角度の微調整（V3 colorNotes の a）を逆回りへ。エディタの項目ではなく raw（.datの標準外の値）に入っていて、書き出しは raw が土台（buildDiffJsonFor）。
+// raw はコピー元のクリップ等と同じ物を共有していることがあるので、書き換えずに作り直す
+function mirrorNoteAngle(o){ const a=o.raw&&o.raw.a; if(typeof a==='number'&&a) o.raw={...o.raw,a:-a}; }
 function sectionRange(s){
   const ordered=[...sections].sort((a,b)=>a.beat-b.beat);
   const i=ordered.indexOf(s);
@@ -3945,11 +4003,11 @@ function pasteFragment(frag,at){
 function mirrorRegion(b0,b1){
   snapshot(); let n=0;
   for(const o of regionObjs(b0,b1)){ n++;
-    if(o.kind==='note'){ o.x=3-o.x; o.d=MIR_D[o.d]??o.d; o.c=o.c===0?1:0; }
+    if(o.kind==='note'){ o.x=3-o.x; o.d=MIR_D[o.d]??o.d; o.c=o.c===0?1:0; mirrorNoteAngle(o); }   // 角度の微調整 a・アークの巻き方向 m もクリップの左右反転（mirrorClip）と同じく反転
     else if(o.kind==='bomb'){ o.x=3-o.x; }
     else if(o.kind==='wall'){ o.x=3-o.x-(o.w-1); }
     else { o.x=3-o.x; o.tx=3-o.tx; o.d=MIR_D[o.d]??o.d; o.c=o.c===0?1:0;
-      if(o.kind==='arc') o.tc=MIR_D[o.tc]??o.tc; }
+      if(o.kind==='arc'){ o.tc=MIR_D[o.tc]??o.tc; o.m=MIR_M[o.m]??o.m; } }
     refreshMesh(o); }
   stat(tf('msg.mirrorApply','ミラー適用 ×{n}（左右+色反転）',{n}));
 }
@@ -3960,10 +4018,10 @@ function mirrorClip(s){   // クリップ単位の左右反転（位置=左右�
   snapshot('node');                  // contentはnodeドメイン（sections）に含まれる＝Undoで戻る
   if(!s.gid) s.gid='g'+(++_nid);
   const c=s.content||{}; let n=0;
-  for(const o of (c.notes||[])){ o.x=3-o.x; o.d=MIR_D[o.d]??o.d; o.c=o.c===0?1:0; n++; }
+  for(const o of (c.notes||[])){ o.x=3-o.x; o.d=MIR_D[o.d]??o.d; o.c=o.c===0?1:0; mirrorNoteAngle(o); n++; }   // 角度の微調整 a も逆回りに（以前は45のまま残っていた）
   for(const o of (c.bombs||[])){ o.x=3-o.x; n++; }
   for(const o of (c.walls||[])){ o.x=3-o.x-((o.w||1)-1); n++; }   // 壁は幅のぶん左端を戻す（mirrorRegionと同一式）
-  for(const o of (c.arcs||[])){ o.x=3-o.x; o.tx=3-o.tx; o.d=MIR_D[o.d]??o.d; o.tc=MIR_D[o.tc]??o.tc; o.c=o.c===0?1:0; n++; }
+  for(const o of (c.arcs||[])){ o.x=3-o.x; o.tx=3-o.tx; o.d=MIR_D[o.d]??o.d; o.tc=MIR_D[o.tc]??o.tc; o.c=o.c===0?1:0; o.m=MIR_M[o.m]??o.m; n++; }   // 巻き方向も時計回り⇄反時計回り
   for(const o of (c.chains||[])){ o.x=3-o.x; o.tx=3-o.tx; o.d=MIR_D[o.d]??o.d; o.c=o.c===0?1:0; n++; }
   for(const ev of (c.lights||[])){
     const isCol=laneKind(ev.et)==='color';   // iが色なのはcolorレーンだけ。SPEED=回転速度・BOOST=ON/OFF・RINGトリガーのiは色ではないので絶対に触らない
@@ -4287,8 +4345,7 @@ function dupJumpItem(kind,dir){
   const it=list[idx];
   if(kind==='n'){ selection=new Set([it]); lightSelection.clear(); gizmoMode=it.kind==='chain'?null:'move'; }
   else { lightSelection=new Set([it]); selection.clear(); }
-  seekEase(((it.beat??it.b))||0);
-  const dz=0-controls.target.z; camera.position.z+=dz; controls.target.z+=dz; controls.update();   // 着地点を画面中央へ（.キーと同流儀）
+  seekEase(((it.beat??it.b))||0);   // カメラも着地点（再生ヘッド）へ寄る
   stat(tf('msg.dupNav','重複{kind} {n}/{total} を選択',{kind:kind==='n'?t('word.notes','ノーツ'):t('word.light','ライト'),n:idx+1,total:list.length}));
 }
 
@@ -4951,6 +5008,20 @@ let BPM=120, songDur=0, cur=0, snap=0.5, brush={c:0,d:1,type:'note'};
 // 拍番号は据え置きで、テンポを変えると後ろの絶対時刻が自動でズレる（bpmEventsそのままの標準挙動）。
 let tempoParts=[];
 function sortTempoParts(){ tempoParts.sort((a,b)=>a.beat-b.beat); }
+// 譜面(.dat)のテンポ変化 → テンポパート。V3=bpmEvents{b,m} / V2=_BPMChanges{_time,_BPM}（_bpmChanges も）。
+// 拍0の値は基準BPM（Info.dat）として扱い取り込まない（テンポパートは拍0には置けない＝addTempoPartAtの下限と同じ）。
+// 直前と同じテンポの変化点は意味が無いので省く
+function tempoPartsFromDat(d,baseBpm){
+  const src=(d&&(Array.isArray(d.bpmEvents)?d.bpmEvents.map(e=>({beat:+e.b,bpm:+e.m}))
+    :(d._BPMChanges||d._bpmChanges||[]).map(e=>({beat:+e._time,bpm:+e._BPM||+e._bpm}))))||[];
+  const byBeat=new Map();   // 同じ拍に複数あれば後に書かれたもの
+  for(const p of src) if(isFinite(p.beat)&&p.beat>1e-6&&p.bpm>0) byBeat.set(Math.round(p.beat*1e6),p);
+  const out=[]; let prev=baseBpm;
+  for(const p of [...byBeat.values()].sort((a,b)=>a.beat-b.beat)){
+    if(Math.abs(p.bpm-prev)<1e-9) continue;
+    out.push({beat:p.beat,bpm:p.bpm}); prev=p.bpm; }
+  return out;
+}
 function bpmAtBeat(b){ let bpm=BPM; for(const p of tempoParts){ if(p.beat>b+1e-9) break; bpm=p.bpm; } return bpm; }
 function beatToTimeTM(b){   // 区分的な拍→秒（曲頭=拍0からの経過秒。offset/leadInは呼び出し側で別途加減する）
   let bb=0, bpm=BPM, tt=0;
@@ -4977,8 +5048,13 @@ function viewBeat(){ if(vwB!=null) return vwB;   // レイテンシ補正はミ�
 function seekEase(target,dur){ target=Math.max(0,target); if(playing) pause();
   vwB=null;   // 3Dは世界スクロールでヘッド追従へ
   tlViewB0=null; tlB0=Math.max(0,target-tlSpan*0.5);   // NLE窓を常にヘッド中心へ飛ばす（手動パンも解除＝再生バー/ショートカットで必ず再生ヘッドへ飛ぶ。ヘルバ様指定）
-  try{ const dz=0-controls.target.z; camera.position.z+=dz; controls.target.z+=dz; controls.update(); }catch(_){}   // 3Dカメラもヘッド(z=0)へ寄せる（「.」キーと同じ＝3D EDITでも再生ヘッドへ飛ぶ）
+  try{ camToHead(); }catch(_){}   // 3Dカメラもヘッドへ寄せる（「.」キーと同じ＝3D EDITでも再生ヘッドへ飛ぶ）
   curAnim={from:cur,to:target,start:performance.now(),dur:dur||240,last:cur}; }
+// 3Dカメラを再生ヘッドへ寄せる: タイムライン軸(Z)の平行移動だけ（角度・高さ・横位置は不変）。
+// カメラ固定モードは注視点をヘッド(z=0)へ。配置モードは定位置ビューの注視点がヘッドより先(z=4.08)にあるのでそこへ
+// （以前はモードによらずz=0へ寄せていたため、配置モードで先頭・曲末・マーカーへ飛ぶたびに定位置カメラが約4ずれた）
+function camToHead(){ const tz=camMode==='place'?placeCamPreset().tgt[2]:0;
+  const dz=tz-controls.target.z; camera.position.z+=dz; controls.target.z+=dz; controls.update(); }
 // ==== 配置モード / 編集モード（Qで切替・ヘルバ様指定）====
 // 'place'=配置: カメラ=定位置ビュー＋タイムライン追従（再生しながらちょっとづつ置く）／ 'edit'=編集: カメラ自由・再生に非追従（カメラと再生は完全独立）
 let camMode='edit';
@@ -5026,13 +5102,19 @@ const HIST_MAX=512;                                         // 統一履歴の�
 // 一本化: {d:対象ドメイン, s:差し戻しダンプ, diff:その編集をした難易度} を発生順に積む（NLE/NOTES/LIGHT混在）。
 // diff を持たせることで難易度をまたいでも1本の履歴で辿れる＝切替そのものは履歴に積まない（空振りのUndoを作らないため・ヘルバ様指定 2026-07-17）
 const undoStack=[], redoStack=[];
+let _histGest=null;   // 1回のドラッグの間だけ入る Set（色の選択画面の円・明るさの帯・数値の帯＝ndColorEdit の commit）。その間は領域ごとに最初の1回だけ積む＝ドラッグ前の状態が1つ残る
 function pushHist(d,s2){ if(d==='note'||d==='light') _flatDirty=true;   // 3D編集(note/light)=フラットが変わった→contentへ要反映
+  if(_histGest){ if(_histGest.has(d)) return; _histGest.add(d); }   // 以前は動かすたびに積み、元の色に戻すのにUndoが何回も要った
   undoStack.push({d,s:s2,diff:currentDiffName}); if(undoStack.length>HIST_MAX) undoStack.shift(); redoStack.length=0; }
 function dumpDomain(d){
   if(d==='node') return JSON.stringify({sections,graphIO,edges:graphEdges,extra:extraNodes.map(({handle,...r})=>r),
     cuts:[...cutSet],altIns,altOuts,altSongs:altSongs.map(({handle,...r})=>r),activeUids,
     song:songNode?(({handle,...r})=>r)(songNode):null,songDeleted,musicBeat,musicSegs,markers,tempoParts,noteRed:RED,noteBlue:BLUE,laserRed:LRED,laserBlue:LBLUE,
     laySel:[...layerSel],musSel:[...musicSelSet],lanesN:notesLanes,lanesL:lightLanes});   // 選択・マーカーも履歴の一部（マーカー作成/削除もUndo可）
+  if(d==='diffs'){   // 全難易度のライト（自動ライティング用）: 今の難易度は'node'、他の難易度はクリップとフラットのライト。レーン追加でずれるロックも含める
+    const curK=(currentDiffName||'').toLowerCase(), others={};
+    for(const k in projDiffs){ if(k===curK||!projDiffs[k]) continue; others[k]={sections:projDiffs[k].sections||[],lightEvents:projDiffs[k].lightEvents||[]}; }
+    return JSON.stringify({node:dumpDomain('node'),others,locks:[...layerLockS]}); }
   if(d==='info') return JSON.stringify({g:{...infoGraph,cam:undefined},sel:[..._inSel]});   // ビュー(cam)は履歴対象外
   if(d==='light') return JSON.stringify({lightEvents,sel:[...lightSelection].map(ev=>lightEvents.indexOf(ev)).filter(i2=>i2>=0)});
   return JSON.stringify({notes,bombs,walls,arcs,chains,
@@ -5040,6 +5122,11 @@ function dumpDomain(d){
 }
 function restoreDomain(d,s2){
   const v=JSON.parse(s2);
+  if(d==='diffs'){
+    for(const k in v.others){ const st=projDiffs[k]; if(st){ st.sections=v.others[k].sections; st.lightEvents=v.others[k].lightEvents; } }
+    restoreDomain('node',v.node);   // 先にレーン（ロックのずらしも含む）を戻し、ロックは保存した状態そのものに置き換える
+    layerLockS.clear(); for(const k of v.locks||[]) layerLockS.add(k);
+    return; }
   if(d==='node'){
     // handleはJSON不可なので現物から引き継ぐ
     const covH=new Map(extraNodes.filter(x=>x.handle).map(x=>[x.id,x.handle]));
@@ -5058,19 +5145,30 @@ function restoreDomain(d,s2){
     if(Array.isArray(v.tempoParts)) tempoParts=v.tempoParts;   // テンポパートもUndo/Redoで往復
     metaDirty=true;
     layerSel=new Set(v.laySel||[]); musicSelSet=new Set(v.musSel||[]);   // 選択も復元
-    if(v.lanesN) notesLanes=v.lanesN; if(v.lanesL) lightLanes=v.lanesL;
+    // レーンの増減は一番上で行い全体を同じ段数ずらす＝戻る/やり直す時はレーン数の差だけロックもずらす（ロックは 'node' の履歴に入っていないため）
+    if(v.lanesN){ shiftLocks('n',v.lanesN-notesLanes); notesLanes=v.lanesN; }
+    if(v.lanesL){ shiftLocks('l',v.lanesL-lightLanes); lightLanes=v.lanesL; }
     if(v.noteRed!=null){ RED=v.noteRed>>>0; BLUE=v.noteBlue>>>0; setNoteColStr(); refreshInfoCards(); applyModeDim(); }
     if(v.laserRed!=null){ LRED=v.laserRed>>>0; LBLUE=v.laserBlue>>>0; laserBoostCols(); refreshInfoCards(); }
     ndSel=null;
     relinkDiffEdges();
+    // 戻したクリップが正＝未反映のフラット（3D編集）は書き戻さない。書き戻すと、ノーツのUndoの直後（同じ描画フレーム内）に
+    // レーン数の変わるUndoが続いた時、レーン番号の違う戻したクリップへ今のノーツが書き込まれ、別のクリップへ移っていた
+    //（undo/redo は戻す前に flushFlatEdits 済み＝編集はやり直し用の写しに入っている）
+    _flatDirty=false;
     compileLayersToFlat();                                  // フラットへ再展開（位置=真実。旧compileGraphToFlatはチェーン順でbeatを上書きしUndo/Redoを破壊していた）
   } else if(d==='info'){
     const cam=infoGraph.cam;                       // 現在のビューは維持
     infoGraph=v.g; infoGraph.cam=cam;
     _inSel=new Set(v.sel||[]);
     sanitizeInfoGraph();
-    { const ao=infoGraph.activeOut, o=infoGraph.outs[ao];   // 書き出し先ミラーを復元後の姿へ再同期（表示と実書き出し先の乖離防止）
-      outDirHandle=(o&&_outHandles[ao]&&_outHandles[ao].name===o.outDirName)?_outHandles[ao]:null;   // handleは名前が一致する時だけ引き継ぐ
+    { // handle（ランタイムのみ）は復元後の出力先と同じフォルダを指す時だけ引き継ぐ。実パスがあれば実パスで比べる（tryAutoRestoreNativeInputs と同じ）。
+      // 以前は名前だけで比べ、同じ名前の別の場所（C:\…\CustomLevels と D:\…\CustomLevels）へ選び直してUndoすると、画面は前のパスに戻るのに書き出しは選び直した方へ行っていた。
+      // 合わなければ未接続（「再接続」で選び直し）。控え（_outHandles）からも外す＝後でアクティブを選び直した時に古いhandleが戻らない
+      const fits=(h,o2)=>!!(h&&o2&&((h.nativePath||o2.outDirPath)?h.nativePath===o2.outDirPath:h.name===o2.outDirName));   // 実パスの無いブラウザのhandleは従来どおり名前で
+      for(const oid in _outHandles) if(!fits(_outHandles[oid],infoGraph.outs[oid])) delete _outHandles[oid];
+      const ao=infoGraph.activeOut, o=infoGraph.outs[ao];   // 書き出し先ミラーを復元後の姿へ再同期（表示と実書き出し先の乖離防止）
+      outDirHandle=(o&&_outHandles[ao])||null;
       if(o&&graphIO&&graphIO.out){ graphIO.out.folderName=o.folderName||''; graphIO.out.outDirName=o.outDirName||''; graphIO.out.outDirPath=o.outDirPath||''; } }
     _infoSnapT=0;   // Undo直後の再入力が600ms窓に飲まれて履歴が取れなくなるのを防ぐ
     layoutInfoNodes(); applyInfoGraph(); infoSelApply();
@@ -5084,7 +5182,7 @@ function restoreDomain(d,s2){
   }
   metaDirty=true;
 }
-const DOM_LABEL={note:'NOTES',light:'LIGHT',node:'NODE',info:'INFO'};
+const DOM_LABEL={note:'NOTES',light:'LIGHT',node:'NODE',info:'INFO',diffs:'ALL DIFFS'};
 function snapshot(dom){
   const d=dom||(lightMode?'light':'note');
   pushHist(d,dumpDomain(d));
@@ -5107,12 +5205,14 @@ function syncHistView(d){
 function undo(){ const e=undoStack.pop();
   if(!e){ stat('取り消す操作がありません'); return; }
   const moved=gotoHistDiff(e); syncHistView(e.d);
+  flushFlatEdits();   // 未反映の3D編集を今のクリップへ確定してから、やり直し用の写しを取る（restoreDomain('node') は戻したクリップへ書き戻さない）
   redoStack.push({d:e.d,s:dumpDomain(e.d),diff:currentDiffName}); restoreDomain(e.d,e.s);
   if(e.d==='note'||e.d==='light') _flatDirty=true;   // フラット復元→contentへ再同期（NLEミニロールと整合）
   stat(tf('msg.undo','取り消し {dom}（残り{n}）',{dom:DOM_LABEL[e.d]+(moved?' @'+moved:''),n:undoStack.length})); }
 function redo(){ const e=redoStack.pop();
   if(!e){ stat('やり直す操作がありません'); return; }
   const moved=gotoHistDiff(e); syncHistView(e.d);
+  flushFlatEdits();   // undo と同じ
   undoStack.push({d:e.d,s:dumpDomain(e.d),diff:currentDiffName}); restoreDomain(e.d,e.s);
   if(e.d==='note'||e.d==='light') _flatDirty=true;   // フラット復元→contentへ再同期
   stat(tf('msg.redo','やり直し {dom}（残り{n}）',{dom:DOM_LABEL[e.d]+(moved?' @'+moved:''),n:redoStack.length})); }
@@ -5947,19 +6047,20 @@ async function prepareMediaFrag(item){   // 現在の難易度の譜面だけを
   }catch(e){ console.warn('MEDIA先読みに失敗',e); }
   item._fragLoading=0;
 }
-// .dat を編集用フラグメント（Sheetのcontent形式）へ変換
+// .dat を編集用フラグメント（Sheetのcontent形式）へ変換。V3は raw=元の値を保持（書き出しは raw を土台に標準の値で上書き＝
+// 角度オフセット a・customData 等が残る。loadDiff と同じ）。V2は raw 無し（一括読込の難易度はV3で書き出すため、V2の項目名が混ざる）
 function parseDiffFragment(d){
   const v3='colorNotes' in d||!!String(d.version||'').match(/^[34]/);
   const out={notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:[]}; let mx=0;
   const M=b=>{ b=+b||0; if(b>mx)mx=b; return b; };
   if(v3){
-    for(const n of d.colorNotes||[]) out.notes.push({kind:'note',beat:M(n.b),x:n.x,y:n.y,c:n.c,d:n.d,raw:null});
-    for(const n of d.bombNotes||[]) out.bombs.push({kind:'bomb',beat:M(n.b),x:n.x,y:n.y,raw:null});
-    for(const o of d.obstacles||[]) out.walls.push({kind:'wall',beat:M(o.b),x:o.x,y:o.y,dur:o.d,w:o.w,h:o.h,raw:null});
-    for(const a of d.sliders||[]) out.arcs.push({kind:'arc',b:M(a.b),c:a.c,x:a.x,y:a.y,d:a.d,mu:a.mu,tb:M(a.tb),tx:a.tx,ty:a.ty,tc:a.tc,tmu:a.tmu,m:a.m,raw:null});
-    for(const c of d.burstSliders||[]) out.chains.push({kind:'chain',b:M(c.b),c:c.c,x:c.x,y:c.y,d:c.d,tb:M(c.tb),tx:c.tx,ty:c.ty,sc:c.sc,s:c.s,raw:null});
+    for(const n of d.colorNotes||[]) out.notes.push({kind:'note',beat:M(n.b),x:n.x,y:n.y,c:n.c,d:n.d,raw:n});
+    for(const n of d.bombNotes||[]) out.bombs.push({kind:'bomb',beat:M(n.b),x:n.x,y:n.y,raw:n});
+    for(const o of d.obstacles||[]) out.walls.push({kind:'wall',beat:M(o.b),x:o.x,y:o.y,dur:o.d,w:o.w,h:o.h,raw:o});
+    for(const a of d.sliders||[]) out.arcs.push({kind:'arc',b:M(a.b),c:a.c,x:a.x,y:a.y,d:a.d,mu:a.mu,tb:M(a.tb),tx:a.tx,ty:a.ty,tc:a.tc,tmu:a.tmu,m:a.m,raw:a});
+    for(const c of d.burstSliders||[]) out.chains.push({kind:'chain',b:M(c.b),c:c.c,x:c.x,y:c.y,d:c.d,tb:M(c.tb),tx:c.tx,ty:c.ty,sc:c.sc,s:c.s,raw:c});
     absorbChainCompanionNotes(out.notes, out.chains);   // 実機.datのチェーン頭colorNoteはチェーンへ吸収（幽霊廃止・書き出し時に再合成）
-    for(const e of d.basicBeatmapEvents||[]) out.lights.push({beat:M(e.b),et:e.et,i:e.i??0,f:e.f??1,raw:null});
+    for(const e of d.basicBeatmapEvents||[]) out.lights.push({beat:M(e.b),et:e.et,i:e.i??0,f:e.f??1,raw:e});
   } else {
     for(const n of d._notes||[]){
       if(n._type===3) out.bombs.push({kind:'bomb',beat:M(n._time),x:n._lineIndex,y:n._lineLayer,raw:null});
@@ -5989,12 +6090,12 @@ function placeClipLine(item,place){
     :{notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:cp(c.lights)};
   const cnt=lk==='n'?(content.notes.length+content.bombs.length+content.walls.length+content.arcs.length+content.chains.length):content.lights.length;
   if(!cnt){ showErr('このクリップは空です'); return; }
-  snapshot('node'); edgesInited=true;
   const len=Math.max(4,Math.ceil((item._len||8)/4)*4);
   const beat=Math.max(0,place?place.beat:snapV(cur));
   let tr=laneCountOf(lk)-1;   // 一番数字の低いトラック(Notes1/Light1=一番下)から詰める（重なる分だけ上へ・ドロップしたレーンには縛られない）
   while(tr>=0&&laneOverlaps(beat,len,lk,tr)) tr--;
   if(tr<0){ showErr(tf('msg.laneFull','この位置は{grp}レーンが全て埋まっています',{grp:lk==='n'?t('word.notes','ノーツ'):t('word.light','ライト')})); return; }
+  snapshot('node'); edgesInited=true;   // 履歴は置き場所が決まってから（以前は先に積み、置けなかった時に空振りのUndoが残った）
   const sec={id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat,track:tr,lk,col:pickStripCol(),
     label:item.name,len,kind:'sheet',content};
   sections.push(sec); relinkDiffEdges(); layerSel=new Set([sec.id]);
@@ -6017,22 +6118,23 @@ async function addSongLine(item,wx,wy,place){   // place={beat,lk,track}: ドロ
       :parseDiffFragment(JSON.parse(await (await item.dir.getFileHandle(bm._beatmapFilename)).getFile().then(f=>f.text())));
   }catch(err){ showErr(tf('msg.chartLoadFail','譜面の読込に失敗: {err}',{err})); return; }
   const lk=(place&&place.lk)==='l'?'l':'n';
-  if(lk==='n'){ const k=(curDn+'Standard.dat').toLowerCase();   // ★ノーツ譜面を持ってきた時だけ、その難易度のNJS/オフセットを取得（ライト配置では一切変更しない）
-    njsCfg[k]={ njs:(+bm._noteJumpMovementSpeed>0)?+bm._noteJumpMovementSpeed:(_DIFF_NJS[curDn]||16), offset:+bm._noteJumpStartBeatOffset||0 };
-    metaDirty=true; if(typeof refreshMusicHdr==='function') refreshMusicHdr(); }
   const cp=a=>(a||[]).map(o=>({...o}));
   const content=lk==='n'
     ?{notes:cp(frag.notes),bombs:cp(frag.bombs),walls:cp(frag.walls),arcs:cp(frag.arcs),chains:cp(frag.chains),lights:[]}
     :{notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:cp(frag.lights)};
   const cnt=lk==='n'?(content.notes.length+content.bombs.length+content.walls.length+content.arcs.length+content.chains.length):content.lights.length;
   if(!cnt){ showErr(tf('msg.chartNoContent','この譜面（{diff}）に{kind}がありません',{diff:dispDiff(curDn),kind:lk==='n'?t('word.notes','ノーツ'):t('word.lighting','ライティング')})); return; }
-  snapshot('node');
-  edgesInited=true;                                        // 自動直列配線をここからの追加に走らせない
   const len=Math.max(4,Math.ceil((frag._max+1)/4)*4);
   const beat=Math.max(0,place?place.beat:snapV(cur));
   let tr=laneCountOf(lk)-1;   // 一番数字の低いトラック(Notes1/Light1=一番下)から詰める（重なる分だけ上へ・ドロップしたレーンには縛られない）
   while(tr>=0&&laneOverlaps(beat,len,lk,tr)) tr--;
   if(tr<0){ showErr(tf('msg.laneFullNoStack','この位置は{grp}レーンが全て埋まっています（重ねて配置はできません）',{grp:lk==='n'?t('word.notes','ノーツ'):t('word.light','ライト')})); return; }
+  // 置き場所が決まってから NJS の取得と履歴（以前は先に行い、置けなかった時も NJS が書き換わり空振りの Undo が残った）
+  if(lk==='n'){ const k=(curDn+'Standard.dat').toLowerCase();   // ★ノーツ譜面を持ってきた時だけ、その難易度のNJS/オフセットを取得（ライト配置では一切変更しない）
+    njsCfg[k]={ njs:(+bm._noteJumpMovementSpeed>0)?+bm._noteJumpMovementSpeed:(_DIFF_NJS[curDn]||16), offset:+bm._noteJumpStartBeatOffset||0 };
+    metaDirty=true; if(typeof refreshMusicHdr==='function') refreshMusicHdr(); }
+  snapshot('node');
+  edgesInited=true;                                        // 自動直列配線をここからの追加に走らせない
   const sec={id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat,track:tr,lk,col:pickStripCol(),
     label:info._songName||item.name,len,kind:'sheet',content};
   sections.push(sec); relinkDiffEdges(); layerSel=new Set([sec.id]);
@@ -6060,20 +6162,24 @@ async function bulkLoadSongData(item){
   try{
     const hasMusic=!!audioBuf&&!songDeleted;    // 既に音源が入っている＝Music(音源・BPM・プレビュー)は上書きせず読み込まない（ヘルバ様指定）
     if(!hasMusic) await loadSongFromItem(item,0);            // 音源・BPM・プレビュー区間（既に音源がある時はスキップ）
-    await dropInfoNodesFromItem(item,60,60);    // 曲情報＋カバー画像ノード（未接続）
+    { const sp=infoFreeSpot();   // 曲情報＋カバー画像（＋試聴）ノード（未接続）。既存のノードと重ならない所へ
+      await dropInfoNodesFromItem(item,sp.x,sp.y); }
     const sets=info._difficultyBeatmapSets||[];
     const std=sets.find(s2=>s2._beatmapCharacteristicName==='Standard')||sets[0];
     const bms=(std&&std._difficultyBeatmaps)||[];
     if(!bms.length){ showOk(tf('msg.bulkSongNoChart','「{name}」に譜面が含まれていないため、曲情報のみ取り込みました',{name:info._songName||item.name})); return; }
     snapshot('node');
     let placedDiffs=0, placedClips=0, curTouched=false;
+    const otherTouched=new Set();   // クリップを足した、開いていない難易度
+    let tempoSrc=null;   // テンポ変化の読み元（最初に bpmEvents/_BPMChanges を持っていた譜面）
     for(const bm of bms){
       const dnm=bm._difficulty; if(!dnm) continue;
       const key=(dnm+'Standard.dat').toLowerCase();
       njsCfg[key]={ njs:(+bm._noteJumpMovementSpeed>0)?+bm._noteJumpMovementSpeed:(_DIFF_NJS[dnm]||16), offset:+bm._noteJumpStartBeatOffset||0 };
-      let frag;
-      try{ frag=parseDiffFragment(JSON.parse(await (await item.dir.getFileHandle(bm._beatmapFilename)).getFile().then(f2=>f2.text()))); }
+      let frag, dj;
+      try{ dj=JSON.parse(await (await item.dir.getFileHandle(bm._beatmapFilename)).getFile().then(f2=>f2.text())); frag=parseDiffFragment(dj); }
       catch(_){ continue; }   // 譜面ファイル自体が読めなくてもNJS/オフセットは取得済みのまま次の難易度へ
+      if(!tempoSrc&&tempoPartsFromDat(dj,BPM).length) tempoSrc=dj;
       const cp=a=>(a||[]).map(o=>({...o}));
       const contentN={notes:cp(frag.notes),bombs:cp(frag.bombs),walls:cp(frag.walls),arcs:cp(frag.arcs),chains:cp(frag.chains),lights:[]};
       const contentL={notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:cp(frag.lights)};
@@ -6088,12 +6194,34 @@ async function bulkLoadSongData(item){
         const tr=firstFreeTrackIn(target,lk,0,len,LANE_MAX); if(tr<0) return;
         target.push({id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat:0,track:tr,lk,col:pickStripCol(),
           label:info._songName||item.name,len,kind:'sheet',content});
-        placedClips++; if(isCur) curTouched=true; };
+        placedClips++; if(isCur) curTouched=true; else otherTouched.add(key); };
       mk('n',contentN,cntN); mk('l',contentL,cntL);
     }
+    // テンポ変化（V3 bpmEvents / V2 _BPMChanges）→テンポパート。NLMのテンポは全難易度共通なので最初に見つかった譜面のものを使う。
+    // 音源も読み込んだ時はそのまま取り込む。音源が既にある時（音源・BPMは上書きしない＝ヘルバ様指定）は、
+    // 同じ曲の譜面を持ってきた（取り込むべき）のか、別の曲の譜面を自分の曲へ持ってきた（取り込むと自分の曲のテンポが壊れる）のかを
+    // アプリでは見分けられないので、利用者に尋ねる。取り込まない時は、後でテンポパートで足せるよう地点を知らせる
+    let tempoNote='';
+    if(tempoSrc){
+      const tp=tempoPartsFromDat(tempoSrc,BPM);
+      const list=tp.map(p=>tf('msg.tempoPoint','拍{beat}でBPM{bpm}',{beat:+p.beat.toFixed(3),bpm:p.bpm})).join(t('word.listSep','、'));
+      let take=!hasMusic;
+      if(hasMusic){
+        const srcBpm=+info._beatsPerMinute;
+        take=await askYesNo(tf('dlg.tempoImport','読み込んだ譜面にはBPMの変化があります（{list}）。\n今のプロジェクトのテンポに取り込みますか？\n\n同じ曲の譜面なら「取り込む」、別の曲の譜面を自分の曲へ持ってきたなら「取り込まない」を選んでください。',{list})
+          +(tempoParts.length?tf('dlg.tempoImportReplace','\n※取り込むと、今のテンポパート（{n}個）は置き換わります。',{n:tempoParts.length}):'')
+          +(srcBpm>0&&Math.abs(srcBpm-BPM)>1e-9?tf('dlg.tempoImportBase','\n※基準のBPMは今のまま（今 {now}／読み込んだ譜面 {src}）。',{now:BPM,src:srcBpm}):''),
+          t('dlg.tempoImportYes','取り込む'),t('dlg.tempoImportNo','取り込まない'));
+      }
+      if(take){ tempoParts=tp; sortTempoParts(); }
+      else tempoNote=tf('msg.tempoNotImported','　※BPMの変化（{list}）は取り込んでいません。必要ならテンポパートで足してください',{list});
+    }
     if(curTouched){ relinkDiffEdges(); compileLayersToFlat(); }
+    // 開いていない難易度はクリップを足しただけではフラット配列（書き出し・譜面チェックが読む）が空のまま＝クリップから作る
+    //（難易度を開いた時の loadDiff と同じく、クリップの内容が正）
+    for(const key of otherTouched){ const st=projDiffs[key]; if(st) Object.assign(st,flatFromSections(st.sections)); }
     metaDirty=true; if(typeof refreshMusicHdr==='function') refreshMusicHdr();
-    showOk(tf('msg.bulkSongLoaded','「{name}」のデータを一括読み込みしました（{n}難易度分・{c}クリップ配置）{skip}',{name:info._songName||item.name,n:placedDiffs,c:placedClips,skip:hasMusic?t('msg.bulkSongMusicKept','　※音源は既存のものを維持'):''}));
+    showOk(tf('msg.bulkSongLoaded','「{name}」のデータを一括読み込みしました（{n}難易度分・{c}クリップ配置）{skip}',{name:info._songName||item.name,n:placedDiffs,c:placedClips,skip:(hasMusic?t('msg.bulkSongMusicKept','　※音源は既存のものを維持'):'')+tempoNote}));
   }catch(err){ showErr(tf('msg.bulkSongLoadFail','曲データの一括読込に失敗: {err}',{err})); }
 }
 document.getElementById('loadBtn').addEventListener('click', async ()=>{
@@ -6133,6 +6261,9 @@ async function afterFolder(){
     catch(e){ console.warn('プロジェクト読込失敗',e); } }
   try{ await applyProject(pj); }
   catch(err){ showErr(tf('msg.projApplyErr','プロジェクト適用エラー: {err}',{err:err&&err.stack||err})); }
+  if(!pj){   // .dat からの新規: 譜面のテンポ変化をテンポパートへ（プロジェクトがある時はそちらのテンポパートが正）
+    for(const bm of (std?._difficultyBeatmaps||[])){ const f=files[String(bm._beatmapFilename||'').toLowerCase()]; if(!f) continue;
+      try{ const tp=tempoPartsFromDat(JSON.parse(await f.text()),BPM); if(tp.length){ tempoParts=tp; sortTempoParts(); break; } }catch(_){} } }
   document.getElementById('saveBtn').style.display='';
   document.getElementById('saveAsBtn').style.display='';
   document.getElementById('openProjBtn').style.display='';
@@ -6263,7 +6394,7 @@ async function tryAutoLoadSongNative(){
   try{
     const j=await window.pywebview.api.read_song_file(songNode.nativePath);
     if(!j||!j.ok) return;
-    await applyLoadedSong(b64ToBuf(j.data),j.name);
+    await applyLoadedSong(b64ToBuf(j.data),j.name,true);
     showOk(tf('msg.audioRestored','音源を復元しました: {name}',{name:j.name}));
   }catch(e){ console.warn('音源の自動復元に失敗',e); }
 }
@@ -6492,21 +6623,25 @@ function buildDiffJsonFor(st){
   const mN=st.notes||[], mB=st.bombs||[], mW=st.walls||[], mA=st.arcs||[], mL=st.lightEvents||[];
   const chainHeadOut=mC.map(c=>({a:0,b:c.b,x:c.x,y:c.y,c:c.c,d:c.d===8?0:c.d}));
   const stripChainTuning=r=>{ if(!r) return r; const o={...r}; for(const k in CHAIN_RAW_KEYS) delete o[k]; return o; };   // cpm/la/s2d/fcp/csqu/td はエディタ専用値・.dat未出力
+  // raw のうち書き出す形式の項目だけ（V2の項目名は _ で始まる・V3は始まらない）。V2の譜面のクリップをV3の難易度へ（逆も）
+  // 読み込んだ時に、別の形式の項目名（_time や b 等）が混ざらないように
+  const RF=(r,v3)=>{ if(!r) return null; let o=null; for(const k in r){ if((k[0]==='_')!==v3){ o=o||{}; o[k]=r[k]; } } return o; };
+  const R3=o=>RF(o.raw,true), R2=o=>RF(o.raw,false);
   if(st.v3){
-    d.colorNotes=[...mN.map(n=>({...(n.raw||{a:0}),b:n.beat,x:n.x,y:n.y,c:n.c,d:n.d})),...chainHeadOut].sort(sortB);
-    d.bombNotes=mB.map(n=>({...(n.raw||{}),b:n.beat,x:n.x,y:n.y})).sort(sortB);
-    d.obstacles=mW.map(o=>({...(o.raw||{}),b:o.beat,x:o.x,y:o.y,d:o.dur,w:o.w,h:o.h})).sort(sortB);
-    d.sliders=mA.map(a=>({...(a.raw||{}),b:a.b,c:a.c,x:a.x,y:a.y,d:a.d,mu:a.mu??1,tb:a.tb,tx:a.tx,ty:a.ty,tc:a.tc??a.d,tmu:a.tmu??1,m:a.m??0})).sort(sortB);
-    d.burstSliders=mC.map(c=>({...(stripChainTuning(c.raw)||{}),b:c.b,c:c.c,x:c.x,y:c.y,d:c.d,tb:c.tb,tx:c.tx,ty:c.ty,sc:c.sc??4,s:c.s??1})).sort(sortB);
-    d.basicBeatmapEvents=mL.map(e=>({...(e.raw||{}),b:e.beat,et:e.et,i:e.i??0,f:e.f??1})).sort(sortB);
+    d.colorNotes=[...mN.map(n=>({...(R3(n)||{a:0}),b:n.beat,x:n.x,y:n.y,c:n.c,d:n.d})),...chainHeadOut].sort(sortB);
+    d.bombNotes=mB.map(n=>({...(R3(n)||{}),b:n.beat,x:n.x,y:n.y})).sort(sortB);
+    d.obstacles=mW.map(o=>({...(R3(o)||{}),b:o.beat,x:o.x,y:o.y,d:o.dur,w:o.w,h:o.h})).sort(sortB);
+    d.sliders=mA.map(a=>({...(R3(a)||{}),b:a.b,c:a.c,x:a.x,y:a.y,d:a.d,mu:a.mu??1,tb:a.tb,tx:a.tx,ty:a.ty,tc:a.tc??a.d,tmu:a.tmu??1,m:a.m??0})).sort(sortB);
+    d.burstSliders=mC.map(c=>({...(stripChainTuning(R3(c))||{}),b:c.b,c:c.c,x:c.x,y:c.y,d:c.d,tb:c.tb,tx:c.tx,ty:c.ty,sc:c.sc??4,s:c.s??1})).sort(sortB);
+    d.basicBeatmapEvents=mL.map(e=>({...(R3(e)||{}),b:e.beat,et:e.et,i:e.i??0,f:e.f??1})).sort(sortB);
     d.bpmEvents=tempoParts.map(p=>({b:p.beat,m:p.bpm}));   // 曲中のテンポ変更（パート機能）。拍番号はそのまま・以降の絶対時刻だけ変わるBS標準の仕組み
     d.version=d.version||'3.2.0'; delete d._version;              // v3構造 → v3のversionを自動
   } else {
-    const ns=mN.map(n=>({...(n.raw||{}),_time:n.beat,_lineIndex:n.x,_lineLayer:n.y,_type:n.c,_cutDirection:n.d}));
-    const bs=mB.map(n=>({...(n.raw||{_cutDirection:0}),_time:n.beat,_lineIndex:n.x,_lineLayer:n.y,_type:3}));
+    const ns=mN.map(n=>({...(R2(n)||{}),_time:n.beat,_lineIndex:n.x,_lineLayer:n.y,_type:n.c,_cutDirection:n.d}));
+    const bs=mB.map(n=>({...(R2(n)||{_cutDirection:0}),_time:n.beat,_lineIndex:n.x,_lineLayer:n.y,_type:3}));
     d._notes=[...ns,...bs].sort((p,q)=>p._time-q._time);
-    d._obstacles=mW.map(o=>({...(o.raw||{}),_time:o.beat,_lineIndex:o.x,_type:(o.y===2?1:0),_duration:o.dur,_width:o.w})).sort((p,q)=>p._time-q._time);
-    d._events=mL.map(e=>({...(e.raw||{}),_time:e.beat,_type:e.et,_value:e.i??0})).sort((p,q)=>p._time-q._time);
+    d._obstacles=mW.map(o=>({...(R2(o)||{}),_time:o.beat,_lineIndex:o.x,_type:(o.y===2?1:0),_duration:o.dur,_width:o.w})).sort((p,q)=>p._time-q._time);
+    d._events=mL.map(e=>({...(R2(e)||{}),_time:e.beat,_type:e.et,_value:e.i??0})).sort((p,q)=>p._time-q._time);
     d._version=d._version||'2.0.0'; delete d.version;            // v2構造 → v2のversionを自動
   }
   return d;
@@ -6668,6 +6803,21 @@ for(const ev of ['pointerdown','keydown','dragenter']) addEventListener(ev,dirty
 for(const ev of ['pointerup','keyup','wheel','change','input','drop']) addEventListener(ev,checkDirtySoon,{capture:true,passive:true});
 setInterval(()=>{ if(!playing) checkDirty(); },4000);   // 操作後に非同期で反映される変更（BPM測定の結果など）の拾い漏れ対策／操作前は基準の追従
 addEventListener('beforeunload',e=>{ if(!window.pywebview&&checkDirty()){ e.preventDefault(); e.returnValue=''; } });   // ブラウザ版(serve.py)はブラウザ標準の確認で代用
+/** はい/いいえの確認（見た目は未保存の確認と同じ）。はい=true。Esc=いいえ */
+function askYesNo(text,yesLabel,noLabel){
+  return new Promise(res=>{
+    const bg=document.createElement('div'); bg.id='dirtyDlgBg';
+    const dlg=document.createElement('div'); dlg.id='dirtyDlg'; bg.appendChild(dlg);
+    const msg=document.createElement('div'); msg.className='ddMsg'; msg.textContent=text; dlg.appendChild(msg);
+    const row=document.createElement('div'); row.className='ddBtns'; dlg.appendChild(row);
+    const done=v=>{ removeEventListener('keydown',onKey,true); bg.remove(); res(v); };
+    const mk=(label,cls,v)=>{ const b=document.createElement('button'); b.textContent=label; if(cls) b.className=cls; b.addEventListener('click',()=>done(v)); row.appendChild(b); return b; };
+    const bYes=mk(yesLabel,'pri',true); mk(noLabel,'',false);
+    const onKey=e=>{ if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); done(false); } else e.stopPropagation(); };   // 裏のショートカットを発火させない
+    addEventListener('keydown',onKey,true);
+    document.body.appendChild(bg); bYes.focus();
+  });
+}
 /** 未保存があれば3択で確認。続行してよければ true。kind='quit'=終了 / 'switch'=新規・開く */
 function confirmDiscard(kind){
   if(!checkDirty()) return Promise.resolve(true);
@@ -6701,14 +6851,26 @@ if(NLM_DEV) window._dbgApp=Object.freeze({
     sel:selection.size,undo:undoStack.length,redo:redoStack.length}),
   notes:()=>structuredClone({notes:notes.map(({raw,...r})=>r),chains:chains.map(({raw,...r})=>r)}),
   infoGraph:()=>structuredClone(infoGraph),
+  booted:()=>_bootDone,   // 起動処理が最後まで終わったか（tools/cdp.py の起動待ち）
   dirty:()=>{ let same=null; try{ same=projSig()===_savedSig; }catch(_){} return {lamp:_dirtyNow,same,inputSinceBase:_inputSinceBase}; },
   sigPair:()=>({now:projSig(),saved:_savedSig}),   // 未保存判定の比較対象（誤検知の調査用。差分は呼び出し側で取る）
   aux:()=>({visible:auxGroup.visible,key:auxKey,show:auxShow}),
+  cam:()=>({pos:camera.position.toArray(),tgt:controls.target.toArray(),anim:!!curAnim,vwB}),   // 3Dカメラの位置・注視点と、先頭等への移動（イージング）中か
   swing:()=>({on:swingWarnOn,warned:[...swingWarnSet].map(n=>({beat:n.beat,x:n.x,y:n.y,c:n.c,d:n.d})),
     lamp:!!document.getElementById('swingLamp')?.classList.contains('on'),frames:swingPool.filter(g=>g.visible).length}),
   prev:()=>({playing:!!_pvPlay,id:_pvPlay?_pvPlay.id:null,connected:connectedNodeId('prev'),
     infoStart:infoBase?infoBase._previewStartTime:null,infoDur:infoBase?infoBase._previewDuration:null,leadInMs:getLeadInMs()}),
   audioPosAtBeat:b=>audioPosAtBeat(b),
+  /** ライトの状況（自動ライティングの検証用）: 今の難易度のライトとライトのクリップ、各難易度の数 */
+  lights:()=>structuredClone({lanes:lightLanes,locks:[...layerLockS],events:lightEvents.map(({raw,...r})=>r),
+    clips:sections.filter(s=>secLk(s)==='l').map(s=>({label:s.label,track:s.track||0,beat:s.beat||0,len:s.len,n:((s.content||{}).lights||[]).length})),
+    diffs:Object.fromEntries(Object.entries(projDiffs).filter(([,st])=>st).map(([k,st])=>[k,{notes:(st.notes||[]).length,lights:(st.lightEvents||[]).length,
+      clips:(st.sections||[]).filter(s=>secLk(s)==='l').map(s=>({label:s.label,track:s.track||0,n:((s.content||{}).lights||[]).length}))}]))}),
+  /** 譜面チェックに渡す入力（書き出しと同じ内容）の複製 */
+  mapCheckInput:async()=>structuredClone(await collectMapCheckInput()),
+  /** カバー画像の補正（検証用）: 書き出しに繋がったカバーノードの補正設定と、カードの表示 */
+  coverFit:()=>{ const cid=connectedNodeId('cover'), n=cid&&infoGraph.nodes[cid], el=cid&&infoWorldEl.querySelector(`.iGrp[data-node="${cid}"] .nCovFit`);
+    return structuredClone({cid:cid||null,fit:(n&&n.data.fit)||null,card:el&&el.style.display!=='none'?el.querySelector('span').textContent:''}); },
   view:()=>nodeColMode,
   /** 3Dビューのマス(x=lineIndex,y=lineLayer)の画面座標（ページ座標px）。配置グリッドが出ている時のクリック位置に使う */
   cellScreen:(x,y)=>{ const p=cellPlanes.find(c=>c.userData.x===x&&c.userData.y===y); if(!p) return null;
@@ -6721,6 +6883,31 @@ if(NLM_DEV) window._dbgApp=Object.freeze({
   /** ライトレーンli（0=左端）の拍beatの床の画面座標（ページ座標px。ライト範囲選択の判定点と同じ） */
   lightLaneScreen:(li,beat)=>{ const r=cv.getBoundingClientRect(), v=new THREE.Vector3(LANE_X0+li*LANE_DX,0.03,(beat-viewBeat())*ZPB).project(camera);
     return {x:r.left+(v.x+1)/2*r.width, y:r.top+(1-v.y)/2*r.height, inView:v.z<1}; },
+  /** NLE（レイヤービュー）の拍beatのx と各帯・レーンの上端y（ページ座標px）。帯はキャンバスに直接描くのでDOMから取れない */
+  nleScreen:beat=>{ const r=ndcv.getBoundingClientRect(), lh=laneHt();
+    return {x:r.left+lBeatToX(beat??cur), left:r.left, top:r.top, w:r.width, h:r.height, gut:LGUT,
+      ruler:r.top, marker:r.top+LRULER-MKRH, tempo:r.top+LRULER-MKRH-TPRH, lanes:r.top+LRULER, laneH:lh,
+      notes:Array.from({length:notesLanes},(_,i)=>r.top+laneY('n',i)), lights:Array.from({length:lightLanes},(_,i)=>r.top+laneY('l',i))}; },
+  /** NLEの状態（tests/e2e_nle の検証用）: 今の難易度のクリップ（位置と中身の数）・選択・分割モード・貼り付け・マーカー・レーンの状態・Music */
+  nle:()=>structuredClone({clips:sections.filter(s=>s.kind!=='null').map(s=>({id:s.id,label:s.label,lk:secLk(s),track:s.track||0,beat:s.beat||0,len:s.len||4,
+      n:Object.fromEntries(Object.keys(_LCT).map(k=>[k,((s.content||{})[k]||[]).length]))})),
+    sel:[...layerSel], razor:layerRazor, paste:layerPaste?{at:layerPaste.at,n:layerPaste.items.length}:null, clipboard:layerClipboard?layerClipboard.items.length:0,
+    markers, lanes:{n:notesLanes,l:lightLanes}, mute:[...layerMuteS], solo:[...layerSoloS], lock:[...layerLockS],
+    music:{beat:musicBeat, segs:musicSegs, sel:[...musicSelSet], audio:!!audioBuf, dur:songDur}, hover:tlHoverBeat, snap,
+    vp:(r=>({n:[r.top+laneTopOf('n'),r.top+laneTopOf('n')+laneVP('n')], l:[r.top+laneTopOf('l'),r.top+laneTopOf('l')+laneVP('l')]}))(ndcv.getBoundingClientRect())}),   // 各グループの表示窓（ページ座標px。レーンが多いと窓の外はスクロールで隠れる）
+  /** Musicレーン（ovcv）の拍beatのx と上端・高さ（ページ座標px） */
+  musicScreen:beat=>{ const r=ovcv.getBoundingClientRect(), w=tlWindow(cur);
+    return {x:r.left+TLGUT+((beat??cur)-w.b0)/w.span*(ovW-TLGUT), left:r.left, top:r.top, h:r.height}; },
+  /** 3D編集の途中状態（tests/e2e_edit の検証用）: ギズモの種類・貼り付け追従・段階式の壁・ライトの選択（lightEventsの添字）とブラシ */
+  edit:()=>structuredClone({gizmo:gizmoMode, pasteFollow:!!pasteFollow, lightMove:!!lightMove, wallStage:wallStage?wallStage.stage:null,
+    lightSel:[...lightSelection].map(ev=>lightEvents.indexOf(ev)), lightBrush:{...lightBrush}, pie:pieOpen}),
+  /** 今の難易度のボム・壁・アーク（notes() に無い種類）の複製 */
+  objs:()=>structuredClone({bombs:bombs.map(({raw,...r})=>r), walls:walls.map(({raw,...r})=>r), arcs:arcs.map(({raw,...r})=>r)}),
+  /** ギズモの表示中のハンドル（つまみ）と中心の画面座標（ページ座標px）。つまみのドラッグ位置に使う */
+  gizmoScreen:()=>{ const r=cv.getBoundingClientRect(), P=w=>{ const p=w.clone().project(camera);
+      return {x:r.left+(p.x+1)/2*r.width, y:r.top+(1-p.y)/2*r.height, onScreen:Math.abs(p.x)<=1&&Math.abs(p.y)<=1&&p.z<1}; };
+    return {visible:gizmo.visible, center:P(gizmoCenter), handles:gizmo.visible?gizmoHandles.filter(g=>g.visible).map(g=>{ const d=g.userData.arrow, size=g.userData.cube.visible;
+      return {axis:d.axis, sign:d.sign, dir:[...d.dir], size, ...P((size?g.userData.cube:g.userData.cone).getWorldPosition(new THREE.Vector3()))}; }):[]}; },
 });
 // 同期で 'ok' を返す＝Python側はJSが生きていることだけ確認して待たない（結果はquit_appで伝える）
 window.__nlmAskQuit=()=>{
@@ -6799,7 +6986,7 @@ function buildExportInfo(diffFiles, coverName){
     // Shuffleはゲームで使われていない古い項目。BeatLeaderの基準（R1.B.2: 未使用または0）に合わせ、Shuffleが0なら周期も0で書く
     //（他のエディタや公式譜面は0.5を書くので、読み込んだ値をそのまま出すと常に違反になる）
     _shufflePeriod:numv(b._shuffle,0)!==0?numv(b._shufflePeriod,0):0,
-    _previewStartTime:Math.round((numv(b._previewStartTime,PREV_DEF.start)+getLeadInMs()/1000)*1000)/1000,   // 試聴ノードは元音源の秒＝song.eggに焼き込む無音ぶんを足す
+    _previewStartTime:Math.round(eggOutSecOf(numv(b._previewStartTime,PREV_DEF.start))*1000)/1000,   // 試聴ノードは元音源の秒＝書き出す song.egg の秒へ（無音追加・Musicの配置ぶんずらす）
     _previewDuration:numv(b._previewDuration,PREV_DEF.dur),
     _songFilename:'song.egg', _coverImageFilename:coverName||b._coverImageFilename||'',
     _environmentName:b._environmentName||(srcInfo()||{})._environmentName||'DefaultEnvironment', _allDirectionsEnvironmentName:b._allDirectionsEnvironmentName||(srcInfo()||{})._allDirectionsEnvironmentName||'GlassDesertEnvironment',
@@ -6816,7 +7003,7 @@ async function collectMapCheckInput(){
   const info=buildExportInfo(diffFiles,'');
   let cover=null;   // 書き出しと同じく、書き出しノードに繋がったカバー画像ファイルを見る
   const covN=extraNodes.find(n=>n.kind==='cover'&&graphEdges.some(e=>e.sig==='cover'&&e.fromId===n.id&&e.toId==='out'));
-  if(covN&&covN.handle){ try{ const f=await covN.handle.getFile(), bmp=await createImageBitmap(f); cover={w:bmp.width,h:bmp.height,name:f.name}; if(bmp.close) bmp.close(); }catch(_){} }
+  if(covN&&covN.handle){ try{ const r=await measureCoverFit(await covN.handle.getFile(),connectedCoverFit()); cover={w:r.w,h:r.h,name:r.name}; }catch(_){} }   // 補正の設定があれば補正後の寸法・名前で判定（書き出しと同じ計算）
   const sets=info._difficultyBeatmapSets||[], bms=sets.flatMap(s=>s._difficultyBeatmaps||[]);
   return { info:{bpm:info._beatsPerMinute, environment:info._environmentName, previewStart:info._previewStartTime, previewDuration:info._previewDuration},
     // NLM版BL評価リスト用（書き出すInfo.datの値そのまま。NLMはカラースキーム・必須MOD・難易度名を書かないので空になる）
@@ -6824,7 +7011,7 @@ async function collectMapCheckInput(){
     infoRaw:{songTimeOffset:info._songTimeOffset, shuffle:info._shuffle, shufflePeriod:info._shufflePeriod,
       colorSchemes:info._colorSchemes||[], requirements:[...new Set(bms.flatMap(b=>(b._customData&&b._customData._requirements)||[]))]},
     diffs:diffFiles.map(d=>{ const nj=njsOffExport(d.dnm); return {difficulty:d.dnm, json:d.json, njs:nj.njs, njsOffset:nj.offset}; }),
-    audioDuration:audioBuf?audioBuf.duration+getLeadInMs()/1000:null,   // song.egg＝先頭の無音追加＋元の音源
+    audioDuration:eggLength(),   // 書き出す song.egg の長さ（無音追加・Musicの配置を反映。音源が無ければ null）
     cover };
 }
 // チェック結果の拍をクリック → その難易度へ切り替え、該当オブジェクトを選択してその拍へ移動（重複チェックの‹›と同じ流儀）
@@ -6839,11 +7026,26 @@ async function mapCheckJump(dn,o){
   const pool=o.kind==='note'?[...notes.filter(it=>at(it)&&(o.c==null||it.c===o.c)),...chains.filter(at)]   // チェーンの頭は書き出し時に合成されるノーツ
     :o.kind==='bomb'?bombs.filter(at):o.kind==='wall'?walls.filter(at):o.kind==='arc'?arcs.filter(at):o.kind==='chain'?chains.filter(at):[];
   if(pool.length){ selection=new Set(pool.slice(0,1)); lightSelection.clear(); gizmoMode=pool[0].kind==='chain'?null:'move'; }
-  seekEase(o.beat||0);
-  const dz=0-controls.target.z; camera.position.z+=dz; controls.target.z+=dz; controls.update();   // 着地点を画面中央へ（.キーと同流儀）
+  seekEase(o.beat||0);   // カメラも着地点（再生ヘッド）へ寄る
   stat(tf('mc.jumped','{diff} の {beat} 拍目へ移動しました',{diff:dispDiff(dn),beat:Math.round((o.beat||0)*1000)/1000}));
 }
-const mapCheckPanel=installMapCheckPanel({t,escHtml,dispDiff,collect:collectMapCheckInput,jump:mapCheckJump});
+const mapCheckPanel=installMapCheckPanel({t,escHtml,dispDiff,collect:collectMapCheckInput,jump:mapCheckJump,autoLight:openAutoLight,coverFix:openCoverFit});
+// ---- カバー画像の補正（js/media/cover-fit.js）: 元の画像は変えず、カバーノードの data.fit={mode,bg} を書き出し・譜面チェックの時に当てる ----
+function connectedCoverFit(){ const cid=connectedNodeId('cover'), n=cid&&infoGraph.nodes[cid]; return (n&&n.data.fit)||null; }
+async function openCoverFit(after){   // after=補正した後に呼ぶ（譜面チェックの再実行）
+  const cid=connectedNodeId('cover'), n=cid&&infoGraph.nodes[cid], h=cid&&_coverHandles[cid];
+  if(!n||!h){ showErr(t('cf.noCover','書き出しに繋がったカバー画像がありません（INFOのカバー画像ノードで画像を選んでください）')); return; }
+  let f=null, bmp=null;
+  try{ f=await h.getFile(); bmp=await createImageBitmap(f); }
+  catch(e){ showErr(t('cf.readFail','カバー画像を読み込めません。INFOのカバー画像ノードで画像を選び直してください')); return; }
+  const name=f.name||n.data.name||'cover.png';
+  if(!coverNeedsFix(bmp.width,bmp.height,name)){ if(bmp.close) bmp.close(); showOk(t('cf.alreadyOk','カバー画像は基準を満たしています（補正は不要です）')); if(after) after(); return; }
+  showCoverFitDialog({t,tf,bmp,name,fit:n.data.fit,onOk:fit=>{
+    const nd=infoGraph.nodes[cid]; if(!nd) return;
+    infoSnapshot(); nd.data.fit=fit; metaDirty=true; applyInfoGraph(); refreshInfoCards();
+    showOk(t('cf.done','カバー画像の補正を設定しました（書き出し時に補正します）'));
+    if(after) after(); }});
+}
 // ---- 難易度を測る（BeatLeaderの星の近似）: 書き出すのと同じInfo.dat/.datを別配布のプラグインへ渡す（rating_plugin.py） ----
 async function collectRatingInput(){
   if(!currentDiffName) return {error:t('rt.noChart','測る譜面がありません')};
@@ -6854,6 +7056,51 @@ async function collectRatingInput(){
   return {files:[{name:'Info.dat',text:JSON.stringify(info)}, ...diffFiles.map(d=>({name:d.name,text:JSON.stringify(d.json)}))]};
 }
 const ratingPanel=installRatingPanel({t,escHtml,dispDiff,collect:collectRatingInput});
+// ---- 自動ライティング（js/lighting/auto-light.js）: 一番ノーツの多い難易度から作り、中身のある全難易度へ同じものを配る ----
+// 置き方は「ライトのレーンを一番上に1本足し、曲の頭から最後までの1クリップ」。既存のライトには触れない（重なりは利用者がレーン単位で選ぶ）
+function autoLightPlan(){
+  if(!currentDiffName) return {error:t('al.noChart','ライトを作る譜面がありません')};
+  stashCurrentDiff(); applyInfoGraph();
+  const hasBody=st=>st&&['notes','bombs','walls','arcs','chains'].some(k=>(st[k]||[]).length);
+  const targets=OUT_DIFFS.map(dn=>({dn,key:(dn+'Standard.dat').toLowerCase()})).filter(x=>hasBody(projDiffs[x.key]));
+  if(!targets.length) return {error:t('al.noBody','ノーツのある難易度がありません')};
+  const nOf=x=>(projDiffs[x.key].notes||[]).length+(projDiffs[x.key].chains||[]).length;
+  const src=targets.reduce((a,x)=>nOf(x)>=nOf(a)?x:a);   // 同数なら難しい方
+  const S=projDiffs[src.key];
+  const cutB=msegs().reduce((m,sg)=>Math.max(m,segEndBeat(sg)),0);   // 書き出しと同じ曲の終わり（Music終端）
+  const env=(infoBase&&infoBase._environmentName)||'DefaultEnvironment';
+  const result=generateAutoLights({notes:S.notes||[],chains:S.chains||[],
+    others:[...(S.bombs||[]),...(S.walls||[]).map(w=>({beat:w.beat,dur:w.dur})),...(S.arcs||[])],
+    endBeat:cutB>0?cutB:undefined,bpm:BPM,env,markers:markers.map(m=>m.beat)});
+  if(!result||!result.events.length) return {error:t('al.noBody','ノーツのある難易度がありません')};
+  return {source:dispDiff(src.dn),sourceNotes:nOf(src),targets:targets.map(x=>dispDiff(x.dn)),
+    targetKeys:targets.map(x=>x.key),env,result};
+}
+function applyAutoLight(plan){
+  if(lightLanes>=LANE_MAX){ showErr(tf('al.laneFull','ライトのレーンが上限（{n}本）です。空いているレーンを消してからもう一度実行してください',{n:LANE_MAX})); return; }
+  stashCurrentDiff();
+  pushHist('diffs',dumpDomain('diffs'));   // 画面外の難易度も含めて1回のUndoで戻せる
+  laneAdd('l');   // 一番上(track0)に空きレーン。既存のクリップ・フラット・ロックは全難易度で1段下がる（laneShiftAll）
+  const evs=plan.result.events, len=Math.ceil(plan.result.endBeat-1e-6), col=pickStripCol(), label=t('al.clipName','自動ライト');
+  const mkSec=()=>({id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat:0,track:0,lk:'l',col,label,len,kind:'sheet',
+    content:{notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:evs.map(e=>({...e,raw:null}))}});
+  const flat=()=>evs.map(e=>({...e,_tr:0,raw:null}));
+  const byBeat=(a,b2)=>a.beat-b2.beat, curK=currentDiffName.toLowerCase();
+  for(const k of plan.targetKeys){
+    if(k===curK){ sections.push(mkSec()); lightEvents.push(...flat()); lightEvents.sort(byBeat); }
+    else { const st=projDiffs[k]; if(!st) continue;
+      st.sections=[...(st.sections||[]),mkSec()]; st.lightEvents=[...(st.lightEvents||[]),...flat()].sort(byBeat); }
+  }
+  relinkDiffEdges(); lightSelection.clear(); rebuild(); stashCurrentDiff();
+  metaDirty=true; renderDiffBar();
+  showOk(tf('al.done','自動ライトを追加しました（{n}個・{diffs}）',{n:evs.length,diffs:plan.targets.join(' / ')}));
+}
+function openAutoLight(after){   // after=作成した後に呼ぶ（譜面チェックの再実行）
+  const plan=autoLightPlan();
+  if(plan.error){ showErr(plan.error); return; }
+  showAutoLightDialog({t,tf,plan,onOk:()=>{ applyAutoLight(plan); if(after) after(); }});
+}
+document.getElementById('tbAutoLight')?.addEventListener('click',()=>openAutoLight(()=>{ if(mapCheckPanel.isOpen()) mapCheckPanel.run(); }));   // LIGHTINGのツールバー
 // 本体の自動更新（js/update/update-dialog.js → serve.py → app_update.py）。起動時の確認はexe版・環境設定ONの時だけ
 const updater=installUpdater({t,tf,lang:()=>langCode,confirmDiscard,showOk});
 { const el=document.getElementById('updateCheckOn');
@@ -6876,10 +7123,11 @@ async function exportMap(forceEgg=false){
   let coverName='';
   const covN=extraNodes.find(n=>n.kind==='cover'&&graphEdges.some(e=>e.sig==='cover'&&e.fromId===n.id&&e.toId==='out'));
   if(covN&&covN.handle&&dest){
-    try{ const f=await covN.handle.getFile();
-      coverName='cover.'+((f.name.match(/\.([^.]+)$/)||[,'png'])[1].toLowerCase());
+    try{ const f=await covN.handle.getFile(), fit=connectedCoverFit();
+      const r=fit?await fitCoverImage(f,fit):{blob:f,name:f.name};   // 補正の設定がある時だけ補正（無ければ従来どおりバイトコピー）
+      coverName='cover.'+((r.name.match(/\.([^.]+)$/)||[,'png'])[1].toLowerCase());
       const ch=await dest.getFileHandle(coverName,{create:true}); const cw=await ch.createWritable();
-      await cw.write(await f.arrayBuffer()); await cw.close();
+      await cw.write(await r.blob.arrayBuffer()); await cw.close();
     }catch(err){ showErr(tf('msg.coverCopyFail','カバー画像のコピーに失敗: {err}',{err})); coverName=''; }
   }
   // --- song.egg（元がOGGならバイトコピー。それ以外はffmpeg経由でOGG Vorbisへ変換） ---
@@ -6891,20 +7139,26 @@ async function exportMap(forceEgg=false){
     if(songF){
       try{
         const f=songF;
-        const leadInMs=getLeadInMs();
-        const mark={name:f.name,size:f.size,mtime:f.lastModified,leadInMs};
+        // Musicの配置: 切っていない（元の音源を丸ごと1回）なら、先頭に（無音追加＋Musicの開始位置）ぶんの無音を足すだけ。
+        // 分割・トリムしてあれば切り貼り表(segs)をサーバーへ渡し、ffmpeg で切り出して並べ直す
+        const P=eggPieces(), whole=P.length===1&&P[0][0]<1e-6&&audioBuf&&Math.abs(P[0][1]-audioBuf.duration)<1e-3;
+        const leadInMs=!P.length?getLeadInMs():whole?Math.round(P[0][2]*1000):0;
+        const segs=(P.length&&!whole)?P.map(q=>q.map(v=>Math.round(v*1000)/1000)):null;
+        const mark={name:f.name,size:f.size,mtime:f.lastModified,leadInMs,segs};
         let eggExists=true; try{ await dest.getFileHandle('song.egg'); }catch(_){ eggExists=false; }
         const prev=(!forceEgg&&eggExists)?await readEggMark(dest):null;
-        if(prev&&prev.name===mark.name&&prev.size===mark.size&&prev.mtime===mark.mtime&&(prev.leadInMs||0)===leadInMs){
-          eggWritten=true;   // 音源・無音追加設定が前回と同一＝再変換不要
+        if(prev&&prev.name===mark.name&&prev.size===mark.size&&prev.mtime===mark.mtime&&(prev.leadInMs||0)===leadInMs
+          &&JSON.stringify(prev.segs||null)===JSON.stringify(segs)){
+          eggWritten=true;   // 音源・無音追加・Musicの配置が前回と同一＝再変換不要
         } else {
           const buf=await f.arrayBuffer();
           const u=new Uint8Array(buf.slice(0,4)), isOgg=(u[0]===0x4F&&u[1]===0x67&&u[2]===0x67&&u[3]===0x53);   // "OggS"
           let outBuf=buf;
-          if(!isOgg||leadInMs>0){   // 無音追加が設定されていれば、元がOGGでも必ずffmpegで焼き込む
+          if(!isOgg||leadInMs>0||segs){   // 無音追加・Musicの配置があれば、元がOGGでも必ずffmpegで焼き込む
             stat(t('m:song.eggへ変換中…（ffmpeg）','song.eggへ変換中…（ffmpeg）'));
             const ext=(f.name.match(/\.([^.]+)$/)||[,'bin'])[1].toLowerCase();
             let qs='ext='+encodeURIComponent(ext); if(leadInMs>0) qs+='&leadInMs='+leadInMs;
+            if(segs) qs+='&segs='+encodeURIComponent(JSON.stringify(segs));
             let r; try{ r=await fetch('__convert/toOgg?'+qs,{method:'POST',headers:{'X-NLM-Request':'1'},body:buf}); }catch(e){ r=null; }
             if(r&&r.ok&&(r.headers.get('content-type')||'').includes('audio')){
               outBuf=await r.arrayBuffer();
@@ -6912,7 +7166,7 @@ async function exportMap(forceEgg=false){
               let em='conv-failed'; try{ const j=await r.json(); if(j&&j.error) em=j.error; }catch(_){}
               outBuf=null;
               eggWarn=' '+(em==='ffmpeg-not-found'
-                ? t('m:※ffmpegが見つかりません。"winget install ffmpeg" でインストール後に再度書き出してください','※ffmpegが見つかりません。"winget install ffmpeg" でインストール後に再度書き出してください')
+                ? t('msg.ffmpegMissing','※ffmpegが見つかりません。"winget install Gyan.FFmpeg" でインストールし、NLMを起動し直してから再度書き出してください')   // serve.pyは起動時のPATHで探す＝インストール後は再起動が必要
                 : tf('msg.eggConvFail','※song.egg変換に失敗: {err}',{err:em}));
             }
           }
@@ -7175,37 +7429,51 @@ function screenPosOf(group){ const v=group.position.clone();
   v.project(camera);
   const r=cv.getBoundingClientRect(); return { x:(v.x+1)/2*r.width, y:(-v.y+1)/2*r.height, in:v.z<1 }; }
 
-function createClipAt(b,lk,top){   // bを含む1小節(4拍)クリップを空きレーンに作成→track。top=true:一番上寄り/false:一番下寄りに探す。ロック中レーンは避ける。空き無しなら上に新レーン追加。不可なら-1
-  const start=Math.max(0,Math.floor(b/4)*4), len=4, N=laneCountOf(lk);
-  const mk=tr=>{ const sec={id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat:start,track:tr,lk,col:pickStripCol(),
-      label:'Sheet',len,kind:'sheet',content:{notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:[]}};
-    sections.push(sec); relinkDiffEdges(); return tr; };
+// bを含む1小節(4拍)クリップを作る場所（状態は変えない）: {tr,add}。top=true:一番上寄り/false:一番下寄りに探す。ロック中レーンは避ける。
+// add=空きが無い（全て埋まり/ロック）ので一番上にレーンを足して track0 に作る。足せない（最大本数）なら null
+function clipSlotAt(b,lk,top){
+  const start=Math.max(0,Math.floor(b/4)*4), N=laneCountOf(lk);
   for(let i=0;i<N;i++){ const tr=top?i:N-1-i;   // top=上から / bottom=下(Layer1)から
     if(layerLockS.has(lk+tr)) continue;          // ロック中レーンには作らない
-    if(laneOverlaps(start,len,lk,tr)) continue;  // 他クリップと重ならない段のみ
-    return mk(tr); }
-  // 空きが無い（全て埋まり/ロック）→ 上に新レーンを追加してtrack0に作成
-  if(N<LANE_MAX){
-    if(lk==='n') notesLanes++; else lightLanes++;
-    laneShiftAll(lk,1);   // 既存を1段下げ、track0を空ける（ソロ/ミュートはlaneShiftAll内でリセット）
-    const shifted=new Set();   // ロックも1段下げて整合（新track0は非ロック）
-    for(const key of layerLockS){ if(key[0]===lk) shifted.add(lk+(+key.slice(1)+1)); else shifted.add(key); }
-    layerLockS.clear(); for(const k of shifted) layerLockS.add(k);
-    return mk(0); }
-  return -1;
+    if(laneOverlaps(start,4,lk,tr)) continue;    // 他クリップと重ならない段のみ
+    return {tr,add:false}; }
+  return N<LANE_MAX?{tr:0,add:true}:null;
 }
+function makeClipAt(b,lk,slot){   // clipSlotAt で決めた場所に空の1小節クリップを作る→track
+  if(slot.add){ if(lk==='n') notesLanes++; else lightLanes++;
+    laneShiftAll(lk,1); }   // 既存を1段下げ、track0を空ける（ソロ/ミュートはリセット・ロックは1段ずらす＝新track0は非ロック）
+  const sec={id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat:Math.max(0,Math.floor(b/4)*4),track:slot.tr,lk,col:pickStripCol(),
+    label:'Sheet',len:4,kind:'sheet',content:{notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:[]}};
+  sections.push(sec); relinkDiffEdges(); return slot.tr; }
+function createClipAt(b,lk,top){ const slot=clipSlotAt(b,lk,top); return slot?makeClipAt(b,lk,slot):-1; }   // bを含む1小節クリップを空きレーンに作成→track（空き無しなら上に新レーン追加）。不可なら-1
 function createNoteClipAt(b){ return createClipAt(b,'n',false); }   // 後方互換
 // EDIT配置の対象クリップ決定ルール（ヘルバ様指定）: 無→作成／有→そのクリップ／重なり→①選択中②なければ一番下／全ロック→一番上に新規（空き無ければ上に新レーン）
-function clipTrackForBeat(b,lk){
+// 行き先だけを求める（状態は変えない）: {tr}=既存のクリップ／{tr,slot}=クリップを作る（clipSlotAt）／null=作れない
+function clipTrackPlan(b,lk){
   const cover=sections.filter(s=>secLk(s)===lk&&s.kind!=='null'&&(s.beat||0)<=b+1e-6&&(s.beat||0)+(s.len||4)>b+1e-6);
-  if(!cover.length) return createClipAt(b,lk,false);              // クリップ無し→作成（一番下寄り）
+  if(!cover.length){ const slot=clipSlotAt(b,lk,false); return slot&&{tr:slot.tr,slot}; }   // クリップ無し→作成（一番下寄り）
   const isLk=c=>layerLockS.has(lk+(c.track||0));
   const sel=cover.find(c=>layerSel.has(c.id)&&!isLk(c));          // ①選択中クリップを優先
-  if(sel) return sel.track||0;
+  if(sel) return {tr:sel.track||0};
   const unlocked=cover.filter(c=>!isLk(c));
-  if(unlocked.length) return unlocked.reduce((a,c)=>((c.track||0)>(a.track||0)?c:a)).track||0;   // ②一番下(track最大)
-  return createClipAt(b,lk,true);                                // ③全ロック→一番上に新規
+  if(unlocked.length) return {tr:unlocked.reduce((a,c)=>((c.track||0)>(a.track||0)?c:a)).track||0};   // ②一番下(track最大)
+  const slot=clipSlotAt(b,lk,true); return slot&&{tr:slot.tr,slot};   // ③全ロック→一番上に新規
 }
+function clipTrackForBeat(b,lk){ const p=clipTrackPlan(b,lk); if(!p) return -1; if(p.slot) makeClipAt(b,lk,p.slot); return p.tr; }
+// 3Dの配置: 行き先のクリップを決め、履歴を取ってからクリップを作る。クリップを自動で作る時（必要ならレーンも足す）は、置く物も含めて構造の履歴1つにまとめる
+// ＝1回のUndoでクリップ・レーン・ずれたロックも戻る（以前は作った後に 'note'/'light' の履歴を取り、Undoで置いた物だけが消えて空のクリップ・レーンが残った）。
+// 作らない時は従来どおり dom（'note'/'light'）の履歴。戻り値 {tr,made}。tr<0=作れない（何も変えず履歴も積まない）。置いた後に placeHistDone(made) を呼ぶ
+function placeTrackHist(b,lk,dom){
+  const p=clipTrackPlan(b,lk);
+  if(!p) return {tr:-1,made:false};
+  if(!p.slot){ snapshot(dom); return {tr:p.tr,made:false}; }
+  const hd=p.slot.add?'diffs':'node';   // レーンを足すと他の難易度のクリップもずれる＝全難易度の履歴（自動ライティングと同じ）
+  flushFlatEdits();                     // 履歴の中身（クリップのcontent）を今の3D編集に揃えてから取る
+  pushHist(hd,dumpDomain(hd));
+  makeClipAt(b,lk,p.slot);
+  return {tr:p.tr,made:true};
+}
+function placeHistDone(made){ if(made){ _flatDirty=true; flushFlatEdits(); } }   // 置いた物を作ったクリップの content へすぐ書き込む＝構造の履歴（Undo/Redo）だけで置いた物も戻る
 function noteTrackForBeat(b){ return clipTrackForBeat(b,'n'); }
 // ペースト用トラック解決: コピー元のトラックがその拍でまだ有効（クリップがあり非ロック）ならそのまま使う。
 // ロック済み/クリップ消失なら通常配置と同じ規則へフォールバック（clipTrackForBeat＝全ロックなら新規クリップを自動作成）。
@@ -7220,19 +7488,22 @@ function pasteTrackFor(b,lk,preferTr){
 function placeAt(cell){
   if(inNullRange(snapV(lockBeat))){ stat('⚠ NULLノードの範囲には配置できません'); return; }
   const b=snapV(lockBeat);
-  const tr=noteTrackForBeat(b);   // クリップが無い拍なら Layer1 の空きにクリップを自動生成
-  if(tr<0){ stat('⚠ クリップを作れません（ノーツレーンが全て埋まっています）'); return; }
+  // 置かない場合の確認はクリップを作る前に済ませる（以前は先にクリップ・レーンを自動で作り、ここで止まると履歴の無い空のクリップが残った）
   if(!sigConnected('notes')){ stat('⚠ ノーツの配線が切断中です（ノードエディタで再接続してから）'); return; }
-  snapshot();
+  // ロック中のレーンにある物は上書きしない（以前は配置ブラシのクリックで向き・色が書き換わり、ロックしていないレーンへ移っていた）
+  if([...notes,...bombs].some(n=>Math.abs(n.beat-b)<1e-4&&n.x===cell.x&&n.y===cell.y&&objLockedN(n))){
+    stat('🔒 ロック中のレーンのオブジェクトは変更できません'); return; }
+  if(brush.type==='bomb'&&bombs.some(n=>Math.abs(n.beat-b)<1e-4&&n.x===cell.x&&n.y===cell.y)) return;   // 同じ所にボムがある＝変化なし（履歴も積まない）
+  const {tr,made}=placeTrackHist(b,'n','note');   // クリップが無い拍なら Layer1 の空きにクリップを自動生成（履歴ごと）
+  if(tr<0){ stat('⚠ クリップを作れません（ノーツレーンが全て埋まっています）'); return; }
   if(brush.type==='note'){
     const exist=notes.find(n=>Math.abs(n.beat-b)<1e-4&&n.x===cell.x&&n.y===cell.y);
     if(exist){ exist.c=brush.c; exist.d=brush.d; exist._tr=tr; refreshMesh(exist); selection=new Set([exist]); }
     else { const n={kind:'note',beat:b,x:cell.x,y:cell.y,c:brush.c,d:brush.d,_tr:tr,raw:null}; notes.push(n); addObj(n); selection=new Set([n]); }
   } else if(brush.type==='bomb'){
-    const exist=bombs.find(n=>Math.abs(n.beat-b)<1e-4&&n.x===cell.x&&n.y===cell.y);
-    if(exist){ undoStack.pop(); return; }   // 変化なし: 直前のスナップショットを捨てる
     const n={kind:'bomb',beat:b,x:cell.x,y:cell.y,_tr:tr,raw:null}; bombs.push(n); addObj(n); selection=new Set([n]);
   }
+  placeHistDone(made);
   gizmoMode=null;   // 置いた直後はギズモを出さない＝連続配置中にハンドルが次のクリックを奪わない（ギズモは既存をクリックで選択した時だけ）
   if(brush.type==='note') swingWarnCheckPlaced(notes.find(n=>Math.abs(n.beat-b)<1e-4&&n.x===cell.x&&n.y===cell.y));
   if(camMode==='place') selection.clear();   // 配置モードは置いた後に選択を残さない＝次を違う傾きで置ける（ヘルバ様指定）
@@ -7338,14 +7609,13 @@ function wallPlaceClick(e){
   const {x,y}=cHit.object.userData;
   const wb=snapV(lockBeat);
   if(inNullRange(wb)){ stat('⚠ NULLノードの範囲には配置できません'); return; }
-  const wtr=noteTrackForBeat(wb);
+  if(!sigConnected('notes')){ stat('⚠ ノーツの配線が切断中です（ノードエディタで再接続してから）'); return; }   // クリップを自動で作る前に確認（placeAtと同じ）
+  const {tr:wtr,made}=placeTrackHist(wb,'n','note');   // クリップが無い拍なら自動生成（クリップ・レーンごと1つの履歴＝placeAtと同じ）
   if(wtr<0){ stat('⚠ クリップを作れません（ノーツレーンが全て埋まっています）'); return; }
-  if(!sigConnected('notes')){ stat('⚠ ノーツの配線が切断中です（ノードエディタで再接続してから）'); return; }
-  snapshot();
   const n={kind:'wall',beat:wb,x,y,dur:WALL_MIN_DUR,w:1,h:1,_tr:wtr,raw:null};   // 1ボックス分からスタート
-  walls.push(n); addObj(n);
+  walls.push(n); addObj(n); placeHistDone(made);
   wallGhost.visible=false; wallHoverCell=null;
-  wallStage={wall:n, stage:'width', baseX:x, baseY:y};   // 起点マスを保持（横幅/高さは起点からの双方向スパン）
+  wallStage={wall:n, stage:'width', baseX:x, baseY:y, made};   // 起点マスを保持（横幅/高さは起点からの双方向スパン）。made=クリップを自動で作った（中止の時に作る前へ戻す）
   updateWallDimArrows();
   stat(tf('msg.wallStageW','壁: 横幅を調整（クリックで確定）'));
 }
@@ -7357,7 +7627,7 @@ function applyWallStage(){
     if(raycaster.ray.intersectPlane(floorPlane,_fv)){
       const b=Math.max(0,snapV(viewBeat()+_fv.z/ZPB));
       const nd=Math.max(WALL_MIN_DUR, +(b-w.beat).toFixed(4));
-      if(Math.abs(nd-w.dur)>1e-4){ w.dur=nd; refreshMesh(w); }
+      if(Math.abs(nd-w.dur)>1e-4){ w.dur=nd; refreshMesh(w); _flatDirty=true; }   // _flatDirty=クリップの content へも反映（以前は仮配置の時点の大きさのまま残り、後の再構築で戻ることがあった）
     }
   } else {
     // 横幅/高さ: 壁の深さに縦平面を置き、マウスのX/Yを読む（グリッド外・再生ヘッド外でも柔軟に効く・ヘルバ様指定）
@@ -7368,11 +7638,11 @@ function applyWallStage(){
       if(wallStage.stage==='width'){
         const col=Math.max(0,Math.min(3, Math.round(1.5-(_fv.x-NOTE_DX)/LANE)));   // 起点からの双方向スパン（NOTE_DXを外してから）
         const x0=Math.min(wallStage.baseX,col), nw=Math.abs(col-wallStage.baseX)+1;
-        if(x0!==w.x||nw!==w.w){ w.x=x0; w.w=nw; refreshMesh(w); }
+        if(x0!==w.x||nw!==w.w){ w.x=x0; w.w=nw; refreshMesh(w); _flatDirty=true; }
       } else {   // height: 起点からの双方向スパン（最上段でも下へ伸ばせる・ヘルバ様指定）
         const layer=Math.max(0,Math.min(2, Math.round((_fv.y-BASE_Y)/LAYER)));
         const y0=Math.min(wallStage.baseY,layer), nh=Math.abs(layer-wallStage.baseY)+1;
-        if(y0!==w.y||nh!==w.h){ w.y=y0; w.h=nh; refreshMesh(w); }
+        if(y0!==w.y||nh!==w.h){ w.y=y0; w.h=nh; refreshMesh(w); _flatDirty=true; }
       }
     }
   }
@@ -7382,7 +7652,9 @@ function applyWallStage(){
 function cancelWallStage(){
   if(!wallStage) return;
   removeObj(wallStage.wall);
-  if(undoStack.length) undoStack.pop();   // 仮配置時のスナップショットも捨てる
+  const e=undoStack.length?undoStack.pop():null;   // 仮配置時のスナップショットも捨てる
+  if(wallStage.made&&e){ _flatDirty=false; restoreDomain(e.d,e.s); }   // 自動で作ったクリップ・レーンも消して仮配置の前へ戻す（仮の壁は捨てるので、今の3D編集は content へ書き戻さない）
+  else _flatDirty=true;   // 消した壁を content からも消す（content には仮配置の時点の壁が書き込まれていて、後の再構築で復活していた）
   wallStage=null; wallDimArrows.visible=false;
   stat(tf('msg.wallCancel','壁の配置を中止しました'));
 }
@@ -7530,16 +7802,15 @@ addEventListener('pointerup', e=>{
   pasteFloorClick=false;
   if(wallDrag){                                       // 壁: ドラッグ確定
     const wb=snapV(lockBeat);
-    const wtr=noteTrackForBeat(wb);   // クリップが無い拍なら Layer1 の空きに自動生成
-    if(wtr<0){ wallDrag=null; updateWallGhost(); stat('⚠ クリップを作れません（ノーツレーンが全て埋まっています）'); return; }
-    if(!sigConnected('notes')){ wallDrag=null; updateWallGhost();
+    if(!sigConnected('notes')){ wallDrag=null; updateWallGhost();   // クリップを自動で作る前に確認（placeAtと同じ）
       stat('⚠ ノーツの配線が切断中です（ノードエディタで再接続してから）'); return; }
+    const {tr:wtr,made}=placeTrackHist(wb,'n','note');   // クリップが無い拍なら Layer1 の空きに自動生成（クリップ・レーンごと1つの履歴＝placeAtと同じ）
+    if(wtr<0){ wallDrag=null; updateWallGhost(); stat('⚠ クリップを作れません（ノーツレーンが全て埋まっています）'); return; }
     const s=wallSpan();
     const rows=s.y1-s.y0+1;
-    snapshot();
     const n={kind:'wall',beat:wb,x:s.x0,y:s.y0,dur:Math.max(snap,wallDurLive),
              w:s.x1-s.x0+1,h:rows,_tr:wtr,raw:null};
-    walls.push(n); addObj(n); selection=new Set([n]);
+    walls.push(n); addObj(n); placeHistDone(made); selection=new Set([n]);
     stat(tf('msg.wallInfo','壁: 列{cols} 段{rows} / {dur}拍',{cols:`${s.x0}${s.x1>s.x0?`-${s.x1}`:''}`,rows:`${s.y0}${s.y1>s.y0?`-${s.y1}`:''}`,dur:n.dur}));
     wallDrag=null; updateWallGhost();
     return;
@@ -8197,10 +8468,18 @@ function confirmPasteFollow(){
   stat(tf('msg.pasteConfirm','貼り付け位置を確定しました'));
 }
 // ペースト追従の取消（Esc／3Dビューの右クリック共用）。貼り付けた実体ごと消す＝NLE側 cancelLayerPaste と同じ流儀
+// 貼り付けの取消で、その貼り付けの履歴を外す（取消した後の Ctrl+Z が空振りしないように）。クリップ・レーンを自動で作った貼り付け
+//（構造の履歴）なら、その履歴へ戻して作ったクリップ・レーン・ずれたロックも消す。戻したら true
+function dropPasteHist(he,dom){
+  const i=he?undoStack.lastIndexOf(he):-1; if(i<0) return false;
+  undoStack.splice(i,1);
+  if(he.d===dom) return false;
+  restoreDomain(he.d,he.s); return true;
+}
 function cancelPasteFollow(){
   if(!pasteFollow) return false;
   pasteFloorClick=false;
-  for(const it of pasteFollow.items) removeObj(it.o);
+  if(!dropPasteHist(pasteFollow.he,'note')) for(const it of pasteFollow.items) removeObj(it.o);
   pasteFollow=null; selection.clear();
   stat('貼り付けを取り消しました');
   return true;
@@ -8306,7 +8585,16 @@ let pasteFloorClick=false;
 function pasteSel3D(){
   if(!clip3D){ stat('貼り付ける内容がありません（Ctrl+Cでコピー）'); return; }
   if(pasteFollow){ setFollowGhost(pasteFollow.items.map(it=>it.o),false); pasteFollow=null; }   // 連続ペーストは前のを確定扱い（前バッチの半透明を戻す）
-  snapshot(clip3D.kind==='light'?'light':'note');
+  // 履歴: 貼り先にクリップが無いとクリップ（全ロックならレーンも）を自動で作る。作ったかは貼った後で分かるので、候補の履歴を先に写しておき、
+  // 作っていれば構造の履歴（'node'・レーンを足したら全難易度の 'diffs'）を積む＝1回のUndoでクリップ・レーン・ずれたロックも戻る
+  //（以前は先に 'note'/'light' を積み、Undoで貼った物だけが消えて空のクリップ・レーンが残った。3Dの配置 placeTrackHist と同じ考え方）
+  const pdom=clip3D.kind==='light'?'light':'note';
+  flushFlatEdits();   // 写しの中身（クリップのcontent）を今の3D編集に揃える
+  const pre={[pdom]:dumpDomain(pdom),node:dumpDomain('node'),diffs:dumpDomain('diffs')}, nSec0=sections.length, nLane0=notesLanes+lightLanes;
+  const pasteHist=()=>{ const hd=(notesLanes+lightLanes!==nLane0)?'diffs':(sections.length!==nSec0)?'node':pdom;
+    pushHist(hd,pre[hd]); const he=undoStack[undoStack.length-1];
+    if(hd!==pdom){ _flatDirty=true; flushFlatEdits(); }   // 貼った物を作ったクリップの content へすぐ書く＝構造の履歴だけで貼った物も戻る
+    return he; };
   // 選択中のNLEクリップ（1個・種別一致）があれば、そのクリップへ放り込む（ヘルバ様指定＝別クリップへ移す手段）
   const selSec=(lk)=>{ if(layerSel.size!==1) return null;
     const s=sections.find(s2=>layerSel.has(s2.id));
@@ -8319,12 +8607,13 @@ function pasteSel3D(){
       const nv={beat,et:v.et,i:v.i,f:v.f,raw:null,_tr:tr};
       if(v.chroma) setLightChroma(nv,v.chroma); return nv; });
     lightEvents.push(...added); lightEvents.sort((a,b2)=>a.beat-b2.beat);
+    const he=pasteHist();
     if(tSec){ const mn=Math.min(...added.map(v=>v.beat)), mx=Math.max(...added.map(v=>v.beat));
       extendClipToFit(tSec,mn,mx); _flatDirty=true; metaDirty=true;
       stat(tf('msg.pasteIntoClip','クリップ「{label}」へ貼り付け',{label:tSec.label||'Sheet'})); }
     lightSelection.clear(); added.forEach(v=>lightSelection.add(v));
     if(lightMode&&lightHover){                             // そのままマウス追従（クリック確定/Esc取消）
-      lightMove={b0:lightHover.beat, l0:lightHover.lane, pasted:added.slice(),   // pasted=この追従が貼り付け由来＝取消では実体ごと消す（ヘルバ様指定 2026-07-18）
+      lightMove={b0:lightHover.beat, l0:lightHover.lane, pasted:added.slice(), he,   // pasted=この追従が貼り付け由来＝取消では実体ごと消す（ヘルバ様指定 2026-07-18）。he=この貼り付けの履歴
         orig:added.map(ev=>({ev,beat:ev.beat,lane:laneIdxByType[ev.et]??0}))};
       stat(tf('msg.pasteLightsFollow','ライト {n}件を貼り付け — マウスで位置決め → クリックで確定 / 右クリック・Escで取消',{n:added.length}));
     } else stat(tf('msg.pasteLightsAt','ライト {n}件を拍{at}へ貼り付けました',{n:added.length,at}));
@@ -8339,10 +8628,11 @@ function pasteSel3D(){
       else o._tr=pasteTrackFor(headBeat(o),'n',o._tr);   // クリップ未選択時: 元トラックがロック中なら空きへ自動回避（新規クリップ作成もあり得る）
       arrOf(o.kind).push(o); addObj(o); added.push(o);
     }
+    const he=pasteHist();
     selection=new Set(added);
     const anchor=added.reduce((a,o)=>headBeat(o)<headBeat(a)?o:a);
     const ax=anchor.x, ay=anchor.y;
-    pasteFollow={at,ax,ay,items:added.map(o=>({o,
+    pasteFollow={at,ax,ay,he,items:added.map(o=>({o,
       rel:headBeat(o)-at,
       relT:(o.kind==='arc'||o.kind==='chain')?o.tb-at:0,
       relX:o.x-ax, relY:o.y-ay,
@@ -8476,8 +8766,12 @@ function syncGizmoForSelection(){
   gizmoMode=selection.size?'move':null;
   if(cs.length===1&&cs.length===selection.size) stat(tf('msg.chainEdit','チェーン: 頭ノーツ=XYZ 向き(黄)=XY 尾ノーツ=XYZ / 外枠矢印=全体移動'));
 }
+// ホイール等の調整が何かを変えるか（写しで試す）。上限・下限で値が変わらない時に履歴を積まない＝Ctrl+Zが空振りしないように
+const _tweakSig=o=>JSON.stringify(Object.entries(o).filter(([,v])=>v===null||typeof v!=='object'));
+const tweakChanges=(objs,mut)=>objs.some(o=>{ const c={...o}; mut(c); return _tweakSig(c)!==_tweakSig(o); });
 function tweakSelArcs(mut, msg){
   const as=selArcs(); if(!as.length) return false;
+  if(!tweakChanges(as,mut)) return true;   // 対象はあるが値は変わらない（上限・下限）＝処理済み扱い・履歴なし
   snapshot();
   as.forEach(mut);
   _flatDirty=true; flushFlatEdits();
@@ -8490,6 +8784,7 @@ function tweakSelArcs(mut, msg){
 function refreshArcPanel(){}   // 上部バーのアーク設定群は撤去済み（調整=選択箱上のarcEditSlideパネル＋ホイールに集約。チェーンと同じ流儀）
 function tweakSelChains(mut, msg){
   const cs=selChains(); if(!cs.length) return false;
+  if(!tweakChanges(cs,mut)) return true;
   snapshot();
   cs.forEach(mut);
   _flatDirty=true; flushFlatEdits();
@@ -8716,8 +9011,7 @@ addEventListener('keydown', e=>{
   if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;   // 未設定の修飾キー付きショートカットは無効化（3D編集=素のキーのみ許可・カスタム割当時の競合防止。文書化済みCtrl系は上で処理済み）
   if(hit(e,'jumpHead')){ e.preventDefault(); if(!e.repeat){ // 再生ヘッドにジャンプ: カメラの角度・高さ・横位置は不変、タイムライン軸(Z)の平行移動のみ
     vwB=null;   // ビュー固定を解除してヘッド追従に戻る（ヘッド=z0）
-    const dz=0-controls.target.z;
-    camera.position.z+=dz; controls.target.z+=dz; controls.update(); } return; }
+    camToHead(); } return; }
   if(hit(e,'snapPie')){ e.preventDefault(); if(!e.repeat&&!pieOpen) openPie(snapPieDefs,snap,setSnap,','); return; }
   if(e.key==='Escape'&&pieOpen){ closePie(false); return; }
   if(hit(e,'camMode')){ if(!e.repeat) toggleCamMode(); return; }   // Q=配置/編集モード切替（配置=カメラ追従+定位置ビュー・編集=カメラ自由）。ライトモードでも有効（ヘルバ様指定 2026-07-13）
@@ -8737,8 +9031,8 @@ addEventListener('keydown', e=>{
   if(e.key==='Escape'){
     if(wallStage){ cancelWallStage(); return; }
     if(cancelPasteFollow()) return;
+    if(lightMove){ cancelLightMove(); return; }   // ライトの貼り付け/移動の追従中＝つまみの解除より先（以前は逆で、貼り付けの取消に Esc が2回要った）
     if(gizmoMode){ gizmoMode=null; stat('ギズモ OFF'); return; }
-    if(lightMove){ cancelLightMove(); return; }
     if(lightMode){ setLightMode(false); return; }
     if(placeMode){ setPlaceMode(false); return; } return; }
   // N/B/W単体のブラシ切替は廃止＝W長押しの配置パイ（セレクト/ノーツ/ボム/壁）に集約（ヘルバ様指定）
@@ -8985,7 +9279,8 @@ async function reconnectExportInputs(){
   const cid=connectedNodeId('cover'), c=cid&&infoGraph.nodes[cid];
   if(c&&c.data.name&&!coverNativeOk(cid)){   // ブラウザhandleは権限切れを事前検知できないため常に選び直す（ネイティブで実ファイルに繋がっていれば不要）
     const pr=await pickCoverImage(c.data.nativePath);
-    if(pr){ infoSnapshot(); c.data.name=pr.fh.name; c.data.nativePath=pr.path; _coverHandles[cid]=pr.fh; metaDirty=true; did=true; }
+    if(pr){ infoSnapshot(); if(pr.fh.name!==(c.data.name||'')) delete c.data.fit;   // 別の画像に替えたら補正の設定は外す（同じ画像の再接続なら残す）
+      c.data.name=pr.fh.name; c.data.nativePath=pr.path; _coverHandles[cid]=pr.fh; metaDirty=true; did=true; }
   }
   applyInfoGraph(); refreshInfoCards(); refreshOutCards();
   stat(did?t('m:書き出し設定を再接続しました','書き出し設定を再接続しました'):t('m:再接続する項目はありませんでした','再接続する項目はありませんでした'));
@@ -9075,7 +9370,9 @@ function srcCardHTML(t){
   return `<h3 data-i18n="node.cover">${TL('node.cover','カバー画像')}</h3>
     <button class="iBtn nPick" style="text-align:left">📁 ${TL('ui.selImage','画像を選択…')}</button>
     <img class="nThumb" style="width:calc(100% - 22px);height:auto;border-radius:6px;margin:0 11px;display:none;object-fit:contain;" alt="">
-    <div class="nCovName" style="font-size:10px;color:#8a8a8a;padding:0 11px;">${TL('ui.noneSelected','（未選択）')}</div>`;
+    <div class="nCovName" style="font-size:10px;color:#8a8a8a;padding:0 11px;">${TL('ui.noneSelected','（未選択）')}</div>
+    <div class="nCovFit" style="display:none;font-size:10px;color:#7fd3ff;padding:0 11px;line-height:1.5;"><span></span>
+      <button class="nCovFitOff" style="margin-left:4px;padding:0 6px;font:inherit;font-size:10px;color:#cfd3da;background:#2d2d2d;border:1px solid #44444c;border-radius:4px;cursor:pointer;">${TL('cf.off','補正をやめる')}</button></div>`;
 }
 function renderInfoCards(){
   for(const el of [...infoWorldEl.querySelectorAll('.iGrp[data-t]')]) if(!infoGraph.nodes[el.dataset.node]) el.remove();
@@ -9103,8 +9400,13 @@ function renderInfoCards(){
         const pr=await pickCoverImage(cur2&&cur2.data.nativePath);
         _pickOpen=null;
         if(pr){ const nd2=infoGraph.nodes[id]; if(nd2){ infoSnapshot(); nd2.data.name=pr.fh.name; nd2.data.nativePath=pr.path; _coverHandles[id]=pr.fh;
+          delete nd2.data.fit;   // 選び直した画像には前の画像の補正を当てない（必要なら譜面チェックからもう一度）
           metaDirty=true; applyInfoGraph(); } }
         refreshInfoCards(); });
+      const fo=el.querySelector('.nCovFitOff');   // カバー: 補正をやめる（カード生成時に一度だけ作る固定要素）
+      if(fo) fo.addEventListener('click',()=>{ const nd2=infoGraph.nodes[id]; if(!nd2||!nd2.data.fit) return;
+        infoSnapshot(); delete nd2.data.fit; metaDirty=true; applyInfoGraph(); refreshInfoCards();
+        showOk(t('cf.offDone','カバー画像の補正をやめました（元の画像のまま書き出します）')); });
       if(n.t==='prev'){   // 試聴: 開始/長さ（‹›=±1秒・Shift+‹›=±0.1秒・数値クリック=手入力）＋試聴ボタン
         el.querySelectorAll('.pvF').forEach(fe=>{ const k=fe.dataset.f2;
           wireStepper(fe,{get:()=>{ const nd2=infoGraph.nodes[id]; return nd2?(+nd2.data[k]||0):0; },
@@ -9141,13 +9443,22 @@ function refreshInfoCards(){
       if(n.data.name||_coverHandles[id]){
         loadCoverPreview({id:'ig:'+id,handle:_coverHandles[id]||null,name:n.data.name});
         const c=_coverImgs.get('ig:'+id);
-        if(c&&c.bmp){ const key=(c.key||'')+'';
-          if(el.dataset.thumbKey!==key){ el.dataset.thumbKey=key;
+        if(c&&c.bmp){
+          if(el._thumbBmp!==c.bmp){ el._thumbBmp=c.bmp;   // 画像そのもので比べる（名前で比べると読込中の古い画像のまま固まる）
             const cc=document.createElement('canvas'); cc.width=c.bmp.width; cc.height=c.bmp.height;
             cc.getContext('2d').drawImage(c.bmp,0,0); th.src=cc.toDataURL('image/png'); }
           th.style.display='block'; }
         nm.textContent=n.data.name||''; }
-      else { th.style.display='none'; nm.textContent=TL('ui.noneSelected','（未選択）'); el.dataset.thumbKey=''; } }
+      else { th.style.display='none'; nm.textContent=TL('ui.noneSelected','（未選択）'); el._thumbBmp=null; }
+      { const fe=el.querySelector('.nCovFit'), fit=n.data.fit;   // 補正の設定: 書き出しで実際に効く時だけ表示（基準を満たす画像なら何もしないため）
+        const c=_coverImgs.get('ig:'+id), bmp=c&&c.bmp, mode=fit&&fit.mode;
+        let txt='';
+        if(fit&&(n.data.name||_coverHandles[id])){
+          const ml=mode==='stretch'?TL('cf.sStretch','引き伸ばし'):mode==='pad'?TL('cf.sPad','余白で埋める'):TL('cf.sCrop','中央を切り抜き');
+          if(!bmp) txt=tf('cf.cardOn','書き出し時に補正（{mode}）',{mode:ml});
+          else if(coverNeedsFix(bmp.width,bmp.height,n.data.name||'')){ const s=coverFitSize(bmp.width,bmp.height,mode);
+            txt=tf('cf.cardSize','書き出し時に {w}×{h} → {s}×{s} へ補正（{mode}）',{w:bmp.width,h:bmp.height,s,mode:ml}); } }
+        if(fe){ fe.style.display=txt?'block':'none'; fe.querySelector('span').textContent=txt; } } }
   }
 }
 let infoGraph=defaultInfoGraph();
@@ -9161,10 +9472,30 @@ function infoCenterView(){   // 全ノードの中央へ（.キー / 初期表�
     x0=Math.min(x0,p.x); y0=Math.min(y0,p.y);
     x1=Math.max(x1,p.x+(el.offsetWidth||280)); y1=Math.max(y1,p.y+(el.offsetHeight||120)); }
   if(x1<x0) return;
-  infoGraph.cam.s=1;   // .=最初の状態と同じビュー（ズーム100%・ノード群の中心を画面中央へ）
-  infoGraph.cam.x=Math.round((r.width-(x1-x0))/2-x0);
-  infoGraph.cam.y=Math.round((r.height-(y1-y0))/2-y0);
+  // .=最初の状態と同じビュー: ノード群の中心を枠の中央へ。枠に収まらなければ縮小して収める（最小70%）。
+  // それでも収まらない向きは左端・上端に合わせる（以前は常に100%で中央＝一番上のノードの見出しや書き出しノードの下のボタンが枠の外に出ていた）。
+  // 上端は枠に重なる見出しバー（INFO⇄NLEの表示）の下から
+  const M=16, gw=x1-x0, gh=y1-y0, bar=document.getElementById('nodeColBar');
+  const br=bar&&bar.getBoundingClientRect(), MT=Math.max(M,br&&br.height?Math.round(br.bottom-r.top)+8:M);
+  const aw=r.width-2*M, ah=r.height-MT-M, s=Math.max(0.7,Math.min(1,aw/gw,ah/gh));
+  infoGraph.cam.s=Math.round(s*1000)/1000;
+  infoGraph.cam.x=Math.round(gw*s<=aw?(r.width-gw*s)/2-x0*s:M-x0*s);
+  infoGraph.cam.y=Math.round(gh*s<=ah?MT+(ah-gh*s)/2-y0*s:MT-y0*s);
   infoCamApply(); drawInfoEdges();
+}
+// ノードを新しく置く起点: 一番左のノードの列で、その列に掛かる既存ノード（書き出しノード含む）より下。
+// 一括読込は以前 (60,60) 固定で、既定の曲情報・カバー・試聴ノードのほぼ真上に重なっていた。
+// INFOが非表示の時は要素の高さが0なので、ノードの種類ごとの目安の高さを使う
+function infoFreeSpot(colW=320){
+  const EST={meta:200,set:200,cover:130,prev:200,out:440};
+  const items=[...Object.entries(infoGraph.nodes).map(([id,n])=>({n,t:n.t,el:inspEl.querySelector(`.iGrp[data-node="${id}"]`)})),
+    ...Object.entries(infoGraph.outs||{}).map(([oid,o])=>({n:o,t:'out',el:inspEl.querySelector(`.iGrp[data-out="${oid}"]`)}))];
+  if(!items.length) return {x:60,y:60};
+  const x0=Math.min(...items.map(it=>it.n.x));
+  let y1=-Infinity;
+  for(const it of items){ const w=(it.el&&it.el.offsetWidth)||300, h=(it.el&&it.el.offsetHeight)||EST[it.t]||200;
+    if(it.n.x<x0+colW&&it.n.x+w>x0) y1=Math.max(y1,it.n.y+h); }
+  return {x:Math.round(x0),y:Math.round((isFinite(y1)?y1:0)+40)};
 }
 function infoAutoCenter(){   // 初回表示時のみ自動センター（ユーザー操作後は発動しない）
   if(!infoGraph.cam||!infoGraph.cam.auto) return;
@@ -9806,6 +10137,7 @@ document.getElementById('mFileMenu').addEventListener('click',async e=>{
   else if(act==='addfolder'){ closeFileMenu(); document.getElementById('libAddBtn').click(); }   // MEDIAの「フォルダを追加」と同じ（showDirectoryPicker→scanLibrary）
   else if(act==='mapcheck'){ closeFileMenu(); mapCheckPanel.open(); }
   else if(act==='rating'){ closeFileMenu(); ratingPanel.open(); }
+  else if(act==='autolight'){ closeFileMenu(); openAutoLight(); }
   else if(act==='update'){ closeFileMenu(); updater.manualCheck(); }
 });
 
@@ -9866,6 +10198,7 @@ function jumpMarker(dir){   // 矢印方向の一番近いマーカーへ（マ�
   if(dir<0){ for(const b of beats){ if(b<cur-1e-3) tgt=b; } if(tgt===null) tgt=0; }
   else { tgt=beats.find(b=>b>cur+1e-3); if(tgt===undefined) return; }
   seekEase(tgt); }
+let _bootDone=false;   // 起動処理（buildToolbar）が最後まで終わった＝起動直後の非同期の初期化（配置モードへの切替など）が済んだ。テストの起動待ち用
 async function buildToolbar(){
   const tr=document.getElementById('tbTransport');
   const defs=[
@@ -9916,6 +10249,7 @@ async function buildToolbar(){
   setPv4Mode(true);   // pv4固定（ARC/pv4切替ボタンは廃止・ARC先読みも停止）
   // 事前ロード（再生中の差し替え用）
   await tbIcon('tp_pause');
+  _bootDone=true;
 }
 let _lastPlaying=null;
 function syncPlayIcons(){
@@ -10052,7 +10386,9 @@ function diffCopy(srcName,dstName,payload){   // payload: 'notes'（ボム/壁/�
   const S=diffStoreOf(srcName,true), D=diffStoreOf(dstName,true);
   if(!S||!D){ showErr('対象の難易度がありません'); return; }
   const dstCur=diffIsCurrent(dstName);
-  if(dstCur) snapshot(payload==='lights'?'light':'note');   // 現在の難易度への受信はUndo可
+  // 現在の難易度への受信はUndo可。クリップ（箱）ごと差し替えるので、箱を含む 'node' の履歴に積む（Undoで箱からフラットを作り直す）。
+  // 以前はフラットだけの 'note'/'light' で、Undo後もクリップが送り元の箱（長さ・色・並び）のまま残っていた
+  if(dstCur){ flushFlatEdits(); snapshot('node'); }
   const flatK=payload==='lights'?['lightEvents']:['notes','bombs','walls','arcs','chains'];
   const kind=payload==='lights'?'l':'n';
   for(const k of flatK) D[k]=structuredClone(S[k]||[]);
@@ -10304,6 +10640,27 @@ wireStepper(document.getElementById('offField'),{get:()=>njsOffCur().offset, set
 // getSongOff()経由でプレビュー再生にもそのまま反映される。書き出し時はexportMap()がffmpegで
 // song.eggへ実際に焼き込む（追加方向のみ・Info.dat側の対応状況に依存しない確実な方式）。
 function getLeadInMs(){ const o=songNode&&songNode.offset; return (isFinite(o)&&o<0)?Math.round(-o*1000):0; }
+// ---- song.egg へ Musicの配置（開始位置・分割・トリム）を反映する（2026-10-04）----
+// 以前は無音追加だけを焼き込み、NLEでMusicを動かす/切ると、エディタでは合っているのにゲームではずれた。
+// 切り貼り表 [[元の音源の開始秒, 終了秒, 書き出し先の開始秒], …] はエディタの再生（play）と同じ計算＝区間 sg は
+// 「拍 sg.beat の時刻から、元の音源の off0+sg.off 秒目を sg.dur 秒鳴らす」（off0=getSongOff()＝無音追加ぶんの負の値）。
+// 元の音源の範囲外（無音追加の先頭など）は切り詰め、その分あとから鳴らす（play と同じ）
+function eggPieces(){
+  if(!audioBuf) return [];
+  const off0=getSongOff(), D=audioBuf.duration, out=[];
+  for(const sg of msegs()){ let s=off0+sg.off, d=sg.dur, at=beatToTimeTM(sg.beat);
+    if(s<0){ at-=s; d+=s; s=0; }
+    const e=Math.min(D,s+d); if(e-s>0.001) out.push([s,e,at]); }
+  return out.sort((a,b)=>a[2]-b[2]);
+}
+// 元の音源の秒 → 書き出した song.egg の秒（試聴区間の開始用）。その秒が切り取られていれば、その後で最初に鳴る区間の頭
+function eggOutSecOf(src){
+  const P=eggPieces(); if(!P.length) return src+getLeadInMs()/1000;
+  for(const [s,e,at] of P) if(src>=s-1e-6&&src<e) return at+(src-s);
+  const nx=P.filter(q=>q[0]>src).sort((a,b)=>a[0]-b[0])[0];
+  return nx?nx[2]:P[0][2];
+}
+function eggLength(){ const P=eggPieces(); return P.length?Math.max(...P.map(([s,e,at])=>at+e-s)):null; }   // 書き出す song.egg の長さ（秒）
 function setLeadInMs(ms){ if(!songNode) return; ms=Math.max(0,Math.round(ms));
   songNode.offset=ms>0?-(ms/1000):0; metaDirty=true;
   if(audioBuf) buildWaveData();
@@ -10636,6 +10993,7 @@ let perfFrames=0, perfLast=performance.now();
   try { rt._ndMouseY = _ndMouseY; } catch (_) {}
   try { rt.layerPaste = layerPaste; } catch (_) {}
   try { rt.MIR_D = MIR_D; } catch (_) {}
+  try { rt.MIR_M = MIR_M; } catch (_) {}
   try { rt.ctxEl = ctxEl; } catch (_) {}
   try { rt._menuHidAt = _menuHidAt; } catch (_) {}
   try { rt.prcv = prcv; } catch (_) {}
@@ -10899,6 +11257,8 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.setLightMode = setLightMode; } catch (_) {}
   try { rt.refreshLightHover = refreshLightHover; } catch (_) {}
   try { rt.placeLight = placeLight; } catch (_) {}
+  try { rt.openAutoLight = openAutoLight; } catch (_) {}
+  try { rt.openCoverFit = openCoverFit; rt.connectedCoverFit = connectedCoverFit; } catch (_) {}
   try { rt.hoverLightEvent = hoverLightEvent; } catch (_) {}
   try { rt.applyLightMove = applyLightMove; } catch (_) {}
   try { rt.cancelLightMove = cancelLightMove; } catch (_) {}
@@ -10924,6 +11284,7 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.cutMusicAt = cutMusicAt; } catch (_) {}
   try { rt.mergeMusicSel = mergeMusicSel; } catch (_) {}
   try { rt.musicHit = musicHit; } catch (_) {}
+  try { rt.musicEdgeAt = musicEdgeAt; } catch (_) {}
   try { rt.deleteMusic = deleteMusic; } catch (_) {}
   try { rt.createFullSongClip = createFullSongClip; } catch (_) {}
   try { rt.secAtPr = secAtPr; } catch (_) {}
@@ -11042,6 +11403,7 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.extractRegion = extractRegion; } catch (_) {}
   try { rt.pasteFragment = pasteFragment; } catch (_) {}
   try { rt.mirrorRegion = mirrorRegion; } catch (_) {}
+  try { rt.mirrorNoteAngle = mirrorNoteAngle; } catch (_) {}
   try { rt.deleteRegionContents = deleteRegionContents; } catch (_) {}
   try { rt.showMenu = showMenu; } catch (_) {}
   try { rt.hideMenu = hideMenu; } catch (_) {}
@@ -11192,8 +11554,13 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.mainPos = mainPos; } catch (_) {}
   try { rt.screenPosOf = screenPosOf; } catch (_) {}
   try { rt.createClipAt = createClipAt; } catch (_) {}
+  try { rt.clipSlotAt = clipSlotAt; } catch (_) {}
+  try { rt.makeClipAt = makeClipAt; } catch (_) {}
   try { rt.createNoteClipAt = createNoteClipAt; } catch (_) {}
   try { rt.clipTrackForBeat = clipTrackForBeat; } catch (_) {}
+  try { rt.clipTrackPlan = clipTrackPlan; } catch (_) {}
+  try { rt.placeTrackHist = placeTrackHist; } catch (_) {}
+  try { rt.placeHistDone = placeHistDone; } catch (_) {}
   try { rt.noteTrackForBeat = noteTrackForBeat; } catch (_) {}
   try { rt.placeAt = placeAt; } catch (_) {}
   try { rt.tlScrub = tlScrub; } catch (_) {}

@@ -71,8 +71,9 @@ export function sampleChainCurve(ch, hx, hy, tx, ty, zt, segments = 28, global =
 export function nearestCutDirection(angleDeg) {
   let best = 0, bestDiff = 1e9;
   for (const d of [0, 1, 2, 3, 4, 5, 6, 7]) {
-    let diff = Math.abs(angleDeg - (DIR_ANGLE[d] ?? 0));
-    if (diff > 180) diff = 360 - diff;
+    // 角度の差を -180〜180 に畳んでから絶対値（angleFromWorldDelta は -180〜180 を返すので、差が360を超えることがある。
+    // 以前は「180を超えたら360から引く」だけで、差が360超だと負になり最小扱いされて -45度未満が全部 4 になっていた）
+    const diff = Math.abs(((angleDeg - (DIR_ANGLE[d] ?? 0)) % 360 + 540) % 360 - 180);
     if (diff < bestDiff) { bestDiff = diff; best = d; }
   }
   return best;

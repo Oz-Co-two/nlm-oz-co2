@@ -43,6 +43,7 @@ export class NlePanel {
     'mergeLayerSel',
     'mergeMusicSel',
     'musicHit',
+    'musicEdgeAt',
     'ndResize',
     'ovResize',
     'packLanes',
@@ -86,6 +87,7 @@ export class NlePanel {
   mergeLayerSel(...args) { return this.rt.mergeLayerSel(...args); }
   mergeMusicSel(...args) { return this.rt.mergeMusicSel(...args); }
   musicHit(...args) { return this.rt.musicHit(...args); }
+  musicEdgeAt(...args) { return this.rt.musicEdgeAt(...args); }
   ndResize(...args) { return this.rt.ndResize(...args); }
   ovResize(...args) { return this.rt.ovResize(...args); }
   packLanes(...args) { return this.rt.packLanes(...args); }

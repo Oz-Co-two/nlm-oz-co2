@@ -1,0 +1,38 @@
+{
+ "_version": "2.1.0",
+ "_songName": "リッチ テスト曲",
+ "_songSubName": "fixture",
+ "_songAuthorName": "NLM Test Artist",
+ "_levelAuthorName": "NLM Tester",
+ "_beatsPerMinute": 120,
+ "_songTimeOffset": 0,
+ "_shuffle": 0,
+ "_shufflePeriod": 0.5,
+ "_previewStartTime": 4,
+ "_previewDuration": 6,
+ "_songFilename": "song.egg",
+ "_coverImageFilename": "",
+ "_environmentName": "DefaultEnvironment",
+ "_allDirectionsEnvironmentName": "GlassDesertEnvironment",
+ "_difficultyBeatmapSets": [
+  {
+   "_beatmapCharacteristicName": "Standard",
+   "_difficultyBeatmaps": [
+    {
+     "_difficulty": "Hard",
+     "_difficultyRank": 5,
+     "_beatmapFilename": "HardStandard.dat",
+     "_noteJumpMovementSpeed": 14,
+     "_noteJumpStartBeatOffset": 0
+    },
+    {
+     "_difficulty": "Expert",
+     "_difficultyRank": 7,
+     "_beatmapFilename": "ExpertStandard.dat",
+     "_noteJumpMovementSpeed": 17,
+     "_noteJumpStartBeatOffset": -0.25
+    }
+   ]
+  }
+ ]
+}

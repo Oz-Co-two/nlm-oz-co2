@@ -142,7 +142,7 @@ const ST = {
 const ST_ORDER = [BL.FAIL, BL.CHECK, BL.PASS, BL.PARTIAL, BL.MANUAL, BL.NA];
 const KIND_JA = { auto: '自動', partial: '一部自動', cand: '候補', manual: '手動', na: '対象外' };
 
-export function blView({ t, escHtml, dispDiff, mcLabel }) {
+export function blView({ t, escHtml, dispDiff, mcLabel, fixHTML }) {   // fixHTML(所見)＝その所見を直すボタン（無ければ''）
   const fill = (s, vars) => { if (vars) for (const k in vars) s = s.split('{' + k + '}').join(String(vars[k])); return s; };
   const stLab = s => t('bl.st.' + s, ST[s].ja);
   const fmtBeat = b => String(Math.round(b * 1000) / 1000);
@@ -189,7 +189,7 @@ export function blView({ t, escHtml, dispDiff, mcLabel }) {
     const fs = r.findings.map((f, fi) => {
       const d = f.d ? `<span class="blDiff">${escHtml(dispDiff(f.d))}</span>` : '';
       const cls = f.status === BL.FAIL || f.status === BL.CHECK ? ' st-' + f.status : '';
-      return `<div class="blF${cls}">${d}<span>${escHtml(msg(f))}</span>${f.objs ? `<span class="mcN">${new Set(f.objs.map(o => o.beat)).size}</span>` : ''}${chips(f, 'bl:' + ri + ':' + fi, st.expanded, CHIP_MAX)}</div>`;
+      return `<div class="blF${cls}">${d}<span>${escHtml(msg(f))}</span>${f.objs ? `<span class="mcN">${new Set(f.objs.map(o => o.beat)).size}</span>` : ''}${fixHTML ? fixHTML(f) : ''}${chips(f, 'bl:' + ri + ':' + fi, st.expanded, CHIP_MAX)}</div>`;
     }).join('');
     let inp = '';
     if (r.input === 'stars') {

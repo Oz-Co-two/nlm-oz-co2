@@ -22,12 +22,15 @@ export class NotesEditor {
     'buildNote',
     'buildWall',
     'createClipAt',
+    'clipSlotAt',
+    'makeClipAt',
     'createNoteClipAt',
     'deleteRegionContents',
     'drawNoteIco',
     'extractRegion',
     'makeSpikyBomb',
     'mirrorRegion',
+    'mirrorNoteAngle',
     'objUnder',
     'pasteFragment',
     'placeAt',
@@ -57,12 +60,15 @@ export class NotesEditor {
   buildNote(...args) { return this.rt.buildNote(...args); }
   buildWall(...args) { return this.rt.buildWall(...args); }
   createClipAt(...args) { return this.rt.createClipAt(...args); }
+  clipSlotAt(...args) { return this.rt.clipSlotAt(...args); }
+  makeClipAt(...args) { return this.rt.makeClipAt(...args); }
   createNoteClipAt(...args) { return this.rt.createNoteClipAt(...args); }
   deleteRegionContents(...args) { return this.rt.deleteRegionContents(...args); }
   drawNoteIco(...args) { return this.rt.drawNoteIco(...args); }
   extractRegion(...args) { return this.rt.extractRegion(...args); }
   makeSpikyBomb(...args) { return this.rt.makeSpikyBomb(...args); }
   mirrorRegion(...args) { return this.rt.mirrorRegion(...args); }
+  mirrorNoteAngle(...args) { return this.rt.mirrorNoteAngle(...args); }
   objUnder(...args) { return this.rt.objUnder(...args); }
   pasteFragment(...args) { return this.rt.pasteFragment(...args); }
   placeAt(...args) { return this.rt.placeAt(...args); }

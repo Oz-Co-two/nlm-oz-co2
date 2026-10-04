@@ -43,6 +43,9 @@ export class EditorRuntimeHelpers {
     'clipRangeAt',
     'clipRef',
     'clipTrackForBeat',
+    'clipTrackPlan',
+    'placeTrackHist',
+    'placeHistDone',
     'closeFileMenu',
     'closeFloatUI',
     'closePie',
@@ -230,6 +233,9 @@ export class EditorRuntimeHelpers {
   clipRangeAt(...args) { return this.rt.clipRangeAt(...args); }
   clipRef(...args) { return this.rt.clipRef(...args); }
   clipTrackForBeat(...args) { return this.rt.clipTrackForBeat(...args); }
+  clipTrackPlan(...args) { return this.rt.clipTrackPlan(...args); }
+  placeTrackHist(...args) { return this.rt.placeTrackHist(...args); }
+  placeHistDone(...args) { return this.rt.placeHistDone(...args); }
   closeFileMenu(...args) { return this.rt.closeFileMenu(...args); }
   closeFloatUI(...args) { return this.rt.closeFloatUI(...args); }
   closePie(...args) { return this.rt.closePie(...args); }

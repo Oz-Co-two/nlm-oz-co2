@@ -206,7 +206,7 @@ def main():
         t.shot("06-direction", marks="[{t:'#tbDirPanel',pad:3}]", clip=(560, 560, 700, 440))
         t.click_el("#tbModeNote"); ed.wait(0.3)
         # 07 置き終わった状態（NLEに自動でクリップができている）
-        seek_to(ed, 0)   # Ctrl+←は配置モードの定位置カメラをずらすので使わない（1コマずつ戻す）
+        seek_to(ed, 0)   # 1コマずつ戻す（v1.4.0-oz より前は Ctrl+← で配置モードの定位置カメラがずれたための回避策。今は Ctrl+← でもよい）
         t.shot("07-notes-placed")
 
         # 08〜09 アークとチェーン: 素材のノーツを置いてからカメラ固定モードで選ぶ

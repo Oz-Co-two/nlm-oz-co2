@@ -1,7 +1,7 @@
 // 譜面チェック（BeatLeader基準）の結果パネル。判定そのものは mapcheck.js。
 // 非モーダルの浮きパネル＝開いたまま譜面を直して「再チェック」できる。拍をクリックするとその位置へ移動・選択する
 import { runMapCheck, STATUS, CHECK_NAMES } from './mapcheck.js';
-import { runBlCriteria } from './blcriteria.js';
+import { runBlCriteria, BL } from './blcriteria.js';
 import { blView } from './blcriteria-view.js';
 
 // 項目の日本語名（{}はチェックが返す数値）。英語版は lang/en.json の mc.k.* で上書きされる
@@ -55,9 +55,20 @@ const ST = {
 };
 const ORDER = [STATUS.RANK, STATUS.ERROR, STATUS.WARN, STATUS.INFO];
 const CHIP_MAX = 80;   // 1項目に最初に並べる拍の数（残りは「他N件」で展開）
+// ライトが足りない項目（自動ライティングで直せるもの）: BS Map Check の項目キー / BL評価リストの所見キー
+const LIGHT_FIX_MC = new Set(['insufficientLight', 'unlitBomb']);
+const LIGHT_FIX_BL = new Set(['lightFew', 'noLightAtAll', 'bombDark']);
+// カバー画像の寸法・形式の項目（カバー画像の補正で直せるもの）
+const COVER_FIX_MC = new Set(['coverNotSquare', 'coverSmall']);
+const COVER_FIX_BL = new Set(['coverRatio', 'coverSize', 'coverFormat']);
 
 export function installMapCheckPanel(api) {
-  const { t, escHtml, collect, jump, dispDiff } = api;
+  // autoLight / coverFix (終わったら呼ぶ関数)＝自動ライティング / カバー画像の補正の確認を開く（無ければボタンを出さない）
+  const { t, escHtml, collect, jump, dispDiff, autoLight, coverFix } = api;
+  const FIX = { autolight: [autoLight, 'mc.fixAutoLight', '💡 自動ライティング…'], cover: [coverFix, 'mc.fixCover', '🖼 カバー画像を補正…'] };
+  const fixBtn = (kind = 'autolight') => FIX[kind][0] ? `<button class="mcFix" data-fix="${kind}">${escHtml(t(FIX[kind][1], FIX[kind][2]))}</button>` : '';
+  const fixKindMc = key => LIGHT_FIX_MC.has(key) ? 'autolight' : COVER_FIX_MC.has(key) ? 'cover' : null;
+  const fixKindBl = key => LIGHT_FIX_BL.has(key) ? 'autolight' : COVER_FIX_BL.has(key) ? 'cover' : null;
   const fill = (s, vars) => { if (vars) for (const k in vars) s = s.split('{' + k + '}').join(String(vars[k])); return s; };
   const labelOf = r => {
     const vars = { ...(r.vars || {}) };
@@ -73,7 +84,8 @@ export function installMapCheckPanel(api) {
   // タブ: 'mc'＝BS Map Check と同じ判定 / 'bl'＝NLM版 BeatLeader評価リスト（開いているタブだけは覚えておく）
   let tab = 'mc'; try { if (localStorage.getItem('bsnm_mcTab') === 'bl') tab = 'bl'; } catch (_) {}
   const blSt = { onlyIssues: false, stars: {}, expanded };   // ★/Techはアプリを開いている間だけ保持
-  const blv = blView({ t, escHtml, dispDiff, mcLabel: key => t('mc.k.' + key, JA[key] || key) });
+  const blv = blView({ t, escHtml, dispDiff, mcLabel: key => t('mc.k.' + key, JA[key] || key),
+    fixHTML: f => fixKindBl(f.key) && (f.status === BL.FAIL || f.status === BL.CHECK) ? fixBtn(fixKindBl(f.key)) : '' });
   const runBl = () => {
     blRes = null;
     if (!input || !last || last.error) return;
@@ -95,6 +107,8 @@ export function installMapCheckPanel(api) {
     }));
     const body = el.querySelector('.mcBody');
     body.addEventListener('click', ev => {   // 拍チップと「他N件」は描画し直すので委譲で受ける（パネル本体は固定要素）
+      const fx = ev.target.closest('.mcFix');
+      if (fx) { const fn = FIX[fx.dataset.fix] && FIX[fx.dataset.fix][0]; if (fn) fn(() => run()); return; }   // 直したらチェックし直す
       const more = ev.target.closest('.mcMore');
       if (more) { expanded.add(more.dataset.id); render(); return; }
       const chip = ev.target.closest('.mcBeat'); if (!chip || !last) return;
@@ -158,7 +172,7 @@ export function installMapCheckPanel(api) {
     }
     const cnt = r.objs ? `<span class="mcN">${new Set(r.objs.map(o => o.beat)).size}</span>` : '';
     return `<div class="mcItem st-${r.status}"><div class="mcLine"><span class="mcIc" title="${escHtml(t(ST[r.status].tip, ST[r.status].tipJa))}">${ST[r.status].ic}</span>`
-      + `<span class="mcLab">${escHtml(lab)}</span>${cnt}${en}</div>${beats}</div>`;
+      + `<span class="mcLab">${escHtml(lab)}</span>${cnt}${en}${fixKindMc(r.key) ? fixBtn(fixKindMc(r.key)) : ''}</div>${beats}</div>`;
   }
   const sortByStatus = list => list.map((r, i) => [r, i]).sort((a, b) => ORDER.indexOf(a[0].status) - ORDER.indexOf(b[0].status) || a[1] - b[1]);
 

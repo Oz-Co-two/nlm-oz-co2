@@ -38,6 +38,7 @@
       <hr>
       <button data-act="mapcheck"><span data-i18n="menu.mapCheck">譜面チェック（BeatLeader基準）…</span><span class="mkey"></span></button>
       <button data-act="rating"><span data-i18n="menu.rating">難易度を測る（BeatLeaderの星の近似）…</span><span class="mkey"></span></button>
+      <button data-act="autolight"><span data-i18n="menu.autoLight">自動ライティング…</span><span class="mkey"></span></button>
       <hr>
       <button data-act="update"><span data-i18n="menu.update">更新を確認…</span><span class="mkey"></span></button>
     </div>
@@ -188,6 +189,9 @@
           <button id="lcChromaSw" class="colSw" data-i18n-t="ui.chromaSwTip" title="現在のクロマ色（クリックでピッカー）"></button>
           <span id="lcColsHost" style="display:inline-flex;align-items:center;gap:4px;"></span>
         </div>
+        <div class="tbg tbgLightGrp" id="tbgLAuto" style="display:none">
+          <button id="tbAutoLight" class="tbi tbAuto" data-i18n-t="tb.autoLightTip" title="ノーツから自動でライトを作り、新しいライトのレーンに置きます"><span data-i18n="tb.autoLight">自動ライト</span></button>
+        </div>
       </div>
       <div id="statChip">
     <div class="legend" id="stat" style="margin-top:8px;color:var(--accent)">フォルダ未読込</div>
@@ -245,7 +249,8 @@
   </div>
 </div>
 <div id="ctxmenu"></div>
-<div id="errToast" style="position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:none;z-index:200;
+<!-- お知らせは再生バー（画面下の中央）より上に出す＝表示中も再生ボタン等を押せる（以前は bottom:18px で重なり、曲の読込直後の約4秒押せなかった） -->
+<div id="errToast" style="position:fixed;left:50%;bottom:62px;transform:translateX(-50%);display:none;z-index:200;
   background:#3a1216;border:1px solid #ff4d5e;border-radius:8px;padding:9px 14px;color:#ffb3bb;font-size:13px;max-width:70%"></div>
 <div id="uiStash" style="display:none">
     <div class="row"><div class="t" data-i18n="ui.brush">ブラシ（N/B/W）</div><div class="types">

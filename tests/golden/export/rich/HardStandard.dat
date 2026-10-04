@@ -1,0 +1,130 @@
+{
+ "version": "3.2.0",
+ "bpmEvents": [
+  {
+   "b": 16,
+   "m": 150
+  }
+ ],
+ "rotationEvents": [],
+ "colorNotes": [
+  {
+   "a": 0,
+   "b": 2,
+   "x": 1,
+   "y": 0,
+   "c": 0,
+   "d": 1
+  },
+  {
+   "a": 0,
+   "b": 3,
+   "x": 2,
+   "y": 0,
+   "c": 1,
+   "d": 1
+  },
+  {
+   "a": 0,
+   "b": 4,
+   "x": 0,
+   "y": 1,
+   "c": 0,
+   "d": 2
+  },
+  {
+   "a": 0,
+   "b": 5,
+   "x": 3,
+   "y": 1,
+   "c": 1,
+   "d": 3
+  },
+  {
+   "a": 0,
+   "b": 6,
+   "x": 1,
+   "y": 0,
+   "c": 0,
+   "d": 8
+  },
+  {
+   "a": 0,
+   "b": 8,
+   "x": 2,
+   "y": 0,
+   "c": 1,
+   "d": 1
+  },
+  {
+   "a": 0,
+   "b": 10,
+   "x": 2,
+   "y": 2,
+   "c": 1,
+   "d": 0
+  }
+ ],
+ "bombNotes": [
+  {
+   "b": 7,
+   "x": 3,
+   "y": 0
+  }
+ ],
+ "obstacles": [
+  {
+   "b": 12,
+   "x": 3,
+   "y": 0,
+   "d": 2,
+   "w": 1,
+   "h": 5
+  }
+ ],
+ "sliders": [
+  {
+   "b": 8,
+   "c": 1,
+   "x": 2,
+   "y": 0,
+   "d": 1,
+   "mu": 1,
+   "tb": 10,
+   "tx": 2,
+   "ty": 2,
+   "tc": 0,
+   "tmu": 1,
+   "m": 0
+  }
+ ],
+ "burstSliders": [],
+ "waypoints": [],
+ "basicBeatmapEvents": [
+  {
+   "b": 0,
+   "et": 0,
+   "i": 5,
+   "f": 1
+  },
+  {
+   "b": 4,
+   "et": 1,
+   "i": 1,
+   "f": 1
+  },
+  {
+   "b": 8,
+   "et": 4,
+   "i": 0,
+   "f": 1
+  }
+ ],
+ "colorBoostBeatmapEvents": [],
+ "lightColorEventBoxGroups": [],
+ "lightRotationEventBoxGroups": [],
+ "basicEventTypesWithKeywords": {
+  "d": []
+ },
+ "useNormalEventsAsCompatibleEvents": true
+}

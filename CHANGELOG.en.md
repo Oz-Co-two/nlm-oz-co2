@@ -1,12 +1,66 @@
 # Changelog (Non-Linear Mapper, Oz-Co2 edition)
 
 The main changes from the original Non-Linear Mapper by helba, newest version first.
-For basic usage, see the [tutorial](docs/tutorial.md) (Japanese) and the original manual.
+For basic usage, see the [tutorial](docs/tutorial.md), the [advanced tutorial](docs/tutorial-advanced.md) (both Japanese) and the original manual.
 
 日本語: [CHANGELOG.md](CHANGELOG.md)
 
 <!-- Format: one "## v1.2.3-oz" heading per version. Top-level bold items ("- **...**") are the headlines shown in the in-app
 update notice (tools/make_release.py puts them into update.json). Keep the same versions and the same number of headlines as CHANGELOG.md. -->
+
+## v1.4.0-oz
+
+- **Added auto lighting**
+  Generates basic lights that follow the notes. Use "Auto lighting…" in the File menu, "Auto light" on the LIGHTING toolbar,
+  or "💡 Auto lighting…" on a map check item that reports too few lights.
+  - The lights are made to satisfy the light items of the map check (insufficient lighting in BS Map Check, R10.A and R7.B in the NLM BL criteria list).
+    Only red and blue (vanilla) colors are used.
+  - The lights are built from the difficulty with the most notes and the same lights are placed in every difficulty that has content.
+    A new light lane is added at the top and the lights go into an "Auto light" clip, so your existing lights are kept
+    (where they overlap, delete or mute one of the lanes to choose).
+  - Adding to all difficulties can be undone with a single Ctrl+Z.
+- **Added cover image fixing**
+  When the map check reports that the cover image is not square, too small, or not png/jpg, you can fix it with "🖼 Fix cover image…" on that item.
+  - Choose how to make it square: "Crop the center (default) / Stretch / Pad with a border (you can choose the border color)".
+    Images smaller than 256×256 are enlarged to 256×256, and formats other than png/jpg are converted to png.
+  - The original image file is not changed. The fixed image is used only when exporting and in the map check.
+    You can go back to the original image any time with "Stop fixing" on the cover image node of the INFO screen.
+- **The Music placement is now applied to the exported song.egg**
+  Moving the start of the Music clip in the NLE, or splitting and trimming it, is now applied to the audio of the exported song.egg.
+  Previously only the lead-in silence was applied, so the song and the map could be out of sync in the game even though they matched in the editor.
+  The song select preview position and the song length used by the map check are calculated from the same placement.
+- **Improvements to "Load song data"**
+  - BPM changes in the map are now imported as tempo parts. If audio is already loaded, you are asked whether to import them
+    (the app cannot tell whether it is the same song or a different one).
+  - Note angle offsets, customData and similar values are now kept through to the export (V3 maps only).
+  - The added nodes are placed where they do not overlap the existing nodes on the INFO screen. When the INFO screen does not fit right after opening,
+    it is zoomed out a little so that the top heading and the buttons of the export node are visible.
+- **Added an advanced tutorial** ([docs/tutorial-advanced.md](docs/tutorial-advanced.md), Japanese)
+  Explains, chapter by chapter with images, operations that speed up your work, how to use tempo, lights and the INFO screen,
+  and the checks before publishing (map check, BL criteria list, estimate difficulty).
+- When ffmpeg is not found, the message now suggests `winget install Gyan.FFmpeg` and mentions that NLM must be restarted after installing it
+- **Bug fixes**
+  - In place mode, jumping to the start, the end or a marker (Ctrl+← / Ctrl+→, the transport bar buttons, etc.) or pressing "." shifted the fixed camera
+  - Dragging the head of a chain to the left always pointed it up-left
+  - Right after "Load song data", difficulties that were not open were left out of the export and the map check
+  - Reopening a project saved with a split or trimmed Music clip lost the split
+  - Several Undo (Ctrl+Z) fixes: clips and lanes created automatically when placing or pasting in the 3D view were left behind after Undo /
+    pressing Undo quickly in a row could move notes to another clip (or lose them) / moving, renaming and deleting markers could not be undone /
+    locks shifted when undoing lane additions or removals / undoing a received difficulty did not restore the clips /
+    undoing after choosing the output folder again could change the export destination
+  - Cancelling a paste in the 3D view with Esc or right-click left the automatically created clip and an empty Undo step behind.
+    Cancelling a light paste needed Esc twice
+  - Mirroring did not mirror the note angle offset or the arc's winding direction (clockwise / counter-clockwise)
+  - Notes on a locked lane could be overwritten in the 3D view
+  - Actions that change nothing (a drag that did not move, a wheel step that did not change the value, clicking the edge of the Music clip, etc.)
+    added Undo steps or marked the project as unsaved. Dragging the circle in the color picker added a large number of Undo steps
+  - NLE fixes: the split mode (R) position did not snap / moving the Music and clips together stopped short of beat 0 /
+    grabbing the Music where it was cut off at the edge of the view trimmed it / the input box for renaming a light clip was misplaced
+  - The automatic tempo detection could pick double or half the tempo (e.g. 60 BPM for 120 BPM)
+  - With vanilla colors, the light color pie (C key) wrote custom colors (with vanilla it now switches between ①, ② and white)
+  - The cover image thumbnail on the INFO screen could stay old after changing the image
+  - The notice shown right after loading a song covered the transport bar, so its buttons could not be pressed
+  - Exporting without ffmpeg could end in a connection error instead of the message explaining how to install it
 
 ## v1.3.0-oz
 

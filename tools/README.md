@@ -142,8 +142,11 @@ Pythonから使う場合（検証スクリプトの書き方）はファイル�
 テスト素材 `tools/fixtures/`:
 - `basic.wav`: 120BPM・16秒のクリック音（プログラム生成＝著作物の問題なし）
 - `basic.nlmf`: basic.wav 用のプロジェクト（1〜8拍目に赤青ノーツ8個）。`Editor(fixture='basic')` で開ける
-- `make_fixtures.py`: 上の2つを作り直す。nlmf は cdp.py で実際にクリックして置き、アプリ自身に保存させている
-  ＝保存形式が変わったらこれを実行すれば追従する。
+- `rich.nlmf`: 主要な要素を一通り含む素材（2難易度・ボム・壁・アーク・チェーン・ライト・BPM変化）。元は `rich_map/`
+  （Beat Saber の譜面フォルダ）で、アプリの「曲データを読み込む」で読ませて保存させたもの。音源は basic.wav を使い回す
+- `make_fixtures.py`: 上の素材を作り直す。nlmf はアプリ自身に保存させている＝保存形式が変わったらこれを実行すれば追従する。
+
+決まった確認はテスト（`tests/`・`tools/run_tests.py`）にする。使い方は `tests/README.md`。
 
 ## 譜面チェックを原作と突き合わせる（mapcheck_difftest.py）
 
@@ -186,6 +189,25 @@ basic.wav を読み込み、実際のクリック・キー入力でノーツや�
 - 配置モードで Ctrl+←（スタートへ）を使うと定位置カメラがずれるため、スクリプトでは ← を繰り返して戻している。
 - ヘッドレスEdgeは、右端のレベルメーター目盛りの位置に丸いアイコンを時々重ねて描く（DOMに無くページ側から消せない）。
   そのため撮影範囲は右端（x=1838）の手前までにしている。
+
+### 上級編（make_advanced_shots.py）
+
+`docs/tutorial-advanced.md` の画像（`docs/images/tutorial-advanced/<章>-<連番>-<内容>.png`）は `tools/make_advanced_shots.py`。
+basic.wav に赤青のノーツを置き、マーカー・テンポパート・ライト・2つ目の書き出しノードを足しながら、各章の画面を撮る。
+撮影の部品（赤枠・ノーツ配置・ダイアログの差し替え）は make_tutorial_shots.py のものを読み込んで使う。
+
+```
+.venv-build/Scripts/python.exe tools/make_advanced_shots.py          # 全部撮る（約3分）
+.venv-build/Scripts/python.exe tools/make_advanced_shots.py 03 08    # 章番号を指定するとその章の画像だけ保存（操作は最初から全部行う）
+```
+
+- NLE の帯（目盛り・テンポパート・マーカー・レーン）はキャンバスに直接描くので、位置は `_dbgApp.nleScreen(拍)` で取る。
+- パイメニューはキーを押している間だけ出るので、CDP で keyDown だけ送って撮り、撮った後に keyUp する。
+- パネル（譜面チェック・難易度を測る）は画面右端に出て撮影範囲からはみ出すので、撮る前に左へ寄せている。
+- 「難易度を測る」は nlm-rating プラグインが要る。取り込み済みの `plugins/rating`（`current.json` と版のフォルダ）を
+  環境変数 `NLM_RATING_DIR` で指定する（省略時は配布フォルダ `NLM-app/plugins/rating`）。撮影用の一時データフォルダへ
+  コピーして使う。見つからなければ「プラグイン未導入」の画面を撮る。
+- 撮った後は、画像を目で見て番号の重なり・はみ出しが無いか確かめる（画面の配置が変わると番号の位置がずれることがある）。
 
 ## ビルドして配布フォルダへ反映する
 

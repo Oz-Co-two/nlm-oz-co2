@@ -106,6 +106,7 @@
 
   /* .tbi.snapNum で .tbi{width:28px}(chrome.css・後読み)に勝つ＝スナップボタンが28pxに潰れて「1/2 ▼」がはみ出す崩れを解消 */
   .tbi.snapNum{width:auto;padding:0 7px;gap:6px;font-size:12.5px;font-weight:600;}
+  .tbi.tbAuto{width:auto;padding:0 9px;font-size:12px;font-weight:600;white-space:nowrap;}   /* LIGHTINGの「自動ライト」（文字のボタン） */
 
   #tbSnapLabel{min-width:38px;text-align:center;display:inline-block;}
 

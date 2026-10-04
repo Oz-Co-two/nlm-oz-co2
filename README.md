@@ -11,9 +11,11 @@ Beat Saber の譜面エディタです。デスクトップアプリ（Windows /
 
 はじめて使う方は、まず **[チュートリアル](docs/tutorial.md)** をどうぞ。曲の読み込みからノーツ配置、
 Beat Saber で遊べる形への書き出し・保存までを、画像付きで順番に説明しています。
+慣れてきたら **[上級編チュートリアル](docs/tutorial-advanced.md)** もどうぞ。作業を速くする操作や、公開前のチェック・★の測定などを説明しています。
 各パネルの細かい操作は、原作サイトのリファレンスマニュアルが詳しいです。
 
 - **チュートリアル（画像付き・基本の流れ）**: [docs/tutorial.md](docs/tutorial.md)
+- **上級編チュートリアル（作業を速くする操作・公開前のチェック・★の測定など）**: [docs/tutorial-advanced.md](docs/tutorial-advanced.md)
 - **原作 / 公式ドキュメント**: https://helba.flashhub.net/nlm/
 - **リファレンスマニュアル**: https://helba.flashhub.net/nlm/manual/
 - **原作の修正履歴**: https://helba.flashhub.net/nlm/changelog.html
@@ -67,7 +69,7 @@ v1.1.0-oz 以前から v1.2.0-oz 以降へ更新した場合は、既存プロ�
 ## このフォークでの変更点
 
 原作からの主な変更点は、版ごとに [CHANGELOG.md](CHANGELOG.md)（English: [CHANGELOG.en.md](CHANGELOG.en.md)）にまとめています。
-基本操作は上記の[チュートリアル](docs/tutorial.md)と原作マニュアルを参照してください。
+基本操作は上記の[チュートリアル](docs/tutorial.md)・[上級編チュートリアル](docs/tutorial-advanced.md)と原作マニュアルを参照してください。
 
 ### 開発用ツール（`tools/`）
 
@@ -78,10 +80,13 @@ v1.1.0-oz 以前から v1.2.0-oz 以降へ更新した場合は、既存プロ�
 - ビルド＆配布フォルダ反映スクリプト（`build_and_deploy.py`）
 - JS 構文・初期ロードチェックツール（`check_js.py`、Node.js 不使用のためヘッドレス Edge で検証）
 - 自動検証ツール（`cdp.py`）とテスト素材（`fixtures/`）: ヘッドレス Edge でエディタを実際に操作・撮影して確認する
+- テスト一式（`run_tests.py` と `tests/`）: エディタを実際に操作して、基本の機能が壊れていないか・書き出しの中身や画面が
+  変わっていないかを自動で確かめる（追加ライブラリ不要。使い方は [tests/README.md](tests/README.md)）
 - 譜面チェックの突き合わせテスト（`mapcheck_difftest.py`）: 譜面チェック（BeatLeader基準）が原作 BS Map Check と同じ結果になるかを確認する
 - NLM版 BeatLeader評価リストの自己テスト（`blcriteria_test.py`）: 基準の違反を1つずつ仕込んだ譜面で、該当項目が指摘されるかを確認する
 - リリース用ファイルの作成（`make_release.py`）: 配布 zip と、アプリ内の自動更新が読む `update.json` を作る
 - 自動更新の自己テスト（`update_test.py`）: ローカルの偽の配布元で、確認・ダウンロード・照合・差し替え・復元を通しで確かめる
+- チュートリアルの画像の撮影（`make_tutorial_shots.py`・`make_advanced_shots.py`）: エディタを実際に操作して、基本編・上級編の画像を撮り直す
 
 ## ライセンス
 
@@ -135,6 +140,7 @@ winget install Gyan.FFmpeg
 ```
 
 未インストールのまま書き出すと、エラーメッセージでインストール方法が案内されます。
+NLM を起動したままインストールした場合は、NLM を一度閉じて起動し直してください（起動時の設定で ffmpeg を探すため）。
 
 ## Linux など Windows 以外での利用（参考情報・動作未確認）
 

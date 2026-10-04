@@ -17,6 +17,8 @@
   #mcPanel .mcBody{overflow-y:auto;padding:4px 8px 8px;flex:1;min-height:60px;}
   #mcPanel .mcFoot{padding:7px 14px 9px;border-top:1px solid #ffffff14;color:var(--textmute);font-size:10.5px;line-height:1.5;}
   #mcPanel .mcFootSub{color:#6a6a72;}
+  #mcPanel .mcFix{margin-left:auto;background:var(--widget);border:1px solid #3a3a44;border-radius:6px;color:#f3d77a;padding:2px 9px;cursor:pointer;font:inherit;font-size:11px;white-space:nowrap;}   /* ライト不足の項目の「自動ライティング…」 */
+  #mcPanel .mcFix:hover{background:var(--widget2);color:#fff;}
 
   #mcPanel .mcSec{margin:6px 0;}
   #mcPanel .mcSec>summary{cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:5px 6px;border-radius:6px;

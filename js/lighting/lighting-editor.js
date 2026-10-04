@@ -32,6 +32,7 @@ export class LightingEditor {
     'laserSwSvg',
     'lightDesc',
     'lightValue',
+    'openAutoLight',
     'placeLight',
     'refreshLightHover',
     'setLightBehav',
@@ -61,6 +62,7 @@ export class LightingEditor {
   laserSwSvg(...args) { return this.rt.laserSwSvg(...args); }
   lightDesc(...args) { return this.rt.lightDesc(...args); }
   lightValue(...args) { return this.rt.lightValue(...args); }
+  openAutoLight(...args) { return this.rt.openAutoLight(...args); }
   placeLight(...args) { return this.rt.placeLight(...args); }
   refreshLightHover(...args) { return this.rt.refreshLightHover(...args); }
   setLightBehav(...args) { return this.rt.setLightBehav(...args); }

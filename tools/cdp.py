@@ -27,6 +27,7 @@ exe版固有の動き（pywebviewの×ボタン確認・ネイティブのファ
       print(ed.js("window._dbgApp.state()"), ed.errors())
 """
 import base64
+import http.server
 import json
 import os
 import shutil
@@ -64,6 +65,26 @@ def _free_port():
 
 class CdpError(RuntimeError):
     pass
+
+
+def _allow_static_cache(serve):
+    """テスト中だけ、静的ファイル（js/css/json/画像）をブラウザにキャッシュさせる（serve.py は開発時のために常にキャッシュ無効）。
+    テストはページを何百回も開き直すので、毎回の読み込み・コンパイルし直しが大きい（開き直し 1.4秒→1.1秒）。
+    Edge のプロファイルは起動ごとに新しい一時フォルダ＝前回の実行の古いファイルが残ることは無い"""
+    H = serve.NoCacheHandler
+    if getattr(H, "_nlm_test_cache", False):
+        return
+    base = H.end_headers
+
+    def end_headers(self):
+        p = self.path.split("?", 1)[0]
+        if self.command == "GET" and not p.startswith("/__") and p.endswith((".js", ".css", ".json", ".png", ".svg", ".jpg", ".woff2")):
+            self.send_header("Cache-Control", "max-age=3600")
+            http.server.SimpleHTTPRequestHandler.end_headers(self)
+        else:
+            base(self)
+    H.end_headers = end_headers
+    H._nlm_test_cache = True
 
 
 class _WebSocket:
@@ -136,9 +157,10 @@ class _WebSocket:
 class Editor:
     """serve.py + ヘッドレスEdgeでエディタを開いて操作する。with文で使う（終了時に後始末）"""
 
-    def __init__(self, width=1600, height=980, wait=6.0, fixture=None, keep_data=False):
+    def __init__(self, width=1600, height=980, wait=6.0, fixture=None, keep_data=False, ready=False, auto_dialog=True):
+        """ready=True: 固定のwait秒ではなく起動完了を検知して進む（テスト用）。auto_dialog: ページのダイアログを自動で承諾"""
         self.width, self.height, self.wait_s, self.fixture = width, height, wait, fixture
-        self.keep_data = keep_data
+        self.keep_data, self.ready, self.auto_dialog = keep_data, ready, auto_dialog
         self._id = 0
         self._events = []   # 受信したCDPイベント（コンソール/例外）
         self.edge = self.httpd = self.ws = None
@@ -162,10 +184,11 @@ class Editor:
         if "serve" in sys.modules:
             del sys.modules["serve"]
         import serve
+        _allow_static_cache(serve)
         self.port = _free_port()
         self.httpd = serve.make_server(port=self.port)
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
-        dport = _free_port()
+        dport = self.dport = _free_port()
         self.profile = tempfile.mkdtemp(prefix="nlm_cdp_edge_")
         self.edge = subprocess.Popen([
             edge, "--headless=new", f"--user-data-dir={self.profile}", f"--remote-debugging-port={dport}",
@@ -174,7 +197,13 @@ class Editor:
             "--autoplay-policy=no-user-gesture-required",
             # ヘッドレスはバックグラウンド扱いで requestAnimationFrame（=エディタの描画ループ）が止まることがある＝抑制を切る
             "--disable-renderer-backgrounding", "--disable-background-timer-throttling",
-            "--disable-backgrounding-occluded-windows", "about:blank",
+            "--disable-backgrounding-occluded-windows",
+            # 新しいプロファイルだと起動の数秒後に edge://sync-confirmation-dialog/（同期の確認）が勝手に開き、
+            # その時にエディタのページとの接続が切れる（タイミング次第で起きる＝テストがたまに全滅する）。同期・初回の案内・拡張機能を止める
+            "--no-first-run", "--no-default-browser-check", "--disable-sync", "--disable-extensions",
+            "--disable-component-extensions-with-background-pages", "--disable-default-apps",
+            "--disable-features=msEdgeSyncConsent,msImplicitSignin,msSignInPromo,EdgeSignIn,Translate",
+            "about:blank",
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         tabs = None
         for _ in range(100):
@@ -194,10 +223,45 @@ class Editor:
         self.call("Emulation.setDeviceMetricsOverride", width=self.width, height=self.height, deviceScaleFactor=1, mobile=False)
         self.call("Emulation.setFocusEmulationEnabled", enabled=True)   # 常に前面・フォーカス中として扱う（描画ループを止めない）
         self.call("Page.bringToFront")
-        self.call("Page.navigate", url=f"http://127.0.0.1:{self.port}/editor.html?dev=1")
-        self.wait(self.wait_s)
+        self.call("Page.navigate", url=self.url())
+        if self.ready:
+            self.wait_ready()
+        else:
+            self.wait(self.wait_s)
         if self.fixture:
             self.load_fixture(self.fixture)
+
+    def url(self):
+        return f"http://127.0.0.1:{self.port}/editor.html?dev=1"
+
+    def wait_ready(self, timeout=30.0, settle=0.15):
+        """起動完了（開発用窓口ができ、描画ループが回り始めた）まで待つ。固定秒数の待ちより速く、遅いPCでも取りこぼさない"""
+        end = time.time() + timeout
+        while time.time() < end:
+            try:
+                # booted: 起動処理の非同期の続き（アイコン読込の後の配置モードへの切替など）まで終わったか。古い版には無いので無ければ待たない
+                if self.js("document.readyState==='complete'&&!!window._dbgApp&&!!(window._dbg&&window._dbg.rt)"
+                           "&&(!window._dbgApp.booted||window._dbgApp.booted())"):
+                    self.wait(settle)
+                    return
+            except CdpError:
+                pass   # 読み込み途中で実行コンテキストが入れ替わった
+            time.sleep(0.1)
+        raise CdpError(f"エディタの起動が {timeout} 秒以内に終わりませんでした")
+
+    def reload(self, fixture=None, clear_storage=True):
+        """ページを開き直して初期状態に戻す（Edgeは起動したまま＝テストごとの起動待ちを省く）。
+        未保存の変更があっても確認ダイアログは自動で承諾する。clear_storage=True で localStorage も消す"""
+        if clear_storage:
+            try:
+                self.js("localStorage.clear();sessionStorage.clear();true")
+            except CdpError:
+                pass
+        self.call("Page.navigate", url=self.url())
+        self.wait_ready()
+        self._events.clear()
+        if fixture:
+            self.load_fixture(fixture)
 
     def close(self):
         if self.ws:
@@ -214,6 +278,26 @@ class Editor:
             if d:
                 shutil.rmtree(d, ignore_errors=True)
 
+    def new_tab(self, path="tests/visual/blank.html"):
+        """同じEdgeに別のタブを開いて Tab を返す（ページと同じサーバーの path を開く＝同じオリジンで fetch できる）。
+        画像の比較など重い処理を、描画ループの回るエディタのページと分けて行うために使う"""
+        # 裏で開き、エディタを前面に戻す。エディタのタブが裏に回ると描画ループ（requestAnimationFrame）が止まり、
+        # 撮影がフレーム待ちで毎回3.5秒ほどかかる・入力が遅れる
+        tid = self.call("Target.createTarget", url=f"http://127.0.0.1:{self.port}/{path}", background=True)["targetId"]
+        self.call("Page.bringToFront")
+        for _ in range(50):
+            tabs = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{self.dport}/json", timeout=2).read())
+            t = next((t for t in tabs if t.get("id") == tid and t.get("webSocketDebuggerUrl")), None)
+            if t:
+                tab = Tab(self, tid, _WebSocket(t["webSocketDebuggerUrl"]))
+                for _ in range(100):
+                    if tab.js("document.readyState") == "complete":
+                        return tab
+                    time.sleep(0.05)
+                return tab
+            time.sleep(0.1)
+        raise CdpError("タブを開けませんでした")
+
     # ---- CDP基本 ----
     def call(self, method, **params):
         self._id += 1
@@ -229,6 +313,10 @@ class Editor:
                 return msg.get("result", {})
             if "method" in msg:
                 self._events.append(msg)
+                if msg["method"] == "Page.javascriptDialogOpening" and self.auto_dialog:
+                    # alert/confirm/beforeunload を自動で承諾（開いたままだとページが止まりテストが固まる）。応答は待たない
+                    self._id += 1
+                    self.ws.send({"id": self._id, "method": "Page.handleJavaScriptDialog", "params": {"accept": True}})
 
     def js(self, expr, await_promise=True):
         """ページ内でJSを実行し、結果（JSON化できる値）を返す。例外はCdpErrorで送出"""
@@ -322,24 +410,61 @@ class Editor:
         self.call("Input.dispatchKeyEvent", type="keyUp", **base)
 
     # ---- テスト素材 ----
-    def load_fixture(self, name):
-        """tools/fixtures/<name>.nlmf を開き、同名の .wav があれば音源として読み込む（ダイアログ無し・未保存扱いにしない）"""
+    # 音源を他の素材と使い回すテスト素材（素材名 → 使う .wav の名前）。無ければ同名の .wav
+    FIXTURE_WAV = {"rich": "basic"}
+
+    def load_fixture(self, name, wav=None, settle=1.5):
+        """tools/fixtures/<name>.nlmf を開き、同名（または FIXTURE_WAV / wav 引数で指定）の .wav があれば音源として読み込む
+        （ダイアログ無し・未保存扱いにしない）。settle=読込後に描画等が落ち着くまで待つ秒数（状態を待ち合わせるテストは短くてよい）"""
         proj = FIXTURES / f"{name}.nlmf"
         if not proj.exists():
             raise CdpError(f"テスト素材が見つかりません: {proj}")
         url = f"tools/fixtures/{name}"
-        wav = (FIXTURES / f"{name}.wav").exists()
+        wname = wav or self.FIXTURE_WAV.get(name, name)
+        wav = (FIXTURES / f"{wname}.wav").exists()
         self.js(f"""(async()=>{{
           const rt=window._dbg.rt;
           const pj=await (await fetch('{url}.nlmf',{{cache:'no-store'}})).json();
           await rt.applyProject(pj);
           if({str(wav).lower()}){{
-            const blob=await (await fetch('{url}.wav',{{cache:'no-store'}})).blob();
-            const file=new File([blob],'{name}.wav',{{type:'audio/wav'}});
+            const blob=await (await fetch('tools/fixtures/{wname}.wav',{{cache:'no-store'}})).blob();
+            const file=new File([blob],'{wname}.wav',{{type:'audio/wav'}});
             await rt.loadSongFromItem({{isMusic:true,name:'{name}',songFh:{{getFile:async()=>file}},info:{{_beatsPerMinute:pj.bpm}}}},pj.musicBeat||0);
           }}
           return true; }})()""")
-        self.wait(1.5)
+        self.wait(settle)
+
+
+class Tab:
+    """Editor.new_tab() が開く補助のタブ。js() で JS を実行できる（入力・撮影は持たない）"""
+
+    def __init__(self, editor, target_id, ws):
+        self.editor, self.target_id, self.ws, self._id = editor, target_id, ws, 0
+
+    def call(self, method, **params):
+        self._id += 1
+        my = self._id
+        self.ws.send({"id": my, "method": method, "params": params})
+        while True:
+            msg = self.ws.recv()
+            if msg is not None and msg.get("id") == my:
+                if "error" in msg:
+                    raise CdpError(f"{method}: {msg['error']}")
+                return msg.get("result", {})
+
+    def js(self, expr, await_promise=True):
+        r = self.call("Runtime.evaluate", expression=expr, awaitPromise=await_promise, returnByValue=True)
+        if "exceptionDetails" in r:
+            d = r["exceptionDetails"]
+            raise CdpError("JS例外: " + (d.get("exception", {}).get("description") or d.get("text", "")))
+        return r.get("result", {}).get("value")
+
+    def close(self):
+        try:
+            self.editor.call("Target.closeTarget", targetId=self.target_id)
+        except Exception:
+            pass
+        self.ws.close()
 
 
 def _main(argv):

@@ -1,6 +1,6 @@
 # NLM開発サーバー: キャッシュ無効ヘッダ付き（Chromeの古いファイル使い回しを根絶）
 # ＋ アセット(asset/)クリップの保存/改名/削除API（ローカル専用。Tauri化時はネイティブ書込みへ置換）
-import http.server, json, os, posixpath, re, shutil, subprocess, sys, tempfile
+import http.server, json, math, os, posixpath, re, shutil, subprocess, sys, tempfile
 from urllib.parse import unquote, urlsplit, parse_qs
 from rating_plugin import RatingPlugin, PluginError
 from app_update import Updater, UpdateError
@@ -171,6 +171,10 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def _convert_to_ogg(self):
+        # 本体（音源）はエラーを返す時も先に読み切る。読まずに応答して閉じると、Windows では残ったデータのせいで接続が
+        # リセットされ、ffmpeg が無い等の応答が届かずに通信エラーになることがあった（数MBの音源を送るため）
+        n = int(self.headers.get('Content-Length', 0) or 0)
+        raw = self.rfile.read(n)
         ffmpeg = shutil.which('ffmpeg')
         if not ffmpeg:
             return self._reply(200, {'ok': False, 'error': 'ffmpeg-not-found'})
@@ -180,8 +184,21 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             lead_in_ms = max(0, int(float(qs.get('leadInMs', ['0'])[0] or '0')))
         except (TypeError, ValueError):
             lead_in_ms = 0
-        n = int(self.headers.get('Content-Length', 0) or 0)
-        raw = self.rfile.read(n)
+        # segs: Musicの配置（分割・トリム）の切り貼り表 [[元の音源の開始秒, 終了秒, 書き出し先の開始秒], …]（editor-app.js の eggPieces）
+        segs = None
+        if 'segs' in qs:
+            try:
+                v = json.loads(qs['segs'][0])
+                if not isinstance(v, list) or not (0 < len(v) <= 1000):
+                    raise ValueError
+                segs = []
+                for it in v:
+                    a, b, at = (float(x) for x in it)
+                    if not all(math.isfinite(x) and 0 <= x < 86400 for x in (a, b, at)) or b <= a:
+                        raise ValueError
+                    segs.append((a, b, at))
+            except (TypeError, ValueError):
+                return self._reply(200, {'ok': False, 'error': 'bad-segs'})
         try:
             with tempfile.TemporaryDirectory() as td:
                 src = os.path.join(td, 'in.' + ext)
@@ -189,7 +206,17 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 with open(src, 'wb') as f:
                     f.write(raw)
                 cmd = [ffmpeg, '-y', '-i', src, '-vn']
-                if lead_in_ms > 0:   # 曲頭に無音を追加(ms)＝実際の音声データを前にずらす（Info.dat側の指定に頼らず確実に効かせる）
+                if segs:   # 区間ごとに切り出し（atrim）→書き出し先の位置へずらし（adelay）→重ねる（amix・音量はそのまま）
+                    parts = ['[0:a]atrim=start=%.6f:end=%.6f,asetpts=PTS-STARTPTS,adelay=%d:all=1[p%d]' % (a, b, round(at * 1000), i)
+                             for i, (a, b, at) in enumerate(segs)]
+                    if len(segs) == 1:
+                        out = '[p0]'
+                    else:
+                        parts.append(''.join('[p%d]' % i for i in range(len(segs)))
+                                     + 'amix=inputs=%d:normalize=0:dropout_transition=0[out]' % len(segs))
+                        out = '[out]'
+                    cmd += ['-filter_complex', ';'.join(parts), '-map', out]
+                elif lead_in_ms > 0:   # 曲頭に無音を追加(ms)＝実際の音声データを前にずらす（Info.dat側の指定に頼らず確実に効かせる）
                     cmd += ['-af', 'adelay=%d:all=true' % lead_in_ms]
                 cmd += ['-c:a', 'libvorbis', '-q:a', '5', dst]
                 # creationflags=CREATE_NO_WINDOW: 親(exe)にコンソールが無くてもffmpeg単体がコンソール窓を

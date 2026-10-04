@@ -29,6 +29,19 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   新しい関数を追加/削除したら、ここの`methodNames`配列と対応メソッドも忘れず更新すること
   （忘れても動くが、参照が浮いた状態になる）。
 
+## テスト（2026-10-04）
+
+- **普段の修正・機能追加では、全テストは回さない**（全部で約6〜7分かかるため）。直した所のテストと、影響しそうな周辺の
+  グループ・テストだけを回す（例: `run_tests.py e2e_nle`、`run_tests.py e2e_edit -k paste`）。どれを回したかは報告に書く。
+- **全テスト（`.venv-build/Scripts/python.exe tools/run_tests.py`）はリリースの直前に1回だけ**: 版を上げた後、GitHubへ
+  プッシュする前。そこで見つかった不具合は、その公開予定の版で直して一緒に出す。
+- 画面には要約だけが出る。失敗の詳細は`test-out/last.txt`を読む（画像を何枚も見て確かめる代わり）。使い方は`tests/README.md`。
+- 失敗したら直してから報告する。自分の変更と無関係に見える失敗も、黙って飛ばさず報告に書く。
+- 書き出しの中身を意図して変えた時だけ`--update-golden`。`git diff tests/golden/`で差分が意図どおりかを確かめ、報告に書く。
+- 画面の「要確認」は、まず`test-out/visual/review.png`（変化した画面だけのまとめ1枚）を見る。意図どおりと言い切れない時は
+  ユーザーに`test-out/visual/report.html`を見てもらう。意図どおりなら`--accept`で基準画像を更新する。
+- 新しい機能を足したら、その機能のテストも足す（`tests/<グループ>/test_*.py`）。新しい画面・ダイアログは`tests/visual/`の画面一覧にも足す。
+
 ## ビルド・実行
 
 - 開発用venv: `.venv-build/`（`.gitignore`済み）。`pip install pywebview pythonnet pyinstaller`。
@@ -117,13 +130,17 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
    - 書き出し: `exportMap()`が`leadInMs>0`ならffmpegの`adelay`フィルタで**song.eggの音声データ自体に
      無音を物理的に焼き込む**。Info.datの`_songTimeOffset`メタデータには依存しない（実際のBeat Saber
      本体がこのフィールドをどこまで確実に解釈するか不明なため、確実性を優先した設計判断）。
+   - **Musicの配置（NLEのMusicクリップの開始位置・分割・トリム）も song.egg に焼き込む**（2026-10-04）。切り貼り表は
+     `eggPieces()`＝`play()`と同じ計算。切っていなければ「無音追加＋Musicの開始位置」ぶんの`adelay`だけ、分割・トリムが
+     あれば`?segs=`で切り貼り表を渡し serve.py が`atrim`→`adelay`→`amix`で並べ直す。以前は無音追加だけで、Musicを動かすと
+     エディタでは合っているのにゲームではずれた。**Musicの再生の仕方（`play()`）を変えたら`eggPieces()`も合わせること。**
 
 ## 試聴ノード（選曲画面のプレビュー区間・2026-09-28）
 
 - Info.datの`_previewStartTime`/`_previewDuration`はINFO画面の**試聴ノード**（`t:'prev'`）が持つ。旧ヘッダーの
   「プレビュー開始/プレビュー長」欄は廃止。アクティブ書き出しに繋がった試聴ノードの値を`applyInfoGraph()`が
   `infoBase`へ写し、未接続なら12秒/10秒（`PREV_DEF`）。
-- ノードの秒は**元の音源の秒**。`exportMap()`が無音追加(leadIn)ぶんを足して書き出す（song.eggの先頭に無音が焼き込まれるため）。
+- ノードの秒は**元の音源の秒**。書き出しは`eggOutSecOf()`で書き出す song.egg の秒へ直す（無音追加・Musicの配置ぶんずれるため）。
   以前は足しておらず、無音追加を使うと試聴位置がずれていた。拍→音源秒の変換は`audioPosAtBeat()`（Musicの配置・カット・無音追加を考慮）。
 - 旧プロジェクト（`infoGraph.prevMig`なし）とプロジェクト無しのInfo.dat読込は`migratePrevNode()`で`infoBase`の値から試聴ノードを作り、
   全書き出しに繋ぐ。`prevMig`を見て1回だけ行う（ユーザーが消した試聴ノードを復活させないため）。
@@ -138,7 +155,7 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   - 「照らされていないボム」は原作が例外で何も出さない条件では何も出さない
 - 原作と違うのは「原作が例外で項目ごと消える」ケースだけ（分割数1のチェーン、不正IDのイベントボックス）。移植は判定できた分を出す。
 - 検査対象は書き出しと同じ `collectExportDiffs()`/`buildExportInfo()` の結果（`exportMap`から切り出して共有）。
-  書き出しの中身を変えればチェックにも自動で反映される。音源の長さは「元の音源＋無音追加」。
+  書き出しの中身を変えればチェックにも自動で反映される。音源の長さは書き出す song.egg の長さ（`eggLength()`）。
 - 原作の更新に追従する時・移植を直した時は `tools/mapcheck_difftest.py`（原作サイトと自動で突き合わせ。tools/README.md）。
 - `js/mapcheck/env-tables.js` は bsmap の `src/beatmap/misc/environment.ts` から自動抽出した表（環境の追加時は作り直す）。
 - 結果パネルは `mapcheck-panel.js`。項目名は `mc.k.<key>`（日本語の既定値はパネル内の`JA`表）。
@@ -152,6 +169,27 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   - 視界ブロック（R5.A）は★とTechレーティングを使う公式の式。値は利用者がパネルで入れる（アプリを開いている間だけ保持）。
   - R1.B.2（Shuffle/Shuffle Periodは未使用か0）に合わせ、`buildExportInfo`はShuffleが0なら周期も0で書く（他のエディタや公式譜面は0.5を書くため、
     読み込んだ値をそのまま出すと常に違反になっていた。ゲームはこの2項目を使っていないので遊び心地は変わらない）。
+
+## 自動ライティング（2026-10-03）
+
+- 入口は3つ: ファイルメニュー「自動ライティング…」・LIGHTINGのツールバー「自動ライト」・譜面チェックのライト不足の項目の
+  「💡 自動ライティング…」（対象の項目は`mapcheck-panel.js`の`LIGHT_FIX_MC`/`LIGHT_FIX_BL`。作成後にチェックをやり直す）。生成は`js/lighting/auto-light.js`（`generateAutoLights`）、配置は`editor-app.js`の`autoLightPlan`/`applyAutoLight`。
+- 狙いは譜面チェックのライト項目（BS Map Check の`insufficientLight`、BL評価リストの R10.A・R7.B）を満たすこと。**R10.Aの数に入るのは
+  環境の表(`BASIC_TRACKS[env].l`)の種別だけ**（Defaultなら0〜4。リング回転/ズーム・レーザー速度は数えない）で、分母は曲の長さ（拍）。
+  ノーツだけでは足りないので、最後に足りない拍をRINGSのフェードで埋めて1拍あたり1.2個にしている。BACKは曲の頭から最後の物の2拍後まで
+  消さない（ボムが常に照らされる＝R7.B）。色はバニラ（赤/青）のみ。
+- 一番ノーツの多い難易度から作り、中身のある全難易度へ同じものを配る。ライトのレーンを一番上に1本足し、曲全体の長さの1クリップに入れる
+  （既存のライトには触れない。重なりは利用者がレーンを消す/ミュートして選ぶ）。
+- 画面外の難易度も変えるため、履歴に専用の領域`'diffs'`（`dumpDomain`/`restoreDomain`）を足した＝1回のUndoで全難易度とロックが戻る。
+
+## カバー画像の補正（2026-10-03）
+
+- 譜面チェックのカバー画像の項目（`mapcheck-panel.js`の`COVER_FIX_MC`/`COVER_FIX_BL`）に「🖼 カバー画像を補正…」。処理と確認画面は`js/media/cover-fit.js`、
+  入口は`editor-app.js`の`openCoverFit`。正方形にする（中央を切り抜く＝既定／引き伸ばす／余白で埋める）・256未満は256へ拡大・png/jpg以外はpngへ。
+- **元の画像ファイルは変えない**。設定はカバーノードの`data.fit={mode,bg}`だけで、書き出し（`exportMap`）は`fitCoverImage()`で補正した画像を、
+  譜面チェック（`collectMapCheckInput`）は`measureCoverFit()`で補正後の寸法・名前だけを使う（どちらも`connectedCoverFit()`。PNGのエンコードは重いのでチェックではしない）。元ファイルへは書けない（`_NativeAccess`）し、補正済みの画像に差し替えると
+  開き直した時に`nativePath`の元画像へ自動で繋ぎ直されて補正が消えるため。`infoGraph`の中なので保存・Undo・未保存ランプは自動で付く。
+- 画像を選び直したら`fit`を消す（前の画像向けの設定のため）。同じ画像の「再接続」では残す。補正が効く時だけカードに「書き出し時に…へ補正」と「補正をやめる」。
 
 ## 難易度を測る（BeatLeaderの星の近似・2026-10-02）
 
@@ -190,9 +228,11 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 ## song.egg 書き出し（変換・キャッシュ）
 
 - 元の音源がOGGならバイトコピー、それ以外（mp3/wav/flac等）はffmpegで`libvorbis`へ変換。
-- 変換は`serve.py`の`/__convert/toOgg`（POST、生バイナリボディ、`?ext=xxx&leadInMs=xxx`）。
+- 変換は`serve.py`の`/__convert/toOgg`（POST、生バイナリボディ、`?ext=xxx&leadInMs=xxx`、Musicを分割・トリムしていれば`&segs=`）。
   ffmpeg呼び出しには`creationflags=CREATE_NO_WINDOW`必須（無いと一瞬コンソール窓が出る）。
-- 出力先フォルダに`.nlm-egg.json`という小さなマーカーファイルを置いて、音源のsize/mtime/leadInMsが
+  エラーを返す時も**送られた音源（本体）を先に読み切ってから応答する**。読まずに応答して閉じると、Windowsでは残ったデータのせいで
+  接続がリセットされ、ffmpeg無し等の応答がJSに届かず通信エラーになる（2026-10-04に修正。大きい本体のPOSTを足す時も同じ）。
+- 出力先フォルダに`.nlm-egg.json`という小さなマーカーファイルを置いて、音源のsize/mtime/leadInMs/segsが
   前回と同一なら再変換をスキップする（ffmpeg起動・大きい音声ファイルの再書き込みを避ける）。
 - 書き出しパネルの「song.eggを強制再変換」チェックボックスでキャッシュを無視して強制再生成できる
   （初期化・やり直し用）。
@@ -213,6 +253,7 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   **pywebview外かつURLに`?dev=1`の時だけ**作る（`isDevMode()`/`NLM_DEV`）。配布版に開発用の入口を残さないため。
   診断を足すなら`_dbgApp`へ（値の複製を返すだけにし、書き換え機能は持たせない）。
 - 検証は`tools/cdp.py`（ヘッドレスEdge＋CDP。撮影・本物の入力・JS実行）と`tools/fixtures/`を使う。詳細は`tools/README.md`。
+  決まった確認は`tests/`のテストにして`tools/run_tests.py`で回す（上の「テスト」節）。
 - `serve.py`はHostヘッダーがローカル名でない要求を403にし（DNSリバインディング対策・追加は`NLM_ALLOWED_HOSTS`）、
   **POSTは`X-NLM-Request: 1`ヘッダー必須**（他サイトからのCSRF対策）。**新しいPOST APIを足したら、JS側のfetchにも
   このヘッダーを付けること**（付け忘れると403で無言に失敗する）。
@@ -246,11 +287,14 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 
 ## 触らなくていい・生きていないコード
 
-- `_ndWidgets`（1684行目付近で宣言、以降どこからも`.push`されていない）や、`nodeGeomOf('song')`等が
-  想定しているらしい「song/in/outノードをキャンバスに描画する古いグラフエディタ」は、現在の
-  `nodeColMode`（`'nle'`と`'info'`の2値のみ）からは到達できないように見える。`songNode`/`graphEdges`/
-  `extraNodes`自体は`applyInfoGraph()`経由で今も現役（INFOノードエディタのミラー先）だが、
-  この古い方のキャンバス描画UIは死んでいる可能性が高い。触る前に本当に呼ばれているか要確認。
+- 「song/in/outノードをキャンバスに描画する古いグラフエディタ」は**到達できないことを確認済み**（2026-10-04・カバレッジ調査）。
+  `ndView`は常に`'layers'`（代入は宣言だけ）で、ノード用の処理は`ndView!=='layers'`の時だけ動く。全テストでも一度も動かない。
+  該当: `activateLine`/`deleteSelNode`/`removeNodeMerge`/`pasteNode`/`copySelNode`/`compileGraphToFlat`/`nodeGeomOf`/`nodeRowsFor`/
+  `portHit`/`editExtraNode`/`nodeExtraH`/`edgeHit`/`resizeAt`/`altAt`/`allNodeIds`/`loadLineDiff`/`_ndWidgets`等と、それを呼ぶ
+  右クリックメニュー・キー処理の分岐（`js/chart/graph-legacy.js`も）。`songNode`/`graphEdges`/`extraNodes`自体は
+  `applyInfoGraph()`経由で今も現役（INFOノードエディタのミラー先）なので消さない。
+- どこからも呼ばれていない関数: `addMarker`（今は`addMarkerAt`）・`srcNjsOf`・`setLightBehavSmart`・`flipLightColors`・`pvFillEnvSel`。
+- 上の2つは削除の候補（当面は残す）。消す時は methodNames からも外し、全テストで確かめる。
 
 ## その他
 

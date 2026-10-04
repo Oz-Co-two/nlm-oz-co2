@@ -21,3 +21,7 @@ __pycache__/
 _backup_*/
 _backup_before_update_*/
 *.bak*
+
+# テストの出力と画面の基準画像（手元だけ。tests/README.md）
+/test-out/
+/tests/visual/baseline/
