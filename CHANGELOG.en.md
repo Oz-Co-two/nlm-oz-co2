@@ -1,7 +1,7 @@
 # Changelog (Non-Linear Mapper, Oz-Co2 edition)
 
 The main changes from the original Non-Linear Mapper by helba, newest version first.
-For basic usage, see the [tutorial](docs/tutorial.md), the [advanced tutorial](docs/tutorial-advanced.md) (both Japanese) and the original manual.
+For basic usage, see the [tutorial](docs/tutorial.en.md), the [advanced tutorial](docs/tutorial-advanced.en.md) and the original manual.
 
 日本語: [CHANGELOG.md](CHANGELOG.md)
 

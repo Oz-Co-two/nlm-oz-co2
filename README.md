@@ -2,6 +2,8 @@
 
 Beat Saber の譜面エディタです。デスクトップアプリ（Windows / pywebview + WebView2）として動作します。
 
+English: [README.en.md](README.en.md)
+
 ![Non-Linear Mapper の編集画面（左上: プレビュー、右上: NLE タイムライン、下: 3D ノーツ編集ビュー）](docs/images/NLM-1.1.jpg)
 
 ## これは何か
