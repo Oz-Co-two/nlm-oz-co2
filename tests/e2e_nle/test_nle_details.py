@@ -4,7 +4,7 @@
 import copy
 import json
 
-from e2e_helpers import wait_until, counts, cell, place_at, switch_diff
+from e2e_helpers import wait_until, counts, cell, place_at, switch_diff, hover_3d
 from nle_helpers import (open_nle, clips, select, hover, menu, clip_xy, export_dat, nle, nle_mouse, scr, lane_y,
                          undo, redo, take_errors)
 
@@ -498,7 +498,63 @@ def test_nle_zoom_pan(t):
     t.eq(clips(ed), clips0, "クリップは変わらない")
     t.eq(export_dat(ed), before, "書き出しは変わらない")
     t.eq(_undo_n(ed), 0, "履歴は積まない")
-    t.ok(ed.js("window._dbgApp.dirty()")["same"], "未保存の判定も変わらない（表示の変更は保存内容に入らない）")
+    t.ok(ed.js("window._dbgApp.dirty()")["same"], "未保存の判定も変わらない（表示の変更は未保存の判定に入らない）")
+    t.no_errors()
+
+
+def test_nle_follow_center(t):
+    '''追従スクロール: 再生ヘッドが窓の中央を越えたら中央に留めて窓を送る＝右上のショートカット一覧の裏へ進まない
+    （Ctrl+ホイールで拡大した直後＝手動の窓でも）。停止中の→でも同じで、←で戻る時は左端の余白で送る'''
+    ed = open_nle(t, "basic")
+    s = scr(ed, 0)
+    x, y = s["x"] + 0.5, lane_y(ed, "n", 0)
+    for _ in range(6):
+        ed.wheel(x, y, -100, ctrl=True)   # 拍0を支点に拡大（32→約8.4拍）＝手動の窓になる
+    w = ed.js("window._dbgApp.tl()")
+    t.ok(w["manual"] and w["b0"] < 0.05 and 8 < w["span"] < 9, f"拡大した窓: {w}")
+    span = w["span"]
+    keys_left = ed.js("(r=>r.width>0?r.left:null)(document.getElementById('nodeKeys').getBoundingClientRect())")
+    t.ok(keys_left is not None, "ショートカット一覧が出ている")
+    head_x = lambda cur, b0: s["left"] + s["gut"] + (cur - b0) / span * (s["w"] - s["gut"])   # 再生ヘッドの画面x
+    t.ok(head_x(span * 0.9, 0) > keys_left, "窓を送らなければ再生ヘッドは一覧の裏へ入る位置まで進む（この画面の大きさで試せている）")
+    # 再生中の毎フレームの再生位置と窓を記録
+    ed.js("""(()=>{ const L=window.__tlLog=[]; window.__tlStop=false;
+      const f=()=>{ const a=window._dbgApp, st=a.state(); if(st.playing){ const w=a.tl(); L.push([st.cur,w.b0,w.manual]); }
+        if(!window.__tlStop) requestAnimationFrame(f); };
+      requestAnimationFrame(f); return true; })()""")
+    hover_3d(ed)
+    ed.key(" ")
+    wait_until(ed, f"window._dbgApp.state().playing&&window._dbgApp.state().cur>{span * 1.4}", timeout=20, label="再生ヘッドが窓の幅の1.4倍まで進む")
+    ed.key(" ")
+    wait_until(ed, "!window._dbgApp.state().playing", label="停止")
+    log = ed.js("(window.__tlStop=true, window.__tlLog)")
+    t.ok(len(log) > 30, f"記録したフレーム数: {len(log)}")
+    before = [b0 for cur, b0, _ in log if cur < span * 0.5 - 0.3]
+    after = [(cur, b0, m) for cur, b0, m in log if cur > span * 0.5 + 0.3]
+    t.ok(before and max(before) < 0.05, f"中央に来るまでは窓は動かない（左端の最大 {max(before or [0]):.3f}）")
+    t.ok(after and not any(m for _, _, m in after), "中央を越えたら追従に切り替わる")
+    fr = [(cur - b0) / span for cur, b0, _ in after]
+    t.ok(fr and 0.45 < min(fr) and max(fr) < 0.56, f"越えた後は再生ヘッドが窓の中央に留まる（{min(fr or [0]):.3f}〜{max(fr or [0]):.3f}）")
+    xs = [head_x(cur, b0) for cur, b0, _ in log]
+    t.ok(max(xs) < keys_left - 2, f"再生ヘッドはショートカット一覧（x={keys_left:.0f}）より左（最大 {max(xs):.0f}）")
+    # 停止中の→（tlFollow）も中央から送る／←で戻る時は左端の余白（4拍か窓の3割の小さい方）で送る
+    ed.key("ArrowLeft", ctrl=True)
+    wait_until(ed, "window._dbgApp.state().cur===0&&!window._dbgApp.cam().anim", label="先頭へ")
+    t.eq(ed.js("window._dbgApp.tl().b0"), 0, "先頭へ飛ぶと窓も先頭")
+    for _ in range(16):
+        ed.key("ArrowRight")
+    wait_until(ed, "window._dbgApp.state().cur===8", label="→で拍8へ")
+    t.ok(abs(ed.js("window._dbgApp.tl().b0") - (8 - span * 0.5)) < 1e-9, "→で中央を越えた分だけ窓が送られる（ヘッドは中央）")
+    b0, mg = ed.js("window._dbgApp.tl().b0"), min(4, span * 0.3)
+    t.ok(b0 + mg < 7, f"（前提）拍7は左端の余白より右: 左端{b0:.3f}・余白{mg:.3f}")
+    for _ in range(2):
+        ed.key("ArrowLeft")
+    wait_until(ed, "window._dbgApp.state().cur===7", label="←で拍7へ")
+    t.eq(ed.js("window._dbgApp.tl().b0"), b0, "←で中央より左へ戻る間は窓は動かない")
+    for _ in range(4):
+        ed.key("ArrowLeft")
+    wait_until(ed, "window._dbgApp.state().cur===5", label="←で拍5へ")
+    t.ok(abs(ed.js("window._dbgApp.tl().b0") - (5 - mg)) < 1e-9, "左端の余白に入ると窓が戻る（ヘッドは左端から余白の位置）")
     t.no_errors()
 
 

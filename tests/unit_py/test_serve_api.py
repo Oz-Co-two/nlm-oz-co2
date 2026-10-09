@@ -21,6 +21,41 @@ def test_settings_save_goes_to_data_dir(t):
     t.ok(os.path.normcase(s.serve.DATA_DIR) != os.path.normcase(str(H.ROOT)), "DATA_DIRは本体と別")
 
 
+def test_settings_save_never_half_written(t):
+    '''保存の最中に読んでも、書きかけ（空・途中まで）の settings.json は返らない。保存は書き終えてから置き換える（一時ファイルは残らない）。
+    以前は空にしてから書いていたため、保存と同時の読み込みが空のファイルを受け取ることがあった（全テストで1回・2026-10-09）'''
+    import threading
+    s = H.server()
+    data = {f"bsnm_k{i}": "値" * 40 for i in range(400)}   # 数十KB＝書いている途中を読みやすくする
+    bad, stop = [], threading.Event()
+
+    def reader():
+        while not stop.is_set():
+            st, _, body = H.req("GET", "/config/settings.json")
+            try:
+                json.loads(body)
+            except Exception:
+                bad.append((st, body[:30]))
+
+    th = [threading.Thread(target=reader) for _ in range(3)]
+    for x in th:
+        x.start()
+    try:
+        for i in range(60):
+            data["n"] = i
+            st, obj = H.post_json("/__settings/save", {"data": data})
+            if st != 200:
+                bad.append(("save", st, obj))
+    finally:
+        stop.set()
+        for x in th:
+            x.join()
+    t.eq(bad[:3], [], f"書きかけを読んだ・保存に失敗した回数 {len(bad)}")
+    p = Path(s.data_dir) / "config" / "settings.json"
+    t.eq(json.loads(p.read_text(encoding="utf-8"))["n"], 59, "最後に保存した中身")
+    t.eq(sorted(x.name for x in p.parent.iterdir()), ["settings.json"], "一時ファイルは残らない")
+
+
 def test_settings_save_bad_json(t):
     '''壊れたJSON本体は500のエラー応答（サーバーは落ちない）'''
     st, _, _ = H.req("POST", "/__settings/save", headers={"X-NLM-Request": "1"}, body=b"{not json")
@@ -223,3 +258,32 @@ def test_convert_ogg_error_with_large_body(t):
             t.eq((st, json.loads(body)), (200, {"ok": False, "error": want}), want)
     finally:
         s.serve.shutil = real
+
+
+def test_post_reply_with_unread_body(t):
+    '''本体を使わない応答（拒否・不明な操作・本体の要らない操作）でも、数MBの本体を送った時に応答が届く'''
+    # 本体を読まずに応答して閉じると、Windows では残ったデータのせいで接続がリセットされ応答が届かないことがある
+    # （小さい本体だとタイミング次第で、全テストでたまに __update/status が ConnectionAbortedError になっていた）
+    big = b"\0" * (8 * 1024 * 1024)
+    for path, hdr, want in (("/__update/status", {"X-NLM-Request": "1"}, 200),
+                            ("/__update/bogus", {"X-NLM-Request": "1"}, 404),
+                            ("/__rating/status", {"X-NLM-Request": "1"}, 200),
+                            ("/__rating/bogus", {"X-NLM-Request": "1"}, 404),
+                            ("/__nothing", {"X-NLM-Request": "1"}, 404),
+                            ("/__update/status", {}, 403)):
+        st, _, _ = H.req("POST", path, headers=hdr, body=big)
+        t.eq(st, want, path + (" ヘッダー無し" if not hdr else ""))
+
+
+def test_post_broken_content_length(t):
+    '''Content-Length が数値でない・本体より長い・とても大きい要求にも応答が返る（拒否する要求の本体は上限を超えたら読まない）'''
+    import time
+    ok = {"X-NLM-Request": "1"}
+    for hdr, want, label in (({**ok, "Content-Length": "abc"}, 200, "数値でない"),
+                             ({"Content-Length": "abc"}, 403, "数値でない・ヘッダー無し"),
+                             ({**ok, "Content-Length": "100"}, 200, "本体より長い（届かない分は待ち切りで諦める）"),
+                             ({"Content-Length": str(512 * 1024 * 1024)}, 403, "とても大きい・ヘッダー無し（読まずに拒否）")):
+        t0 = time.time()
+        st, _, _ = H.req("POST", "/__update/status", headers=hdr, body=None)
+        t.eq(st, want, label)
+        t.ok(time.time() - t0 < 5, label + ": すぐ返る")

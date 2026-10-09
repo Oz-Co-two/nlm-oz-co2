@@ -151,3 +151,32 @@ def test_place_undo(t):
 - 原因: `serve.py` の song.egg 変換が、エラーを返す時に送られた音源を読まずに応答して閉じていた。Windows では残ったデータのせいで
   接続がリセットされ、応答が届かないことがある（小さい音源ではタイミング次第）。v1.4.0-oz で修正し、8MB の本体で確かめるテストを追加
   （`unit_py/test_serve_api.py::test_convert_ogg_error_with_large_body`）。
+
+### unit_py「__rating/__update のPOSTもヘッダー必須…」のエラー（2026-10-05・解決済み）
+
+- 全テストで1回だけ、`/__update/status` の応答で `ConnectionAbortedError: [WinError 10053]`。単独で3回回しても再現せず。
+- 原因: 上と同じ種類。song.egg 変換だけを直していて、`__update`・`__rating` の本体の要らない操作・不明な操作・403 の拒否は、
+  送られた本体（テストでは `{}` の2バイト）を読まずに応答していた。8MB の本体を送ると毎回再現した。
+- 修正: `serve.py` の `_reply()`・`_deny()` が応答の前に `_drain()` でまだ読んでいない本体を読み捨てるようにした（POSTの全部の応答が対象。
+  使う本体は `_raw_body()` で1回だけ読む）。拒否する要求の本体は保存せず16MBを超えたら読まない・数値でない Content-Length は本体なしとして扱う
+  （見直しで、拒否する要求に大きなメモリを使わせられる・壊れた要求に応答が返らない、という指摘があったため）。
+  確かめるテスト: `unit_py/test_serve_api.py::test_post_reply_with_unread_body`・`test_post_broken_content_length`。
+
+### 画面テストが46件まとめて「エラー」（2026-10-05・解決済み）
+
+- **起きたこと**: 全テストの1回で、visual の全部（46件）がエラー。最初の1件は `Failed to parse URL from /test-out/visual/_tmp/boot_0.png`、
+  残りはすべて `ReferenceError: __vis is not defined`。他のグループは全部通り、visual の所要時間が普段の倍（212秒）＝PCが混んでいた。
+- **原因**: 画像の比較に使う補助タブ（`tools/cdp.py` の `new_tab`）が、目的のページへ移る前の about:blank の時点で「開けた」と判定していた
+  （about:blank も `readyState` は `complete`）。そこへ比較用の JS を入れると、about:blank では相対URLの fetch ができず（1件目）、
+  遅れてページが移ると入れた JS が消える（2件目以降）。補助タブは1回だけ作って使い回すので、外れると全部が落ちる。
+  静かな時に40回開いても0回だった（混んでいる時だけ起きる）。
+- **修正**: `new_tab` は `location` が http になったことも確かめてから返す（10秒で開けなければ例外）。
+
+### e2e_edit「Chroma配色: …カラーパイ」の後片付けでエラー（2026-10-09・解決済み）
+
+- **起きたこと**: v1.4.2-oz の準備の全テストで1回、テストの最後に環境設定を既定へ戻す所（`restore_settings`）で
+  `SyntaxError: Failed to execute 'json' on 'Response': Unexpected end of JSON input`。`config/settings.json` を読んだら空だった。単独で3回回すと通った。
+- **原因**: `serve.py` の `__settings/save` が、ファイルを空にしてから書いていた。保存と同時に読むと、空・途中までのファイルが返る
+  （本体がテストで読んだのは、アプリが設定の変化を保存している最中）。同時に読み書きするテストで60回の保存中に9回の空を読めた。
+- **修正**: 一時ファイルに書き終えてから置き換える（`_write_text_atomic`）・保存と `GET /config/settings.json` を同じ鍵（`_settings_lock`）で交互にする。
+  確かめるテスト: `unit_py/test_serve_api.py::test_settings_save_never_half_written`（修正前は失敗することを確認済み）。

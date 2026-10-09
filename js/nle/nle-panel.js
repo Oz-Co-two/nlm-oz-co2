@@ -48,7 +48,6 @@ export class NlePanel {
     'ovResize',
     'packLanes',
     'phRect',
-    'sectionRange',
     'splitSectionAt',
     'syncFlatToSections',
     'tlEnd',
@@ -92,7 +91,6 @@ export class NlePanel {
   ovResize(...args) { return this.rt.ovResize(...args); }
   packLanes(...args) { return this.rt.packLanes(...args); }
   phRect(...args) { return this.rt.phRect(...args); }
-  sectionRange(...args) { return this.rt.sectionRange(...args); }
   splitSectionAt(...args) { return this.rt.splitSectionAt(...args); }
   syncFlatToSections(...args) { return this.rt.syncFlatToSections(...args); }
   tlEnd(...args) { return this.rt.tlEnd(...args); }

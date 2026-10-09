@@ -26,7 +26,6 @@ export class InfoPanel {
     'infoAutoCenter',
     'infoCamApply',
     'infoCenterView',
-    'infoChain',
     'infoNodeEls',
     'infoNodeT',
     'infoOutPortOf',
@@ -59,7 +58,6 @@ export class InfoPanel {
   infoAutoCenter(...args) { return this.rt.infoAutoCenter(...args); }
   infoCamApply(...args) { return this.rt.infoCamApply(...args); }
   infoCenterView(...args) { return this.rt.infoCenterView(...args); }
-  infoChain(...args) { return this.rt.infoChain(...args); }
   infoNodeEls(...args) { return this.rt.infoNodeEls(...args); }
   infoNodeT(...args) { return this.rt.infoNodeT(...args); }
   infoOutPortOf(...args) { return this.rt.infoOutPortOf(...args); }

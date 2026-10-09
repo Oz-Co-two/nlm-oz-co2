@@ -291,11 +291,14 @@ class Editor:
             t = next((t for t in tabs if t.get("id") == tid and t.get("webSocketDebuggerUrl")), None)
             if t:
                 tab = Tab(self, tid, _WebSocket(t["webSocketDebuggerUrl"]))
-                for _ in range(100):
-                    if tab.js("document.readyState") == "complete":
+                # 開いた直後のタブは、目的のページへ移る前に一瞬 about:blank（これも readyState は complete）になる。
+                # そこで返すと、入れたJSが直後のページ移動で消える・相対URLが使えない（PCが混んでいる時に画面テストが46件まとめて落ちた。
+                # tests/README.md「たまに出るエラーの記録」）。目的のページに移ったことも確かめる
+                for _ in range(200):
+                    if tab.js("location.protocol.startsWith('http')&&document.readyState==='complete'"):
                         return tab
                     time.sleep(0.05)
-                return tab
+                raise CdpError(f"補助タブが {path} を開けませんでした（10秒）")
             time.sleep(0.1)
         raise CdpError("タブを開けませんでした")
 

@@ -8,6 +8,21 @@ For basic usage, see the [tutorial](docs/tutorial.en.md), the [advanced tutorial
 <!-- Format: one "## v1.2.3-oz" heading per version. Top-level bold items ("- **...**") are the headlines shown in the in-app
 update notice (tools/make_release.py puts them into update.json). Keep the same versions and the same number of headlines as CHANGELOG.md. -->
 
+## v1.4.2-oz
+
+- **You can now grab and move the notes at the ends of an arc**
+  Clicking a note at the end of an arc now selects the note, not the arc (before, it grabbed the end of the arc and you could not move the note).
+  - When you move the note, the connected end of the arc follows it (moving one end bends the arc; moving both ends moves the whole arc). The head note does not go past the tail's beat.
+  - When you move an arc, the notes at both ends move with it. To move only one end of the arc, select the arc and use the small arrows at its head and tail
+    (while they are shown, the arrows that move the whole arc are drawn larger).
+  - When you change a note's direction (Alt + wheel, D, the direction palette), the direction of the connected arc end changes too.
+- **Projects now open where you saved them**
+  Saving also records the playhead position and the NLE zoom and scroll position, and opening the project restores them. Just moving the playhead or zooming does not mark the project as unsaved.
+  - During playback, the NLE now keeps the playhead at the center of the view and scrolls (before, it moved almost to the right edge and hid behind the shortcut list at the top right).
+- **Fixed rare problems**
+  - Checking for updates and similar actions could rarely fail because the connection was cut off.
+  - If the app quit while saving your preferences, the preferences could be lost (they are now written in full before replacing the old file).
+
 ## v1.4.1-oz
 
 - **Fixed text that was not translated in the English UI**

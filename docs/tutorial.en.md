@@ -166,6 +166,12 @@ The two buttons at the right end of the toolbar do the same.
 You can change how much an arc curves and how many slices a chain has with the wheel while it is selected
 (for the key combinations, see the shortcut list on the screen or the NOTES section of the original manual).
 
+An arc stays connected to the notes at its ends.
+
+- Clicking a note at the end of an arc selects the note. When you move that note, the end of the arc follows it. When you change the note's direction, the arc's end direction changes too
+- To select the arc itself, click around the middle of its line. When you move the arc, the notes at both ends move with it
+- To move only one end of the arc, select the arc and use the small arrows that appear at its head and tail (the large arrows move the whole arc)
+
 ---
 
 ## 5. Bombs and walls

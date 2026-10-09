@@ -25,7 +25,6 @@ export class LightingEditor {
     'deleteLightAt',
     'drawLightIco',
     'ensureChips',
-    'flipLightColors',
     'hoverLightEvent',
     'laneKind',
     'laserBoostCols',
@@ -36,7 +35,6 @@ export class LightingEditor {
     'placeLight',
     'refreshLightHover',
     'setLightBehav',
-    'setLightBehavSmart',
     'setLightColor',
     'setLightMode',
     'setPvShowLights',
@@ -55,7 +53,6 @@ export class LightingEditor {
   deleteLightAt(...args) { return this.rt.deleteLightAt(...args); }
   drawLightIco(...args) { return this.rt.drawLightIco(...args); }
   ensureChips(...args) { return this.rt.ensureChips(...args); }
-  flipLightColors(...args) { return this.rt.flipLightColors(...args); }
   hoverLightEvent(...args) { return this.rt.hoverLightEvent(...args); }
   laneKind(...args) { return this.rt.laneKind(...args); }
   laserBoostCols(...args) { return this.rt.laserBoostCols(...args); }
@@ -66,7 +63,6 @@ export class LightingEditor {
   placeLight(...args) { return this.rt.placeLight(...args); }
   refreshLightHover(...args) { return this.rt.refreshLightHover(...args); }
   setLightBehav(...args) { return this.rt.setLightBehav(...args); }
-  setLightBehavSmart(...args) { return this.rt.setLightBehavSmart(...args); }
   setLightColor(...args) { return this.rt.setLightColor(...args); }
   setLightMode(...args) { return this.rt.setLightMode(...args); }
   setPvShowLights(...args) { return this.rt.setPvShowLights(...args); }

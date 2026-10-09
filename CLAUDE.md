@@ -235,7 +235,9 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - 変換は`serve.py`の`/__convert/toOgg`（POST、生バイナリボディ、`?ext=xxx&leadInMs=xxx`、Musicを分割・トリムしていれば`&segs=`）。
   ffmpeg呼び出しには`creationflags=CREATE_NO_WINDOW`必須（無いと一瞬コンソール窓が出る）。
   エラーを返す時も**送られた音源（本体）を先に読み切ってから応答する**。読まずに応答して閉じると、Windowsでは残ったデータのせいで
-  接続がリセットされ、ffmpeg無し等の応答がJSに届かず通信エラーになる（2026-10-04に修正。大きい本体のPOSTを足す時も同じ）。
+  接続がリセットされ、ffmpeg無し等の応答がJSに届かず通信エラーになる（2026-10-04に修正）。2026-10-05からは全POST共通で、
+  `_reply()`/`_deny()`が応答の前に`_drain()`でまだ読んでいない本体を読み捨てる（使う本体は`_raw_body()`/`_body()`で1回だけ読む。
+  拒否する要求の本体は保存せず、16MBを超えたら読まない）。**`_reply()`を通さずに応答するPOST APIを足す時は、先に`_raw_body()`か`_drain()`を呼ぶこと**。
 - 出力先フォルダに`.nlm-egg.json`という小さなマーカーファイルを置いて、音源のsize/mtime/leadInMs/segsが
   前回と同一なら再変換をスキップする（ffmpeg起動・大きい音声ファイルの再書き込みを避ける）。
 - 書き出しパネルの「song.eggを強制再変換」チェックボックスでキャッシュを無視して強制再生成できる
@@ -247,9 +249,14 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   `metaDirty`は履歴に積まれる編集で立たない・Undoで戻らない等の穴があり判定には使っていない。
   **プロジェクトに保存する項目を`buildProjectText`へ足したら`projSig`にも足すこと**（足さないとその変更でランプが点かない）。
   逆に、自動で書き足される派生値（例: `infoBase._beatsPerMinute`）は除外しないと「元に戻してもランプが消えない」誤検知になる。
+- `buildProjectText`の`view`（再生位置・NLEのズーム・表示の左端。開いた時に`restoreView()`で戻す・2026-10-06）は**わざと`projSig`に入れていない**
+  （利用者の要望: カーソルを動かしただけで未保存にしない）。保存した時の値が残るだけで、動かしただけなら閉じる時に確認は出ない。
+  開いた直後は音源の読込が終わる前で、曲末が暫定の128拍（`camSongEndBeat`）。3Dカメラの可動範囲（`clampCamera`）は再生ヘッドを必ず含めること
+  （含めないと、戻した再生位置が128拍より後ろの時にカメラが押し出されて3Dに何も映らなくなる。2026-10-09に修正）。
 - 閉じる確認は`app.py`の`events.closing`（未保存時だけ中止→JSの`__nlmAskQuit`で3択）。pywebview標準の
   `confirm_close`は英語固定なので使わない。closingはUIスレッドで同期実行＝中で`evaluate_js`を待つとデッドロックする。
-- `editor-app.js`内の`window._dbg`は`js/main.js`が起動時に上書きするため、そちらに診断を足しても外から見えない。
+- `window._dbg`は`js/main.js`が作る（editor-app.js側にあった古い`window._dbg`は、main.jsが起動時に上書きして外から見えなかったため
+  2026-10-05に削除）。editor-app.jsの中の状態を見る診断は`window._dbgApp`へ足す（下の節）。
 
 ## 開発用窓口とローカルサーバーのアクセス制御（2026-09-28）
 
@@ -283,6 +290,19 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
     `config/native_out_dirs.json`に保存され次回も自動接続できる。JS側から許可を足す口は作らないこと。
   - 読み込み: 音源/画像の拡張子、そのセッションでダイアログから選んだファイル、許可済み出力フォルダの中だけ。
 
+## アークと端のノーツのつながり（2026-10-06）
+
+- アークは Beat Saber の形式どおり独立した物（頭・尾の座標を自分で持つ）で、ノーツとのつながりは保存しない。
+  「拍・列・段が一致」（`arcEndIs`）で、その都度判定する。チェーンは作る時にノーツを消費するので、この話は無い。
+- 連動させている操作: 色（`recolorLinkedSliders`）・向き（`redirLinkedSliders`。頭=`d`・尾=`tc`）・ギズモでの移動（`arcLinkPlan`）。
+  移動は、ノーツを動かすとつながったアークの端がついてくる（片端=変形・両端=平行移動・頭は尾の拍を越えない）。アークを全体移動すると端のノーツを連れていく。
+  アークの頭・尾のミニギズモと、ノーツの無い筒の端のドラッグはアークの端だけを動かす（つながりを外す手段として残している）。
+  **ノーツを動かす・向きを変える操作を新しく足したら、これらを通すこと**（通さないとアークが置き去りになる）。貼り付けの追従中は連動しない。
+- クリックはノーツ優先: `objUnder`は筒と端のノーツが重なる所（筒の端の近く・レイが端のノーツも通る）でノーツを返し、
+  `pickArcEndpoint`は端のノーツを拾わない。以前は端のノーツの上のクリックがアークの端を掴み、ノーツを動かせなかった。
+  `pickArcPart`（既定で端のノーツも拾う）は、選択中アークの端点の上の Alt+ホイール（向き）用。
+- アークを1本選ぶと頭・尾にミニギズモが出るので、その間だけ全体移動の矢印を大きくする（`GIZMO_SCALE_BIG`）。普段の矢印は小さいまま（原作者の指定）。
+
 ## 表示言語（日本語・英語・2026-10-04）
 
 - 訳の仕組みは5つ: JSの文言は`t('キー','日本語')`/`tf()`、HTMLは`data-i18n`（文字）/`data-i18n-t`（title）/`data-i18n-ph`（placeholder）、
@@ -304,17 +324,18 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - 「最近使ったファイル」機能（`addRecent`/`fillRecentMenu`/`openRecentHandle`）— 上記のIndexedDB
   クラッシュの直接原因だったため、メニュー・JS・CSS・翻訳ファイルから完全に削除した。
   同じ発想の機能を作る場合は、必ずネイティブパス方式（上記4番）を使うこと。
+- 古いノード画面（song/in/outノードをキャンバスに並べて配線するグラフエディタ）の処理一式（2026-10-05）。`ndView`が常に`'layers'`で
+  到達できなかった。同時に、どこからも呼ばれていなかった関数（`addMarker`・`srcNjsOf`・`setLightBehavSmart`・`flipLightColors`等）と、
+  常に隠れていたステージ選択（`#pvEnvSel`・`pvFillEnvSel`。原作者の指示で「当面削除」とされていた物）も削除。戻す時は git の履歴から。
+  調べ方は、全テストのカバレッジ（`run_tests.py --coverage`）→ 名前の参照をたどって消せる物の範囲を出す → 複数の観点での反証。
 
-## 触らなくていい・生きていないコード
+## 古いノード画面の名残り（消さないもの）
 
-- 「song/in/outノードをキャンバスに描画する古いグラフエディタ」は**到達できないことを確認済み**（2026-10-04・カバレッジ調査）。
-  `ndView`は常に`'layers'`（代入は宣言だけ）で、ノード用の処理は`ndView!=='layers'`の時だけ動く。全テストでも一度も動かない。
-  該当: `activateLine`/`deleteSelNode`/`removeNodeMerge`/`pasteNode`/`copySelNode`/`compileGraphToFlat`/`nodeGeomOf`/`nodeRowsFor`/
-  `portHit`/`editExtraNode`/`nodeExtraH`/`edgeHit`/`resizeAt`/`altAt`/`allNodeIds`/`loadLineDiff`/`_ndWidgets`等と、それを呼ぶ
-  右クリックメニュー・キー処理の分岐（`js/chart/graph-legacy.js`も）。`songNode`/`graphEdges`/`extraNodes`自体は
-  `applyInfoGraph()`経由で今も現役（INFOノードエディタのミラー先）なので消さない。
-- どこからも呼ばれていない関数: `addMarker`（今は`addMarkerAt`）・`srcNjsOf`・`setLightBehavSmart`・`flipLightColors`・`pvFillEnvSel`。
-- 上の2つは削除の候補（当面は残す）。消す時は methodNames からも外し、全テストで確かめる。
+- `songNode`/`graphEdges`/`extraNodes`/`graphIO`/`altIns`/`altOuts`/`altSongs`/`activeUids`/`cutSet`は現役のデータ（保存ファイル・
+  履歴に入る。`applyInfoGraph()`がINFOノードエディタからここへ写す）。`js/chart/graph-legacy.js`も、レイヤー画面・保存・読込が使う
+  `ensureEdges`/`newDefaultGraph`/`sigConnected`/`sigPath`を持つので消さない。
+- `loadLineDiff`/`fillDiffSelectFromInfo`は、`restoreLineAssets()`が古い版の残したIndexedDBの`lineDirs`を読む経路から呼ばれ得るので残した
+  （今の版は`lineDirs`を書かない）。`ndFromScreen`/`ndCam`はMEDIAのドロップが使う（今は常に恒等変換）。
 
 ## その他
 

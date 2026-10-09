@@ -25,7 +25,6 @@ export class UiChrome {
     'ndColorEdit',
     'paneOf',
     'refreshMusicHdr',
-    'saveCamSpd',
     'saveSplits',
     'setLaneRatio',
     'showErr',
@@ -53,7 +52,6 @@ export class UiChrome {
   ndColorEdit(...args) { return this.rt.ndColorEdit(...args); }
   paneOf(...args) { return this.rt.paneOf(...args); }
   refreshMusicHdr(...args) { return this.rt.refreshMusicHdr(...args); }
-  saveCamSpd(...args) { return this.rt.saveCamSpd(...args); }
   saveSplits(...args) { return this.rt.saveSplits(...args); }
   setLaneRatio(...args) { return this.rt.setLaneRatio(...args); }
   showErr(...args) { return this.rt.showErr(...args); }

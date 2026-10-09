@@ -21,24 +21,17 @@ export class NotesEditor {
     'buildChain',
     'buildNote',
     'buildWall',
-    'createClipAt',
     'clipSlotAt',
     'makeClipAt',
-    'createNoteClipAt',
-    'deleteRegionContents',
     'drawNoteIco',
-    'extractRegion',
     'makeSpikyBomb',
-    'mirrorRegion',
     'mirrorNoteAngle',
     'objUnder',
-    'pasteFragment',
     'placeAt',
     'rebuild',
     'recolorLinkedSliders',
     'refreshGhost',
     'refreshMesh',
-    'regionObjs',
     'removeObj',
     'selWalls',
     'setNoteColStr',
@@ -59,24 +52,17 @@ export class NotesEditor {
   buildChain(...args) { return this.rt.buildChain(...args); }
   buildNote(...args) { return this.rt.buildNote(...args); }
   buildWall(...args) { return this.rt.buildWall(...args); }
-  createClipAt(...args) { return this.rt.createClipAt(...args); }
   clipSlotAt(...args) { return this.rt.clipSlotAt(...args); }
   makeClipAt(...args) { return this.rt.makeClipAt(...args); }
-  createNoteClipAt(...args) { return this.rt.createNoteClipAt(...args); }
-  deleteRegionContents(...args) { return this.rt.deleteRegionContents(...args); }
   drawNoteIco(...args) { return this.rt.drawNoteIco(...args); }
-  extractRegion(...args) { return this.rt.extractRegion(...args); }
   makeSpikyBomb(...args) { return this.rt.makeSpikyBomb(...args); }
-  mirrorRegion(...args) { return this.rt.mirrorRegion(...args); }
   mirrorNoteAngle(...args) { return this.rt.mirrorNoteAngle(...args); }
   objUnder(...args) { return this.rt.objUnder(...args); }
-  pasteFragment(...args) { return this.rt.pasteFragment(...args); }
   placeAt(...args) { return this.rt.placeAt(...args); }
   rebuild(...args) { return this.rt.rebuild(...args); }
   recolorLinkedSliders(...args) { return this.rt.recolorLinkedSliders(...args); }
   refreshGhost(...args) { return this.rt.refreshGhost(...args); }
   refreshMesh(...args) { return this.rt.refreshMesh(...args); }
-  regionObjs(...args) { return this.rt.regionObjs(...args); }
   removeObj(...args) { return this.rt.removeObj(...args); }
   selWalls(...args) { return this.rt.selWalls(...args); }
   setNoteColStr(...args) { return this.rt.setNoteColStr(...args); }

@@ -1,6 +1,6 @@
 # NLM開発サーバー: キャッシュ無効ヘッダ付き（Chromeの古いファイル使い回しを根絶）
 # ＋ アセット(asset/)クリップの保存/改名/削除API（ローカル専用。Tauri化時はネイティブ書込みへ置換）
-import http.server, json, math, os, posixpath, re, shutil, subprocess, sys, tempfile
+import http.server, json, math, os, posixpath, re, shutil, subprocess, sys, tempfile, threading, time
 from urllib.parse import unquote, urlsplit, parse_qs
 from rating_plugin import RatingPlugin, PluginError
 from app_update import Updater, UpdateError
@@ -46,6 +46,26 @@ def _hostname(hostport):
         return hp[1:hp.find(']')] if ']' in hp else hp[1:]
     return hp.rsplit(':', 1)[0] if hp.count(':') == 1 else hp
 
+_settings_lock = threading.Lock()   # config/settings.json の保存と配信を交互にする（書きかけを読ませない）
+
+
+def _write_text_atomic(path, text):
+    """一時ファイルに書き終えてから置き換える＝読み手が書きかけ（空・途中まで）を見ない・途中で落ちても前の中身が残る（2026-10-09）。
+    以前は空にしてから書いていたため、保存と同時の読み込みが空のファイルを受け取ることがあった。
+    Windows では置き換え先を他が開いていると失敗する（ウイルス対策ソフト・起動時に言語を読む app.py 等）ので少し待ってやり直す"""
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write(text)
+    for i in range(20):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if i == 19:
+                raise
+            time.sleep(0.05)
+
+
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=BASE_DIR, **kwargs)
@@ -61,6 +81,7 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         return True
 
     def _deny(self):
+        self._drain()   # 拒否する時も本体を読み捨ててから応答する（_drain の説明）
         self.send_error(403, 'Forbidden (NLM local server: access from this host/origin is not allowed)')
 
     def translate_path(self, path):
@@ -137,6 +158,9 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                         pass   # 壊れたファイルは無視して他方を使う
             if found:
                 return self._reply(200, merged)
+        if lp == '/config/settings.json':   # 保存（__settings/save）と同じ鍵の中で読む＝保存の途中を返さない
+            with _settings_lock:
+                return super().do_GET()
         return super().do_GET()
 
     def list_directory(self, path):
@@ -158,11 +182,48 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a):   # 静かに
         pass
 
+    _DRAIN_MAX = 16 * 1024 * 1024   # 使わない本体を読み捨てる上限（これより大きい本体は読まない＝接続がリセットされても構わない不正な要求）
+
+    def _content_length(self):
+        if self.command != 'POST':
+            return 0
+        try:
+            return max(0, int(self.headers.get('Content-Length', 0) or 0))
+        except ValueError:
+            return 0   # 数値でない Content-Length は本体なしとして扱う（例外にすると応答が返らない）
+
+    def _raw_body(self):
+        # POSTの本体は1回だけ読む（_body も同じものを使う）
+        if getattr(self, '_raw', None) is None:
+            n = self._content_length()
+            self._raw = self.rfile.read(n) if n > 0 else b''
+        return self._raw
+
+    def _drain(self):
+        # 応答する前に、まだ読んでいない本体を読み捨てる（_reply・_deny から呼ぶ）。読まずに応答して閉じると、Windows では残った
+        # データのせいで接続がリセットされ、応答が届かずに通信エラーになることがある（本体が大きいほど起きやすい。小さい本体でも
+        # まれに起き、全テストで __update/status がたまに ConnectionAbortedError になっていた）。拒否する要求（他サイトから送られた物）
+        # に大きなメモリを使わせないよう、保存せずに少しずつ読み、上限を超える本体・届かない本体は諦める
+        if getattr(self, '_raw', None) is not None:
+            return
+        n, self._raw = self._content_length(), b''
+        if not 0 < n <= self._DRAIN_MAX:
+            return
+        try:
+            self.connection.settimeout(2)
+            while n > 0:
+                d = self.rfile.read(min(n, 65536))
+                if not d:
+                    break
+                n -= len(d)
+        except OSError:
+            pass
+
     def _body(self):
-        n = int(self.headers.get('Content-Length', 0) or 0)
-        return json.loads(self.rfile.read(n) or b'{}')
+        return json.loads(self._raw_body() or b'{}')
 
     def _reply(self, code, obj):
+        self._drain()
         body = json.dumps(obj, ensure_ascii=False).encode('utf-8')
         self.send_response(code)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
@@ -171,10 +232,8 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def _convert_to_ogg(self):
-        # 本体（音源）はエラーを返す時も先に読み切る。読まずに応答して閉じると、Windows では残ったデータのせいで接続が
-        # リセットされ、ffmpeg が無い等の応答が届かずに通信エラーになることがあった（数MBの音源を送るため）
-        n = int(self.headers.get('Content-Length', 0) or 0)
-        raw = self.rfile.read(n)
+        # 本体（音源）はエラーを返す時も先に読み切る（_drain の説明。数MBの音源を送るため特に起きやすかった）
+        raw = self._raw_body()
         ffmpeg = shutil.which('ffmpeg')
         if not ffmpeg:
             return self._reply(200, {'ok': False, 'error': 'ffmpeg-not-found'})
@@ -281,14 +340,15 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
 
     def do_POST(self):
+        self._raw = None   # 本体の読み込みは要求ごと（_raw_body）
         if not self._access_ok(write=True):
             return self._deny()
         try:
             if self.path == '/__settings/save':   # 環境設定(bsnm_*)を config/settings.json へ保存
                 b = self._body()
                 os.makedirs(CONFIG_DIR, exist_ok=True)
-                with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(b.get('data', {}), f, ensure_ascii=False, indent=1)
+                with _settings_lock:
+                    _write_text_atomic(SETTINGS_FILE, json.dumps(b.get('data', {}), ensure_ascii=False, indent=1))
                 return self._reply(200, {'ok': True})
             if self.path == '/__openarg/save':   # ダブルクリックで開いたファイルへ保存を書き戻す（同じ.nlmfへ上書き）
                 if not OPEN_FILE:

@@ -1,6 +1,7 @@
 /**
  * GraphLegacy
- * LEGACY — old node-graph path (kept)
+ * 配線グラフ（sections を INPUT→OUTPUT の経路でつなぐデータ）。古いノード画面の処理は削除済みで、
+ * 残っているのはレイヤー（NLE）画面・保存・読込が今も使う関数だけ。
  *
  * Object API for this domain. Methods forward to the editor runtime closure
  * (shared `let` state lives there for behavior fidelity).
@@ -14,25 +15,17 @@ export class GraphLegacy {
   /** Method names owned by this domain (for install / introspection). */
   static get methodNames() {
     return [
-    'activateLine',
-    'compileGraphToFlat',
     'ensureEdges',
-    'graphOp',
     'newDefaultGraph',
     'sigConnected',
-    'sigPath',
-    'syncGraphFromFlat'
+    'sigPath'
     ];
   }
 
-  activateLine(...args) { return this.rt.activateLine(...args); }
-  compileGraphToFlat(...args) { return this.rt.compileGraphToFlat(...args); }
   ensureEdges(...args) { return this.rt.ensureEdges(...args); }
-  graphOp(...args) { return this.rt.graphOp(...args); }
   newDefaultGraph(...args) { return this.rt.newDefaultGraph(...args); }
   sigConnected(...args) { return this.rt.sigConnected(...args); }
   sigPath(...args) { return this.rt.sigPath(...args); }
-  syncGraphFromFlat(...args) { return this.rt.syncGraphFromFlat(...args); }
 }
 
 /** Register domain object on `rt.modules.legacy` and bind live impls. */

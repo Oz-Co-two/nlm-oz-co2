@@ -4,11 +4,11 @@
   /* Infoモード（Info.dat編集） */
   #infoPanel{position:absolute;inset:0;overflow-y:auto;background:#161616;z-index:6;padding:32px 14px 14px;border-radius:10px;}
 
-  #infoPanel .irow,#neFields .irow{margin-bottom:9px;max-width:430px;}
+  #infoPanel .irow{margin-bottom:9px;max-width:430px;}
 
-  #infoPanel label,#neFields label{display:block;font-size:11px;color:#8a8a8a;margin-bottom:3px;}
+  #infoPanel label{display:block;font-size:11px;color:#8a8a8a;margin-bottom:3px;}
 
-  #infoPanel input,#neFields input{width:100%;background:#242424;border:1px solid #1d1d1d;border-radius:4px;color:#eee;padding:6px 8px;font-size:12px;outline:none;}
+  #infoPanel input{width:100%;background:#242424;border:1px solid #1d1d1d;border-radius:4px;color:#eee;padding:6px 8px;font-size:12px;outline:none;}
 
   #infoPanel input:focus{border-color:var(--accent);}
 

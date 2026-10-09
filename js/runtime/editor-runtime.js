@@ -25,12 +25,9 @@ export class EditorRuntimeHelpers {
     '_rd32be',
     '_sniffMime',
     'addLibItem',
-    'addMarker',
     'addMarkerAt',
     'addSongLine',
     'addSrcNode',
-    'allNodeIds',
-    'altAt',
     'applyArtwork',
     'applyHandleDrag',
     'axisParam',
@@ -52,18 +49,14 @@ export class EditorRuntimeHelpers {
     'commitLayerPaste',
     'connectedNodeId',
     'copySel3D',
-    'copySelNode',
     'createArc',
     'createChain',
     'createExtra',
     'crispVLine',
     'dataURLToBlob',
-    'defaultFresh',
     'deleteAssetClip',
     'deleteLayerSel',
-    'deleteMultiSel',
     'deleteMusic',
-    'deleteSelNode',
     'deleteSrcNode',
     'diffColOf',
     'diffCountsOf',
@@ -73,8 +66,6 @@ export class EditorRuntimeHelpers {
     'dispDiff',
     'drawBand',
     'dupJumpItem',
-    'edgeHit',
-    'editExtraNode',
     'endHandleDrag',
     'ensureDiffSelect',
     'ensureDupPool',
@@ -83,7 +74,6 @@ export class EditorRuntimeHelpers {
     'ensureNodeIds',
     'ensureSelPool',
     'estimateBPM',
-    'extraAt',
     'floorColBeat',
     'fmt',
     'fragFromContent',
@@ -95,8 +85,6 @@ export class EditorRuntimeHelpers {
     'hsv2rgb',
     'hueOf',
     'inNullRange',
-    'inRegion',
-    'ioAt',
     'jumpMarker',
     'lBeatToX',
     'loadCoverPreview',
@@ -113,45 +101,29 @@ export class EditorRuntimeHelpers {
     'msegs',
     'ndFromScreen',
     'ndInlineEdit',
-    'ndToScreen',
     'njsOffCur',
-    'nodeAt',
-    'nodeExtraH',
-    'nodeGeomOf',
-    'nodeRowsFor',
-    'noteSwSvg',
-    'noteTrackForBeat',
     'numSprTex',
-    'openCoverFile',
     'openDiffMenu',
     'openPie',
-    'pasteNode',
     'pasteSel3D',
     'pickOutFolder',
     'pickStripCol',
     'placeClipLine',
-    'portHit',
-    'portPosOf',
-    'portPosW',
     'prResize',
     'prSeekTo',
-    'pvFillEnvSel',
     'pvFinderVis',
     'quickSetNode',
     'readinessHTML',
     'refreshCoverB64',
     'refreshHoverVisuals',
     'refreshPal',
-    'removeNodeMerge',
     'removeObjMesh',
     'renameAssetClip',
     'renderOutCards',
     'resetDiffSections',
-    'resizeAt',
     'restoreCoversFromB64',
     'restoreLineAssets',
     'rgb2hsv',
-    'rippleSection',
     'rotStep',
     'roundRectND',
     'rowOf',
@@ -169,7 +141,6 @@ export class EditorRuntimeHelpers {
     'setColor',
     'setFollowGhost',
     'setLibLabel',
-    'setNdView',
     'setNjsCur',
     'setPtr',
     'setScr',
@@ -177,9 +148,7 @@ export class EditorRuntimeHelpers {
     'shiftMusicSelBeat',
     'shiftSelLayersBeat',
     'showMenu',
-    'songAt',
     'srcCardHTML',
-    'srcNjsOf',
     'startHandleDrag',
     'startLayerPaste',
     'stopS',
@@ -215,12 +184,9 @@ export class EditorRuntimeHelpers {
   _rd32be(...args) { return this.rt._rd32be(...args); }
   _sniffMime(...args) { return this.rt._sniffMime(...args); }
   addLibItem(...args) { return this.rt.addLibItem(...args); }
-  addMarker(...args) { return this.rt.addMarker(...args); }
   addMarkerAt(...args) { return this.rt.addMarkerAt(...args); }
   addSongLine(...args) { return this.rt.addSongLine(...args); }
   addSrcNode(...args) { return this.rt.addSrcNode(...args); }
-  allNodeIds(...args) { return this.rt.allNodeIds(...args); }
-  altAt(...args) { return this.rt.altAt(...args); }
   applyArtwork(...args) { return this.rt.applyArtwork(...args); }
   applyHandleDrag(...args) { return this.rt.applyHandleDrag(...args); }
   axisParam(...args) { return this.rt.axisParam(...args); }
@@ -242,18 +208,14 @@ export class EditorRuntimeHelpers {
   commitLayerPaste(...args) { return this.rt.commitLayerPaste(...args); }
   connectedNodeId(...args) { return this.rt.connectedNodeId(...args); }
   copySel3D(...args) { return this.rt.copySel3D(...args); }
-  copySelNode(...args) { return this.rt.copySelNode(...args); }
   createArc(...args) { return this.rt.createArc(...args); }
   createChain(...args) { return this.rt.createChain(...args); }
   createExtra(...args) { return this.rt.createExtra(...args); }
   crispVLine(...args) { return this.rt.crispVLine(...args); }
   dataURLToBlob(...args) { return this.rt.dataURLToBlob(...args); }
-  defaultFresh(...args) { return this.rt.defaultFresh(...args); }
   deleteAssetClip(...args) { return this.rt.deleteAssetClip(...args); }
   deleteLayerSel(...args) { return this.rt.deleteLayerSel(...args); }
-  deleteMultiSel(...args) { return this.rt.deleteMultiSel(...args); }
   deleteMusic(...args) { return this.rt.deleteMusic(...args); }
-  deleteSelNode(...args) { return this.rt.deleteSelNode(...args); }
   deleteSrcNode(...args) { return this.rt.deleteSrcNode(...args); }
   diffColOf(...args) { return this.rt.diffColOf(...args); }
   diffCountsOf(...args) { return this.rt.diffCountsOf(...args); }
@@ -263,8 +225,6 @@ export class EditorRuntimeHelpers {
   dispDiff(...args) { return this.rt.dispDiff(...args); }
   drawBand(...args) { return this.rt.drawBand(...args); }
   dupJumpItem(...args) { return this.rt.dupJumpItem(...args); }
-  edgeHit(...args) { return this.rt.edgeHit(...args); }
-  editExtraNode(...args) { return this.rt.editExtraNode(...args); }
   endHandleDrag(...args) { return this.rt.endHandleDrag(...args); }
   ensureDiffSelect(...args) { return this.rt.ensureDiffSelect(...args); }
   ensureDupPool(...args) { return this.rt.ensureDupPool(...args); }
@@ -273,7 +233,6 @@ export class EditorRuntimeHelpers {
   ensureNodeIds(...args) { return this.rt.ensureNodeIds(...args); }
   ensureSelPool(...args) { return this.rt.ensureSelPool(...args); }
   estimateBPM(...args) { return this.rt.estimateBPM(...args); }
-  extraAt(...args) { return this.rt.extraAt(...args); }
   floorColBeat(...args) { return this.rt.floorColBeat(...args); }
   fmt(...args) { return this.rt.fmt(...args); }
   fragFromContent(...args) { return this.rt.fragFromContent(...args); }
@@ -285,8 +244,6 @@ export class EditorRuntimeHelpers {
   hsv2rgb(...args) { return this.rt.hsv2rgb(...args); }
   hueOf(...args) { return this.rt.hueOf(...args); }
   inNullRange(...args) { return this.rt.inNullRange(...args); }
-  inRegion(...args) { return this.rt.inRegion(...args); }
-  ioAt(...args) { return this.rt.ioAt(...args); }
   jumpMarker(...args) { return this.rt.jumpMarker(...args); }
   lBeatToX(...args) { return this.rt.lBeatToX(...args); }
   loadCoverPreview(...args) { return this.rt.loadCoverPreview(...args); }
@@ -303,45 +260,29 @@ export class EditorRuntimeHelpers {
   msegs(...args) { return this.rt.msegs(...args); }
   ndFromScreen(...args) { return this.rt.ndFromScreen(...args); }
   ndInlineEdit(...args) { return this.rt.ndInlineEdit(...args); }
-  ndToScreen(...args) { return this.rt.ndToScreen(...args); }
   njsOffCur(...args) { return this.rt.njsOffCur(...args); }
-  nodeAt(...args) { return this.rt.nodeAt(...args); }
-  nodeExtraH(...args) { return this.rt.nodeExtraH(...args); }
-  nodeGeomOf(...args) { return this.rt.nodeGeomOf(...args); }
-  nodeRowsFor(...args) { return this.rt.nodeRowsFor(...args); }
-  noteSwSvg(...args) { return this.rt.noteSwSvg(...args); }
-  noteTrackForBeat(...args) { return this.rt.noteTrackForBeat(...args); }
   numSprTex(...args) { return this.rt.numSprTex(...args); }
-  openCoverFile(...args) { return this.rt.openCoverFile(...args); }
   openDiffMenu(...args) { return this.rt.openDiffMenu(...args); }
   openPie(...args) { return this.rt.openPie(...args); }
-  pasteNode(...args) { return this.rt.pasteNode(...args); }
   pasteSel3D(...args) { return this.rt.pasteSel3D(...args); }
   pickOutFolder(...args) { return this.rt.pickOutFolder(...args); }
   pickStripCol(...args) { return this.rt.pickStripCol(...args); }
   placeClipLine(...args) { return this.rt.placeClipLine(...args); }
-  portHit(...args) { return this.rt.portHit(...args); }
-  portPosOf(...args) { return this.rt.portPosOf(...args); }
-  portPosW(...args) { return this.rt.portPosW(...args); }
   prResize(...args) { return this.rt.prResize(...args); }
   prSeekTo(...args) { return this.rt.prSeekTo(...args); }
-  pvFillEnvSel(...args) { return this.rt.pvFillEnvSel(...args); }
   pvFinderVis(...args) { return this.rt.pvFinderVis(...args); }
   quickSetNode(...args) { return this.rt.quickSetNode(...args); }
   readinessHTML(...args) { return this.rt.readinessHTML(...args); }
   refreshCoverB64(...args) { return this.rt.refreshCoverB64(...args); }
   refreshHoverVisuals(...args) { return this.rt.refreshHoverVisuals(...args); }
   refreshPal(...args) { return this.rt.refreshPal(...args); }
-  removeNodeMerge(...args) { return this.rt.removeNodeMerge(...args); }
   removeObjMesh(...args) { return this.rt.removeObjMesh(...args); }
   renameAssetClip(...args) { return this.rt.renameAssetClip(...args); }
   renderOutCards(...args) { return this.rt.renderOutCards(...args); }
   resetDiffSections(...args) { return this.rt.resetDiffSections(...args); }
-  resizeAt(...args) { return this.rt.resizeAt(...args); }
   restoreCoversFromB64(...args) { return this.rt.restoreCoversFromB64(...args); }
   restoreLineAssets(...args) { return this.rt.restoreLineAssets(...args); }
   rgb2hsv(...args) { return this.rt.rgb2hsv(...args); }
-  rippleSection(...args) { return this.rt.rippleSection(...args); }
   rotStep(...args) { return this.rt.rotStep(...args); }
   roundRectND(...args) { return this.rt.roundRectND(...args); }
   rowOf(...args) { return this.rt.rowOf(...args); }
@@ -359,7 +300,6 @@ export class EditorRuntimeHelpers {
   setColor(...args) { return this.rt.setColor(...args); }
   setFollowGhost(...args) { return this.rt.setFollowGhost(...args); }
   setLibLabel(...args) { return this.rt.setLibLabel(...args); }
-  setNdView(...args) { return this.rt.setNdView(...args); }
   setNjsCur(...args) { return this.rt.setNjsCur(...args); }
   setPtr(...args) { return this.rt.setPtr(...args); }
   setScr(...args) { return this.rt.setScr(...args); }
@@ -367,9 +307,7 @@ export class EditorRuntimeHelpers {
   shiftMusicSelBeat(...args) { return this.rt.shiftMusicSelBeat(...args); }
   shiftSelLayersBeat(...args) { return this.rt.shiftSelLayersBeat(...args); }
   showMenu(...args) { return this.rt.showMenu(...args); }
-  songAt(...args) { return this.rt.songAt(...args); }
   srcCardHTML(...args) { return this.rt.srcCardHTML(...args); }
-  srcNjsOf(...args) { return this.rt.srcNjsOf(...args); }
   startHandleDrag(...args) { return this.rt.startHandleDrag(...args); }
   startLayerPaste(...args) { return this.rt.startLayerPaste(...args); }
   stopS(...args) { return this.rt.stopS(...args); }

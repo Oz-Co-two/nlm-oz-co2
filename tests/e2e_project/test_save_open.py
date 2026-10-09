@@ -160,6 +160,85 @@ def test_save_open_roundtrip(t):
     t.no_errors()
 
 
+TL = "(()=>{const a=window._dbgApp,w=a.tl();return {beat:a.state().cur,span:w.span,b0:w.b0}})()"
+
+
+def test_save_restores_view(t):
+    '''保存すると再生位置とNLEのズーム・表示位置も記録し、開くとその状態に戻る。再生位置・ズームを動かしただけでは未保存にならない。
+    記録の無い旧ファイルは先頭から（ズームはそのまま）'''
+    ed = _setup(t)
+    s = ed.js("window._dbgApp.nleScreen(0)")
+    x, y = s['x'] + 0.5, s['notes'][0] + s['laneH'] * 0.5
+    for _ in range(3):
+        ed.wheel(x, y, -100, ctrl=True)   # 拍0を支点に拡大（32→16.384拍）
+    hover_3d(ed)
+    for _ in range(24):
+        ed.key('ArrowRight')   # 1/2拍ずつ12拍目へ（中央を越えたので窓も送られる）
+    wait_until(ed, "window._dbgApp.state().cur===12", label='再生位置を拍12へ')
+    view = ed.js(TL)
+    t.ok(abs(view['span'] - 16.384) < 1e-9 and view['b0'] > 0, f'拡大して送られた窓: {view}')
+    ed.wait(0.7)   # 判定は操作が落ち着いて0.5秒後
+    t.eq(dirty(ed)['lamp'], False, '再生位置・ズームを動かしただけでは未保存にならない')
+    _ctrl_s(ed)
+    wait_until(ed, "__fake.writes.length>=1", label='保存')
+    text = fake(ed)['writes'][0]['text']
+    t.eq(json.loads(text)['view'], view, '保存した中身に再生位置・ズーム・表示位置')
+    # 別の位置・ズームにしてから開く
+    ed.key('ArrowLeft', ctrl=True)
+    wait_until(ed, "window._dbgApp.state().cur===0", label='先頭へ')
+    for _ in range(2):
+        ed.wheel(x, y, 100, ctrl=True)
+    t.ok(ed.js(TL) != view, '開く前は別の状態')
+    queue_open(ed, 'a.nlmf', text)
+    ed.key('o', ctrl=True)
+    wait_until(ed, "__fake.openCalls.length===1&&window._dbgApp.state().cur===12", label='開くと保存時の再生位置')
+    t.eq(ed.js(TL), view, '開いた後の再生位置・ズーム・表示位置')
+    wait_until(ed, "window._dbgApp.dirty().lamp===false", timeout=5, label='開き終えたら未保存でない')
+    # 記録の無い旧ファイル（この機能より前に保存したもの）
+    old = json.loads(text)
+    old.pop('view')
+    queue_open(ed, 'old.nlmf', json.dumps(old))
+    ed.key('o', ctrl=True)
+    wait_until(ed, "__fake.openCalls.length===2&&window._dbgApp.state().cur===0", label='旧ファイルは先頭から')
+    t.eq(ed.js(TL), {'beat': 0, 'span': view['span'], 'b0': 0}, '旧ファイル: 先頭を表示・ズームはそのまま')
+    # 壊れた値は使わない（ファイル由来の値）
+    bad = dict(json.loads(text), view={'beat': -5, 'span': 'x', 'b0': None})
+    queue_open(ed, 'bad.nlmf', json.dumps(bad))
+    ed.key('o', ctrl=True)
+    wait_until(ed, "__fake.openCalls.length===3", label='壊れた値のファイルを開く')
+    wait_until(ed, "window._dbgApp.dirty().lamp===false", timeout=5, label='開き終える')
+    t.eq(ed.js(TL), {'beat': 0, 'span': view['span'], 'b0': 0}, '壊れた値: 再生位置は0へ・ズームはそのまま')
+    # 新規作成は、開いていたファイルの表示位置を残さない
+    queue_open(ed, 'a.nlmf', text)
+    ed.key('o', ctrl=True)
+    wait_until(ed, "__fake.openCalls.length===4&&window._dbgApp.state().cur===12", label='もう一度開く')
+    wait_until(ed, "window._dbgApp.dirty().lamp===false", timeout=5, label='開き終える')
+    file_menu(ed, 'new')
+    wait_until(ed, "window._dbgApp.state().cur===0", label='新規作成')
+    t.eq(ed.js(TL), {'beat': 0, 'span': view['span'], 'b0': 0}, '新規作成: 先頭を表示・ズームはそのまま')
+    t.no_errors()
+
+
+def test_open_far_view_keeps_3d_camera(t):
+    '''保存時の再生位置が曲末の暫定値（音源の読込前＝128拍）より後ろのファイルを開いても、3Dのカメラは再生ヘッドの所に留まる。
+    以前はカメラの可動範囲（曲頭−8拍〜曲末＋8拍）の外として押し出され、位置と注視点が同じ奥行き（真横向き）になって何も映らなかった（2026-10-09）'''
+    ed = _setup(t)
+    c0 = ed.js("window._dbgApp.cam()")
+    pj = json.loads(ed.js("window._dbg.rt.buildProjectText()"))
+    pj['view'] = {'beat': 200, 'span': 32, 'b0': 184}
+    queue_open(ed, 'far.nlmf', json.dumps(pj))
+    hover_3d(ed)
+    ed.key('o', ctrl=True)
+    wait_until(ed, "__fake.openCalls.length===1&&window._dbgApp.state().cur===200", label='拍200の位置で開く')
+    wait_until(ed, "window._dbgApp.dirty().lamp===false", timeout=5, label='開き終える')
+    ed.wait(0.2)   # 描画のたびに可動範囲へ寄せる＝数フレーム回してから見る
+    c1 = ed.js("window._dbgApp.cam()")
+    t.eq(state(ed)['camMode'], 'place', '配置モードのまま')
+    t.ok(all(abs(a - b) < 1e-6 for a, b in zip(c1['pos'] + c1['tgt'], c0['pos'] + c0['tgt'])),
+         f'カメラは再生ヘッドに対して開く前と同じ位置・向き（前 {c0} / 後 {c1}）')
+    t.no_errors()
+
+
 def test_open_then_save_overwrites_opened_file(t):
     '''開いたファイルへのCtrl+Sはピッカー無しでそのファイルへ書く'''
     ed = _setup(t, 'basic')
