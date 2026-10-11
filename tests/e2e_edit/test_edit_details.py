@@ -203,6 +203,70 @@ def test_light_color_pie_vanilla(t):
     t.eq(new, want, '以後置くライトも青（値1）・クロマ色なし')
 
 
+def _sheet_label(ed, prefix):
+    """左上の早見表（NOTES/LIGHTING）で、説明が prefix で始まる行の説明"""
+    return ed.js(f"(()=>{{const r=[...document.querySelectorAll('#modeKeys .mkrow')].find(r=>r.children[0].textContent.startsWith({prefix!r})); return r?r.children[0].textContent:null}})()")
+
+
+def test_light_number_keys(t):
+    '''バニラ配色: LIGHTINGの3Dの上で 1/2/3＝色を選ぶ（①赤・②青・白）。選択中のライトの色も変わり（動作は保つ）・Undoで戻る。
+    3Dの上の数字では難易度は変わらない（4/5は何もしない）。NLEの上では今までどおり数字で難易度が変わる'''
+    ed = open_ed(t)
+    to_edit_cam(ed)
+    to_light_mode(ed)
+    t.eq(_sheet_label(ed, '色を選ぶ'), '色を選ぶ（①・②・白）', '早見表に数字キーの行がある')
+    d0 = state(ed)['diff']
+    t.ok(d0 != 'NormalStandard.dat', f'前提: 最初の難易度は Normal 以外（{d0}）')
+    hover_off_grid(ed)
+    u0 = state(ed)['undo']
+    ed.key('2')
+    wait_until(ed, "window._dbgApp.edit().lightBrush.base===0", label='2でブラシが②（青）')
+    t.eq(state(ed)['undo'], u0, 'ブラシだけの変更は履歴を積まない')
+    place_light(ed, BACK, 1)
+    t.eq(light_row(ed, 1, 0)['i'], 1, '置いたライトは青のライト（0+1）')
+    _select_light(ed, BACK, 1)
+    u1 = state(ed)['undo']
+    seq = []
+    for n, k in enumerate('31', 1):
+        ed.key(k)
+        wait_until(ed, f"window._dbgApp.state().undo==={u1 + n}", label=f'{k}で選んだライトの色')
+        seq.append((edit(ed)['lightBrush']['base'], light_row(ed, 1, 0)['i']))
+    t.eq(seq, [(8, 9), (4, 5)], '（ブラシの色の基準, ライトの値）: 3＝白のライト・1＝赤のライト')
+    undo(ed)
+    wait_until(ed, "window._dbgApp.lights().events[0].i===9", label='Undoで白へ戻る')
+    for k in '45':
+        ed.key(k)
+    ed.wait(0.3)
+    t.eq(state(ed)['diff'], d0, '3Dの上の数字では難易度は変わらない')
+    hover_nle(ed, 2)
+    ed.key('2')
+    wait_until(ed, "window._dbgApp.state().diff==='NormalStandard.dat'", label='NLEの上の2はNormalへの切替')
+    t.no_errors()
+
+
+def test_light_number_keys_chroma(t):
+    '''Chroma配色: LIGHTINGの3Dの上で 1/2/3＝左ノーツの色・右ノーツの色・白（カラーパイの先頭3つ）。続けてFを押すとその次の色へ進む。早見表の行も「左・右・白」になる'''
+    ed = open_ed(t)
+    try:
+        set_setting_checkbox(ed, 'chromaMode', True)
+        to_edit_cam(ed)
+        to_light_mode(ed)
+        t.eq(_sheet_label(ed, '色を選ぶ'), '色を選ぶ（左・右・白）', '早見表の行がクロマの色の名前になる')
+        hover_off_grid(ed)
+        ed.key('2')
+        wait_until(ed, "window._dbgApp.edit().lightBrush.chroma==='#3092ff'", label='2＝右ノーツの色（青）')
+        ed.key('3')
+        wait_until(ed, "window._dbgApp.edit().lightBrush.chroma==='#e8f0ff'", label='3＝白')
+        ed.key('1')
+        wait_until(ed, "window._dbgApp.edit().lightBrush.chroma!=='#e8f0ff'", label='1で色が変わる')
+        t.eq(hex01(edit(ed)['lightBrush']['chroma']), RED, '1＝左ノーツの色')
+        ed.key('f')
+        wait_until(ed, "window._dbgApp.edit().lightBrush.chroma==='#3092ff'", label='Fは左の次＝右へ進む')
+        t.no_errors()
+    finally:
+        restore_settings(ed, 'bsnm_chroma')
+
+
 # ---- 3. 直前ノーツ表示（H）・同じ向きの警告 ----
 def test_aux_prev_toggle(t):
     '''直前ノーツ表示（補助グリッド）: 再生ヘッドより前の赤・青それぞれ最後の拍のノーツ（位置・向き）を映す・Hで表示/非表示（環境設定と連動・保存される）・LIGHTINGと再生中は出さない'''

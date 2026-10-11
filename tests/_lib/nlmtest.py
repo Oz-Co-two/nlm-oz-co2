@@ -20,12 +20,13 @@ t（Ctx）でできること:
 （画面の比較のまとめ画像づくりなど。行番号で並ぶので、ファイルの最後に置く）。
 
 グループごとに別プロセスで動く（tools/run_tests.py が並列に起動する）。単体で動かす時:
-    .venv-build/Scripts/python.exe tests/_lib/nlmtest.py --group e2e [-k 名前の一部]
+    .venv-build/Scripts/python.exe tests/_lib/nlmtest.py --group e2e [-k 名前の一部] [--only ファイル名::関数名 / ファイル名 …]
 """
 import argparse
 import difflib
 import importlib.util
 import json
+import os
 import sys
 import time
 import traceback
@@ -58,12 +59,17 @@ class Review(Exception):
 
 
 # 3Dビューの描画を省き、位置の計算に要る行列の更新だけ行う（t.fresh() のたびに入れる）。
-# GPUの無いヘッドレスでは描画がソフトウェアでCPUを使い切り、グループを並列に回すと全体が数倍遅くなっていた。
+# ソフトウェア描画（GPUの無いPC・NLM_TEST_SOFTWARE_GL=1。tools/cdp.py の _gl_args）ではCPUを使い切り、グループを並列に回すと全体が数倍遅くなっていた。
+# GPUで描く時は省いても省かなくても差は測れない程度（2026-10-11）だが、ソフトウェア描画に戻った時のために残している。
 # テストは絵ではなく状態と画面座標（cellScreen 等＝カメラの行列）を見るので、行列さえ更新すれば足りる。画面の比較（visual）は撮影時に3Dビューを隠している
 LIGHT_RENDER_JS = """(()=>{ const r=window._dbg&&window._dbg.rt&&window._dbg.rt.renderer;
   if(r&&!r.__testLight){ r.__testLight=true; r.render=(s,c)=>{ if(s&&s.matrixWorldAutoUpdate!==false) s.updateMatrixWorld();
     if(c&&!c.parent) c.updateMatrixWorld(); }; }
   return true; })()"""
+
+# テストのページの描画ループの上限（毎秒）。何もしていない時の Edge のCPUが約4分の1になり、並列に回せる数が増える（tools/cdp.py の _fps_cap_js）。
+# 環境変数 NLM_TEST_FPS で変えられる（0=上限なし。上限のせいか切り分ける時）
+TEST_FPS = int(os.environ.get("NLM_TEST_FPS", "30"))
 
 # ページ内エラーのうち、テスト環境（ヘッドレス・音声デバイス無し等）特有で無視してよいもの。足す時は理由を書く
 BENIGN_ERRORS = [
@@ -90,7 +96,7 @@ class Ctx:
     def ed(self):
         if self._ed is None:
             from cdp import Editor
-            self._ed = Editor(ready=True)
+            self._ed = Editor(ready=True, max_fps=TEST_FPS)
             self._ed.start()
             if self.cov:   # 記録を始めてから開き直す（読み込み時に動くコードも数える）
                 self.cov.start(self._ed)
@@ -132,7 +138,8 @@ class Ctx:
     def close(self):
         self.restart()
         if self.cov:
-            self.cov.save(OUT / "coverage" / f"{self.group}.json")
+            part = getattr(self.opts, "part", None)   # グループを分けて流した時（--part）は分けた分ごとに書く（tests/_lib/jscov.py が合算する）
+            self.cov.save(OUT / "coverage" / (f"{self.group}.{part}.json" if part is not None else f"{self.group}.json"))
 
     # ---- 確認 ----
     def eq(self, actual, expected, label=""):
@@ -199,6 +206,9 @@ def _load(path):
 
 def run_group(group, opts):
     files = sorted((TESTS / group).glob("test_*.py"))
+    only = set(opts.only or ())   # --only: 回すテスト（「ファイル名::関数名」）かファイル（「ファイル名」）。tools/run_tests.py がグループを分ける時に渡す
+    if only:
+        files = [f for f in files if f.name in only or any(o.startswith(f.name + "::") for o in only)]
     ctx = Ctx(group, opts)
     results = []
     try:
@@ -215,6 +225,8 @@ def run_group(group, opts):
             for name, fn in tests:
                 title = ((fn.__doc__ or "").strip().splitlines() or [name])[0]
                 summary = name.startswith("test_zz_")   # まとめ役: -k で絞っても、同じファイルで1件でも動いたら最後に動く
+                if only and f.name not in only and f"{f.name}::{name}" not in only:
+                    continue
                 if opts.k and not any(k in f"{f.name}::{name} {title}" for k in opts.k):
                     if not (summary and ran):
                         continue
@@ -253,6 +265,8 @@ def main(argv=None):
     ap.add_argument("--json", help="結果をJSONで書き出す先")
     ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--coverage", action="store_true", help="JSのカバレッジを test-out/coverage/ に記録")
+    ap.add_argument("--only", nargs="+", help="回すテスト（ファイル名::関数名）かファイル（ファイル名）だけを回す")
+    ap.add_argument("--part", type=int, help="グループを分けて流す時の番号（カバレッジの記録のファイル名に使う）")
     opts = ap.parse_args(argv)
     opts.k = [k for ks in opts.k for k in ks] if opts.k else None
     res = run_group(opts.group, opts)

@@ -83,7 +83,7 @@ def main():
     th.start()
 
     try:
-        url = f"http://127.0.0.1:{port}/{target}"
+        url = f"http://127.0.0.1:{port}/{target}#k={serve.SESSION_TOKEN}"   # 合言葉付き（serve.py の SESSION_TOKEN）
         with tempfile.TemporaryDirectory(prefix="nlm_check_edge_") as profile:
             log_fd, log_path = tempfile.mkstemp(prefix="nlm_check_log_", suffix=".txt")
             os.close(log_fd)

@@ -136,11 +136,12 @@ py -3.14 -m venv .venv-build
 # → NonLinearMapper.exe + _internal/ are written to dist/NonLinearMapper/
 ```
 
-For quick checks during development, start the local server with `python serve.py` and open
-`http://127.0.0.1:8138/editor.html` in your browser (DevTools are available).
+For quick checks during development, start the local server with `python serve.py` and open the editor in your browser
+(DevTools are available). On startup it prints a URL with an access key (`http://127.0.0.1:8138/editor.html#k=…`) and opens it
+in your default browser (use `--no-browser` to skip that). The access key changes every time the server starts.
 
-- Opening the page with `?dev=1` in the URL enables the developer hooks (`window._dbg` / `window._dbgApp`) in the DevTools console.
-  They are not created in the distributed exe or without `?dev=1`.
+- Opening the page with `?dev=1` in the URL (e.g. `http://127.0.0.1:8138/editor.html?dev=1#k=…`) enables the developer hooks
+  (`window._dbg` / `window._dbgApp`) in the DevTools console. They are not created in the distributed exe or without `?dev=1`.
 
 `tools/` contains scripts used during development (tempo / beat grid analysis, build and deploy, JS syntax check, automated tests,
 map check comparison tests, release file creation, tutorial screenshots). They are not meant for regular users,
@@ -166,7 +167,9 @@ cd nlm-oz-co2
 python3 serve.py
 ```
 
-Then open `http://127.0.0.1:8138/editor.html` in Chrome, Chromium or Edge. Press `Ctrl+C` in the terminal to stop it.
+On startup the terminal shows a URL with an access key (`http://127.0.0.1:8138/editor.html#k=…`), and it opens in your default browser.
+If your default browser is not Chrome, Chromium or Edge, open the shown URL in one of them. The access key changes every time
+the server starts, so a bookmarked URL will not work after a restart. Press `Ctrl+C` in the terminal to stop the server.
 
 **Things to note (expected)**
 
@@ -178,20 +181,32 @@ Then open `http://127.0.0.1:8138/editor.html` in Chrome, Chromium or Edge. Press
 - **"Estimate difficulty" is not available**, because the add-on plugin (nlm-rating) is a Windows exe only.
 - **Keep the terminal open.** Closing it stops the server. Opening `editor.html` directly with `file://` does not work either.
 - **Where things are saved**: preferences and clips saved with "Save to assets" go to `config/` and `asset/` in the cloned folder.
-- Only access via `127.0.0.1` / `localhost` is accepted. If you get "403 Forbidden" when accessing it by another name,
+- Only access via `127.0.0.1` / `localhost` is accepted, and everything except the editor's own files (saving, preferences,
+  assets, etc.) needs the access key. If you get "403 Forbidden" or the editor says the URL has no access key,
   see Troubleshooting below.
 
 ## Troubleshooting
 
-### "403 Forbidden" when using the editor started with `python serve.py`
+### "403 Forbidden", or saving and preferences do not work, with the editor started by `python serve.py`
 
-For safety, the local server only accepts access by the names `127.0.0.1` / `localhost` / `[::1]`
-(to prevent other websites from reading and writing through it). If you access it by another name through Docker or WSL port forwarding,
-a reverse proxy, etc., set the allowed names, comma-separated, in the environment variable `NLM_ALLOWED_HOSTS`.
+For safety, the local server checks two things.
+
+- **Access key**: saving, preferences, assets, etc. only work from a page opened with the `#k=…` (access key) part of the URL
+  shown at startup (so that other accounts on the same PC, or other devices on the network, cannot use them).
+  If you open `http://127.0.0.1:8138/editor.html` without the key, or keep using a page opened before the server was restarted,
+  the editor says the URL has no access key, or saving and so on fail. Reopen the editor with the URL shown in the terminal when the
+  server started.
+- **Host name**: only access by the names `127.0.0.1` / `localhost` / `[::1]` is accepted (to prevent other websites from reading
+  and writing through it). If you access it by another name through Docker or WSL port forwarding, a reverse proxy, etc., set the allowed
+  names, comma-separated, in the environment variable `NLM_ALLOWED_HOSTS`. The shown URL still says `127.0.0.1`, so replace that
+  part with your name when opening it (keep the `#k=…` part).
 
 ```bash
 NLM_ALLOWED_HOSTS=nlm.local,192.168.0.10 python serve.py
 ```
+
+When you connect to a server on another machine over your LAN, the connection is not encrypted (HTTP), so anyone who can watch the
+traffic on that network can also read the access key. Use it only on a network you trust.
 
 ### "Failed to resolve Python.Runtime.Loader.Initialize from ...\Python.Runtime.dll" at startup
 

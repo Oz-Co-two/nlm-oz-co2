@@ -20,8 +20,9 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - `app.py` — デスクトップ版ランチャー。`pywebview`でWebView2(Edge Chromium)ネイティブウィンドウを開く。
   内部で`serve.py`をローカルの空きポートでスレッド起動し、`http://127.0.0.1:<port>/editor.html`を表示。
 - `serve.py` — 静的ファイル配信＋ローカル専用API（`__settings/save`, `__openarg`, `__asset/*`,
-  `__convert/toOgg`等）。`python serve.py`単体でも起動でき、その場合は普通のブラウザ（Edge/Chrome）
-  で`http://127.0.0.1:8138/editor.html`を開いて動作確認できる（DevToolsが自由に使える最速の検証手段）。
+  `__convert/toOgg`等）。`python serve.py`単体でも起動でき、その場合は起動時に表示される合言葉付きの URL
+  （`http://127.0.0.1:8138/editor.html#k=…`。既定のブラウザで自動で開く）を普通のブラウザ（Edge/Chrome）で開いて動作確認できる
+  （DevToolsが自由に使える最速の検証手段。開発用窓口は `editor.html?dev=1#k=…`）。合言葉は下の「開発用窓口と…」節。
 - `editor.html` → `js/main.js` → `js/runtime/editor-app.js`（実質1万行超のモノリシック本体）。
   UI・保存・書き出し・3D描画・音声処理が全部ここに入っている。
 - `js/runtime/editor-runtime.js` / `js/project/save-system.js` は「メソッド一覧を持つラッパークラス」。
@@ -31,7 +32,8 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 
 ## テスト（2026-10-04）
 
-- **普段の修正・機能追加では、全テストは回さない**（全部で約6〜7分かかるため）。直した所のテストと、影響しそうな周辺の
+- **普段の修正・機能追加では、全テストは回さない**（2026-10-04の取り決め。当時は全部で約6〜7分かかった。2026-10-11にテストのEdgeを
+  GPU描画・描画は毎秒30回まで・大きいグループを分けて同時に流す形にして約1分半になった。仕組みは`tests/README.md`）。直した所のテストと、影響しそうな周辺の
   グループ・テストだけを回す（例: `run_tests.py e2e_nle`、`run_tests.py e2e_edit -k paste`）。どれを回したかは報告に書く。
 - **全テスト（`.venv-build/Scripts/python.exe tools/run_tests.py`）はリリースの直前に1回だけ**: 版を上げた後、GitHubへ
   プッシュする前。そこで見つかった不具合は、その公開予定の版で直して一緒に出す。
@@ -268,6 +270,17 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - `serve.py`はHostヘッダーがローカル名でない要求を403にし（DNSリバインディング対策・追加は`NLM_ALLOWED_HOSTS`）、
   **POSTは`X-NLM-Request: 1`ヘッダー必須**（他サイトからのCSRF対策）。**新しいPOST APIを足したら、JS側のfetchにも
   このヘッダーを付けること**（付け忘れると403で無言に失敗する）。
+- **合言葉**（2026-10-11）: 上の守りはブラウザ経由の攻撃だけを防ぎ、ブラウザ以外から直接送られると通る。そこで起動ごとの
+  `SESSION_TOKEN` を `X-NLM-Token` ヘッダーで求める（POST 全部と、`PUBLIC_FILES`/`PUBLIC_DIRS` 以外の GET）。
+  - 画面へは URL の `#k=…`（`access_url()`）で渡し、`settings-mirror.js` の先頭が同じオリジンへの fetch/XHR に自動で付ける
+    ＝JS の通信で個別に付ける必要は無い。Cookie では渡さない（127.0.0.1 の Cookie はポートを区別せず別ポートのページへ漏れる）。
+  - 合言葉なしで返すのは許可リストの静的ファイル（`<script src>`・`<link>`・`<img>`・`import()` はヘッダーを付けられない）だけ。
+    **画面がヘッダー無しで読み込む物を新しいフォルダに置いたら `PUBLIC_DIRS` に足す**（足さないと403）。守る場所を列挙する形に
+    してはいけない（asset/ 内のジャンクション等の別名で抜けられる）。
+  - Python から直接要求するツール・テストは `X-NLM-Token` を付ける（`tools/cdp.py` の `ed.token`、unit_py の `H.req` は既定で付ける）。
+    `cdp.Editor.url()` は呼ぶたびに `?n=` を変える（`#` 付きの同じ URL へ移ると読み込み直さない＝テストの開き直しが効かない）。
+  - `python serve.py` は起動時に合言葉付きの URL を英語で表示しブラウザで開く（`--no-browser`・`--port=`）。表示に日本語を
+    入れない（日本語を表せない文字コードで出力をファイルへ回すと起動前に落ちる。test_standalone_start_message）。
 - `serve.py`の`translate_path`は`\`・ドライブ名・`..`を含むパスを404にする（Windowsではこれらでフォルダ外を読めてしまう）。
   フォルダ一覧（`list_directory`）はアセット走査用に`asset/`配下だけ許可。
 
@@ -289,6 +302,16 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   - 許可済み出力フォルダ＝`pick_folder`（ネイティブのフォルダ選択ダイアログ）で選ばれたフォルダ。exe隣の
     `config/native_out_dirs.json`に保存され次回も自動接続できる。JS側から許可を足す口は作らないこと。
   - 読み込み: 音源/画像の拡張子、そのセッションでダイアログから選んだファイル、許可済み出力フォルダの中だけ。
+  - ネットワーク上のパス（`\\server\share\...`）は存在確認・実体の解決だけで接続と認証（NTLM）が起きるので、`may_touch()`が字面だけで
+    「このPCでダイアログから選んだファイル・許可済み出力フォルダの中」と確かめてから触る（選んだUNCは`native_out_dirs.json`の
+    `unc_files`/`unc_out_dirs`に保存）。`\\?\`・`\??\`・相対パス等は受けない。**JSから来たパスに触る処理を足したら、先に`may_touch()`を通すこと。**
+- **ブラウザのファイル選択で選んだファイルへの書き込みの許可**（2026-10-11・app.pyの`_auto_allow_file_rw`）: 「開く…」等で選んだファイルは読み込みの
+  許可しか付かず、保存の`requestPermission({mode:'readwrite'})`で WebView2 が画面の上の端に枠の無い確認を出していた（見落としやすく、見た目・位置は変えられない）。
+  exe版では`CoreWebView2.PermissionRequested`で、種類が`FileReadWrite`かつこの起動の`http://127.0.0.1:<port>`からの要求だけを、確認なしで許可する
+  （`SavesInProfile=False`。他の種類・別の画面は既定の確認のまま）。対象は利用者が選んだかドラッグした物だけ＝書き出し先フォルダと同じ考え方（利用者と合意）。
+  「操作から始まった要求だけ」も条件にしたかったが、WebView2 はこの種類の`IsUserInitiated`を常に False と報告する（実機で確認）ため使っていない。
+  自動テスト（ブラウザ）では通らない。実機での確かめ方: exe を CDP 付きで起動し、`Input.dispatchDragEvent`でファイルをドロップして
+  `getAsFileSystemHandle()`でハンドルを作り（ファイル選択画面は自動で押せないため）、`requestPermission`が確認なしで`granted`になるかを見る。
 
 ## アークと端のノーツのつながり（2026-10-06）
 
@@ -302,6 +325,16 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   `pickArcEndpoint`は端のノーツを拾わない。以前は端のノーツの上のクリックがアークの端を掴み、ノーツを動かせなかった。
   `pickArcPart`（既定で端のノーツも拾う）は、選択中アークの端点の上の Alt+ホイール（向き）用。
 - アークを1本選ぶと頭・尾にミニギズモが出るので、その間だけ全体移動の矢印を大きくする（`GIZMO_SCALE_BIG`）。普段の矢印は小さいまま（原作者の指定）。
+
+## ショートカットと早見表（2026-10-11）
+
+- キーのショートカットは editor-app.js の`ACTIONS`に定義し、keydown では`hit(e,id)`で判定する＝環境設定の「ショートカット編集」で割り当てを変えられる。
+- 画面に浮かぶ早見表（`KEYS_COMMON`/`KEYS_NOTE`/`KEYS_LIGHT`/`KEYS_NLE`/`KEYS_NODE`）は、操作の`{id}`を ACTIONS の今のキーに置き換えて出す（`keyText`。割り当てを変えるとすぐ描き直す）。
+  **ショートカットを足したら早見表にも足す**（以前は固定の文字で、W・Esc 等が載っておらず、割り当てを変えても古いキーのままだった）。
+  訳のキーは`{…}`を含んだままの文字列（例`skk:2個以上 {noteArc} ／ …`）。キー名は設定ファイル（`bsnm_keymap`）由来なので`escHtml`を通す。
+- 右下の共通の早見表は3Dビューの高さぎりぎり。行を足すと画面テスト（1600×980）で最後の行が下にはみ出して`崩れ`になる（Escの行を足した時は区切り線を2本減らして収めた）。
+- LIGHTINGで3Dの上にマウスがある時の数字キー: 1/2/3＝色を選ぶ（`lightCol1〜3`・①/②/白、クロマ時は左/右/白＝Cパイの先頭3つ）。ここでは数字で難易度を変えない
+  （4/5も何もしない・利用者と決めた仕様）。NLE・INFO等の上では今までどおり数字＝難易度切替。
 
 ## 表示言語（日本語・英語・2026-10-04）
 

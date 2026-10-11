@@ -1,7 +1,8 @@
 """ヘッドレスEdgeでエディタを実際に動かして検証するツール（Node/追加ライブラリ不要）。
 
-Chrome DevTools Protocol(CDP)を標準ライブラリだけの最小WebSocketで話す。できること:
-  - 画面のスクリーンショット（WebGLの3Dビューも写る。ソフトウェア描画）
+Chrome DevTools Protocol(CDP)を標準ライブラリだけで、起動したEdgeとのパイプ（--remote-debugging-pipe）越しに話す。
+TCPのデバッグポートは開かない（認証が無く、同じPCの別のユーザーからも繋いでブラウザを操作できてしまうため）。できること:
+  - 画面のスクリーンショット（WebGLの3Dビューも写る。GPUで描画し、GPUが無いPCではソフトウェア描画。_gl_args()）
   - 本物のマウス/キーボード入力（クリック・ドラッグ・ホイール・Ctrl+Z等。合成イベントではなくブラウザ入力として届く）
   - ページ内JSの実行と結果取得、コンソール/例外ログの回収
   - テスト素材(tools/fixtures/)の読込（ファイル選択ダイアログを経由しない）
@@ -27,18 +28,17 @@ exe版固有の動き（pywebviewの×ボタン確認・ネイティブのファ
       print(ed.js("window._dbgApp.state()"), ed.errors())
 """
 import base64
+import collections
 import http.server
 import json
 import os
 import shutil
 import socket
-import struct
 import subprocess
 import sys
 import tempfile
 import threading
 import time
-import urllib.request
 from pathlib import Path
 
 if sys.platform == "win32":
@@ -55,6 +55,29 @@ EDGE_CANDIDATES = [
     r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
     "/usr/bin/microsoft-edge", "/usr/bin/google-chrome", "/usr/bin/chromium",
 ]
+
+
+def _gl_args():
+    """描画の方式。既定はGPU（ヘッドレスでも使える）。以前はソフトウェア描画（SwiftShader）を指定していたが、
+    エディタは毎フレーム画面を描き直すので、何もしていない時でも Edge 1つで約14コア分のCPUを使い、テストを並列に回すとCPUを使い切っていた
+    （GPUでは約1コア分・開き直し 1.5秒→0.9秒。2026-10-11に測定）。
+    --enable-unsafe-swiftshader は、GPUが無い・使えないPCで WebGL をソフトウェア描画へ戻すために残す。
+    環境変数 NLM_TEST_SOFTWARE_GL=1 で従来のソフトウェア描画に固定する（GPUのせいか切り分ける時）"""
+    if os.environ.get("NLM_TEST_SOFTWARE_GL") == "1":
+        return ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
+    return ["--enable-unsafe-swiftshader"]
+
+
+def _fps_cap_js(fps):
+    """ページの requestAnimationFrame を毎秒 fps 回までにする（ページのJSより先に入れる）。GPU描画ではモニターのリフレッシュレート
+    （このPCでは144回）で回り、エディタは毎フレーム描き直すので、何もしていなくても Edge 1つで約1.5コア分のCPUを使っていた
+    （8つ同時で: 上限なし 約50%・30回 約12%。2026-10-11に測定）。同じフレームに頼まれた分はまとめて同じ時刻で呼ぶ（本来と同じ）"""
+    return """(()=>{ const raf=window.requestAnimationFrame.bind(window), gap=1000/%d-2;
+  let q=new Map(), id=0, asked=false, last=-Infinity;
+  const pump=t=>{ if(t-last<gap){ raf(pump); return; } last=t; asked=false; const cbs=q; q=new Map();
+    for(const cb of cbs.values()){ try{ cb(t); }catch(e){ reportError(e); } } };
+  window.requestAnimationFrame=cb=>{ q.set(++id,cb); if(!asked){ asked=true; raf(pump); } return id; };
+  window.cancelAnimationFrame=n=>{ q.delete(n); }; })()""" % fps
 
 
 def _free_port():
@@ -87,83 +110,182 @@ def _allow_static_cache(serve):
     H._nlm_test_cache = True
 
 
-class _WebSocket:
-    """CDP用の最小WebSocketクライアント（テキストフレームのみ・クライアント側マスク付き）"""
+class _Pipe:
+    """Edge との CDP のパイプ（--remote-debugging-pipe）。メッセージは JSON を \\0 で区切って送り合う。
+    1本のパイプをブラウザ自身（sessionId 無し）と各タブのセッション（Target.attachToTarget の flatten）で共有するので、
+    受信は専用のスレッドで読み、sessionId ごとの箱に振り分ける"""
+    TIMEOUT = 60   # 何も届かないまま待つ上限（秒）。以前の WebSocket の受信待ち（ソケットのタイムアウト）と同じ
 
-    def __init__(self, url):
-        rest = url.split("://", 1)[1]
-        hostport, path = rest.split("/", 1)
-        host, port = hostport.rsplit(":", 1)
-        self.sock = socket.create_connection((host, int(port)), timeout=60)
-        key = base64.b64encode(os.urandom(16)).decode()
-        self.sock.sendall((f"GET /{path} HTTP/1.1\r\nHost: {hostport}\r\nUpgrade: websocket\r\n"
-                           f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
-        buf = b""
-        while b"\r\n\r\n" not in buf:
-            chunk = self.sock.recv(4096)
-            if not chunk:
-                raise CdpError("WebSocketの接続に失敗しました")
-            buf += chunk
-        if b" 101 " not in buf.split(b"\r\n", 1)[0]:
-            raise CdpError("WebSocketのハンドシェイクに失敗しました: " + buf.split(b"\r\n", 1)[0].decode(errors="replace"))
-        self.buf = buf.split(b"\r\n\r\n", 1)[1]
+    def __init__(self, rfd, wfd):
+        self.wfd = wfd
+        # ブラウザ自身へ送る命令の番号。タブ側の番号（Editor._id / Tab._id）と重ならない範囲にする
+        # （閉じたばかりのタブへ送った命令のエラーは sessionId 無し＝ブラウザ宛てとして返ってくるため）
+        self._bid = 1 << 30
+        self._cv = threading.Condition()
+        self._wlock = threading.Lock()
+        self._boxes = {}      # sessionId（ブラウザ自身は None）→ 届いたメッセージの列
+        self._gone = set()    # 切り離された（タブが閉じた・こちらで閉じた）セッション
+        self._eof = False     # パイプが閉じた＝Edge が終了した
+        threading.Thread(target=self._read_loop, args=(rfd,), daemon=True).start()
 
-    def _recvn(self, n):
-        while len(self.buf) < n:
-            chunk = self.sock.recv(1 << 20)
-            if not chunk:
-                raise CdpError("ブラウザとの接続が切れました")
-            self.buf += chunk
-        data, self.buf = self.buf[:n], self.buf[n:]
-        return data
-
-    def send(self, obj):
-        data = json.dumps(obj).encode()
-        mask = os.urandom(4)
-        n = len(data)
-        head = bytes([0x81])
-        if n < 126:
-            head += bytes([0x80 | n])
-        elif n < 65536:
-            head += bytes([0x80 | 126]) + struct.pack(">H", n)
-        else:
-            head += bytes([0x80 | 127]) + struct.pack(">Q", n)
-        self.sock.sendall(head + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
-
-    def recv(self):
-        """1メッセージ受信（継続フレームも連結）。テキスト以外(ping等)は None"""
-        payload, opcode = b"", None
-        while True:
-            b1, b2 = self._recvn(2)
-            n = b2 & 0x7F
-            if n == 126:
-                n = struct.unpack(">H", self._recvn(2))[0]
-            elif n == 127:
-                n = struct.unpack(">Q", self._recvn(8))[0]
-            if opcode is None:
-                opcode = b1 & 0x0F
-            payload += self._recvn(n)
-            if b1 & 0x80:
-                break
-        return json.loads(payload) if opcode == 1 else None
-
-    def close(self):
+    def _read_loop(self, rfd):
+        buf = bytearray()
         try:
-            self.sock.close()
+            while True:
+                chunk = os.read(rfd, 1 << 20)
+                if not chunk:
+                    break
+                start = len(buf)
+                buf += chunk
+                i = buf.find(b"\0", start)
+                while i >= 0:
+                    self._dispatch(json.loads(buf[:i]))
+                    del buf[:i + 1]
+                    i = buf.find(b"\0")
         except Exception:
             pass
+        finally:
+            with self._cv:
+                self._eof = True
+                self._cv.notify_all()
+            # 読む側はこのスレッドが閉じる（Windows では読んでいる最中の fd を別のスレッドから閉じると、読み終わるまで止まる）
+            try:
+                os.close(rfd)
+            except OSError:
+                pass
+
+    def _dispatch(self, msg):
+        sid = msg.pop("sessionId", None)   # 受け取る側には以前の WebSocket と同じ形（sessionId 無し）で渡す
+        with self._cv:
+            if sid is None and "id" not in msg:
+                # ブラウザ自身へのイベント。使うのはタブが閉じた知らせだけ（以前はタブの WebSocket が切れて
+                # すぐ「接続が切れました」になった。知らせを捨てると、閉じたタブへの命令が応答を待って60秒止まる）
+                if msg.get("method") != "Target.detachedFromTarget":
+                    return
+                self._gone.add(msg.get("params", {}).get("sessionId"))
+            elif sid not in self._gone:
+                self._boxes.setdefault(sid, collections.deque()).append(msg)
+            self._cv.notify_all()
+
+    def send(self, sid, obj):
+        if sid is not None:
+            obj = {**obj, "sessionId": sid}
+        data = memoryview(json.dumps(obj).encode() + b"\0")
+        with self._cv:
+            if self._eof or sid in self._gone:
+                raise CdpError("ブラウザとの接続が切れました")
+        with self._wlock:
+            try:
+                if self.wfd is None:
+                    raise OSError("closed")
+                while data:
+                    data = data[os.write(self.wfd, data):]
+            except OSError:
+                raise CdpError("ブラウザとの接続が切れました") from None
+
+    def recv(self, sid, timeout=None):
+        """sid 宛ての次のメッセージ。セッションが切り離された・Edge が終了した時は（届いていた分を渡し終えた後）CdpError"""
+        end = time.monotonic() + (self.TIMEOUT if timeout is None else timeout)
+        with self._cv:
+            while True:
+                box = self._boxes.get(sid)
+                if box:
+                    return box.popleft()
+                if self._eof or sid in self._gone:
+                    raise CdpError("ブラウザとの接続が切れました")
+                left = end - time.monotonic()
+                if left <= 0:
+                    raise TimeoutError("timed out")   # 以前（ソケットの受信待ち）と同じ例外
+                self._cv.wait(left)
+
+    def call(self, method, timeout=None, **params):
+        """ブラウザ自身へ命令を送り、結果を返す（タブ宛ての命令は Editor.call / Tab.call）"""
+        self._bid += 1
+        my = self._bid
+        self.send(None, {"id": my, "method": method, "params": params})
+        while True:
+            msg = self.recv(None, timeout)
+            if msg.get("id") == my:
+                if "error" in msg:
+                    raise CdpError(f"{method}: {msg['error']}")
+                return msg.get("result", {})
+
+    def attach(self, target_id):
+        """タブにセッションを張って返す"""
+        return _PipeSession(self, self.call("Target.attachToTarget", targetId=target_id, flatten=True)["sessionId"])
+
+    def forget(self, sid):
+        with self._cv:
+            self._gone.add(sid)
+            self._boxes.pop(sid, None)
+            self._cv.notify_all()
+
+    def close(self):
+        """書く側を閉じる（読む側は、Edge が終了してパイプが閉じた時に読み取りのスレッドが閉じる）"""
+        with self._wlock:
+            if self.wfd is not None:
+                try:
+                    os.close(self.wfd)
+                except OSError:
+                    pass
+                self.wfd = None
+
+
+class _PipeSession:
+    """パイプ越しの1つのタブとのセッション。以前の WebSocket と同じ send / recv / close を持つ"""
+
+    def __init__(self, pipe, sid):
+        self.pipe, self.sid = pipe, sid
+
+    def send(self, obj):
+        self.pipe.send(self.sid, obj)
+
+    def recv(self):
+        return self.pipe.recv(self.sid)
+
+    def close(self):
+        self.pipe.forget(self.sid)
+
+
+def _launch_with_pipe(args):
+    """Edge（args[0]）を CDP のパイプ付きで起動し、(プロセス, _Pipe) を返す。
+    Windows は渡すハンドルの番号を --remote-debugging-io-pipes で伝え（子にはその2つだけを継承させる）、
+    それ以外は Chromium の決まりどおり fd 3（ブラウザが読む）/ fd 4（ブラウザが書く）に付け替えて渡す"""
+    to_r, to_w = os.pipe()       # こちら → Edge
+    from_r, from_w = os.pipe()   # Edge → こちら
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            hr, hw = msvcrt.get_osfhandle(to_r), msvcrt.get_osfhandle(from_w)
+            os.set_handle_inheritable(hr, True)
+            os.set_handle_inheritable(hw, True)
+            si = subprocess.STARTUPINFO(lpAttributeList={"handle_list": [hr, hw]})
+            proc = subprocess.Popen([args[0], f"--remote-debugging-io-pipes={hr},{hw}", *args[1:]], startupinfo=si,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            proc = subprocess.Popen(["/bin/sh", "-c", 'exec "$@" 3<&0 4>&1 </dev/null >/dev/null', "sh", *args],
+                                    stdin=to_r, stdout=from_w, stderr=subprocess.DEVNULL)
+    except BaseException:
+        os.close(to_w)
+        os.close(from_r)
+        raise
+    finally:
+        os.close(to_r)     # 子へ渡した側はこちらでは閉じる（Edge が終了した時に読む側が終わりを受け取れるように）
+        os.close(from_w)
+    return proc, _Pipe(from_r, to_w)
 
 
 class Editor:
     """serve.py + ヘッドレスEdgeでエディタを開いて操作する。with文で使う（終了時に後始末）"""
 
-    def __init__(self, width=1600, height=980, wait=6.0, fixture=None, keep_data=False, ready=False, auto_dialog=True):
-        """ready=True: 固定のwait秒ではなく起動完了を検知して進む（テスト用）。auto_dialog: ページのダイアログを自動で承諾"""
+    def __init__(self, width=1600, height=980, wait=6.0, fixture=None, keep_data=False, ready=False, auto_dialog=True, max_fps=None):
+        """ready=True: 固定のwait秒ではなく起動完了を検知して進む（テスト用）。auto_dialog: ページのダイアログを自動で承諾。
+        max_fps: 描画ループ（requestAnimationFrame）を毎秒この回数までに抑える（テストを並列に回す時のCPU節約。_fps_cap_js）"""
         self.width, self.height, self.wait_s, self.fixture = width, height, wait, fixture
-        self.keep_data, self.ready, self.auto_dialog = keep_data, ready, auto_dialog
+        self.keep_data, self.ready, self.auto_dialog, self.max_fps = keep_data, ready, auto_dialog, max_fps
         self._id = 0
         self._events = []   # 受信したCDPイベント（コンソール/例外）
-        self.edge = self.httpd = self.ws = None
+        self.edge = self.httpd = self.ws = self.pipe = None
 
     # ---- 起動・終了 ----
     def __enter__(self):
@@ -185,15 +307,17 @@ class Editor:
             del sys.modules["serve"]
         import serve
         _allow_static_cache(serve)
+        self.token = serve.SESSION_TOKEN   # 合言葉。ページへは URL の #k= で渡す（url()）。Python から直接要求する時は X-NLM-Token に付ける
         self.port = _free_port()
         self.httpd = serve.make_server(port=self.port)
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
-        dport = self.dport = _free_port()
         self.profile = tempfile.mkdtemp(prefix="nlm_cdp_edge_")
-        self.edge = subprocess.Popen([
-            edge, "--headless=new", f"--user-data-dir={self.profile}", f"--remote-debugging-port={dport}",
+        # CDP はパイプで話す。TCP のデバッグポート（--remote-debugging-port）は認証が無く、127.0.0.1 でも
+        # 同じPCの別のユーザーから繋いで、このブラウザを開発者の権限で操作できてしまうため使わない
+        self.edge, self.pipe = _launch_with_pipe([
+            edge, "--headless=new", f"--user-data-dir={self.profile}", "--remote-debugging-pipe",
             f"--window-size={self.width},{self.height}", "--hide-scrollbars", "--mute-audio",
-            "--use-angle=swiftshader", "--enable-unsafe-swiftshader",   # GPU無しでもWebGL(3Dビュー)を描く
+            *_gl_args(),
             "--autoplay-policy=no-user-gesture-required",
             # ヘッドレスはバックグラウンド扱いで requestAnimationFrame（=エディタの描画ループ）が止まることがある＝抑制を切る
             "--disable-renderer-backgrounding", "--disable-background-timer-throttling",
@@ -204,26 +328,27 @@ class Editor:
             "--disable-component-extensions-with-background-pages", "--disable-default-apps",
             "--disable-features=msEdgeSyncConsent,msImplicitSignin,msSignInPromo,EdgeSignIn,Translate",
             "about:blank",
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        tabs = None
-        for _ in range(100):
+        ])
+        page, end = None, time.time() + 20
+        while not page and time.time() < end:
             try:
-                tabs = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{dport}/json", timeout=2).read())
-                if any(t.get("type") == "page" for t in tabs):
-                    break
-            except Exception:
-                pass
-            time.sleep(0.2)
-        page = next((t for t in (tabs or []) if t.get("type") == "page"), None)
+                tabs = self.pipe.call("Target.getTargets", timeout=max(0.1, end - time.time()))["targetInfos"]
+            except (CdpError, TimeoutError):
+                break   # Edge が終了した・パイプで応答しない
+            page = next((t for t in tabs if t.get("type") == "page"), None)
+            if not page:
+                time.sleep(0.2)
         if not page:
             raise CdpError("Edgeのデバッグ接続に失敗しました")
-        self.ws = _WebSocket(page["webSocketDebuggerUrl"])
+        self.ws = self.pipe.attach(page["targetId"])   # 以前の WebSocket と同じ send / recv / close
         self.call("Runtime.enable")
         self.call("Page.enable")
         self.call("Log.enable")   # 通信の失敗（Failed to load resource）等も受け取る。errors() には入れない＝診断用（tests/visual の例外の記録）
         self.call("Emulation.setDeviceMetricsOverride", width=self.width, height=self.height, deviceScaleFactor=1, mobile=False)
         self.call("Emulation.setFocusEmulationEnabled", enabled=True)   # 常に前面・フォーカス中として扱う（描画ループを止めない）
         self.call("Page.bringToFront")
+        if self.max_fps:   # このタブで開くページ全部（reload も）に、ページのJSより先に入る
+            self.call("Page.addScriptToEvaluateOnNewDocument", source=_fps_cap_js(self.max_fps))
         self.call("Page.navigate", url=self.url())
         if self.ready:
             self.wait_ready()
@@ -233,22 +358,53 @@ class Editor:
             self.load_fixture(self.fixture)
 
     def url(self):
-        return f"http://127.0.0.1:{self.port}/editor.html?dev=1"
+        # 合言葉は #k=。# 付きの同じ URL へ移ると「同じページ内の移動」になって読み込み直さないので、呼ぶたびに n を変える
+        self._nav = getattr(self, "_nav", 0) + 1
+        return f"http://127.0.0.1:{self.port}/editor.html?dev=1&n={self._nav}#k={self.token}"
 
     def wait_ready(self, timeout=30.0, settle=0.15):
         """起動完了（開発用窓口ができ、描画ループが回り始めた）まで待つ。固定秒数の待ちより速く、遅いPCでも取りこぼさない"""
         end = time.time() + timeout
         while time.time() < end:
             try:
-                # booted: 起動処理の非同期の続き（アイコン読込の後の配置モードへの切替など）まで終わったか。古い版には無いので無ければ待たない
+                # booted: 起動処理の非同期の続き（アイコン読込の後の配置モードへの切替など）まで終わったか。古い版には無いので無ければ待たない。
+                # bootCover: 起動中に画面を覆うカバー。booted の後、2フレーム待って大きさを測り直し（キャンバスが一度消える）、薄くして0.24秒後に
+                # 取り除く。残っている間はクリックがカバーに当たる（GPU描画で起動が速くなり、開き直した直後のクリックが外れるテストが出た）
                 if self.js("document.readyState==='complete'&&!!window._dbgApp&&!!(window._dbg&&window._dbg.rt)"
-                           "&&(!window._dbgApp.booted||window._dbgApp.booted())"):
+                           "&&(!window._dbgApp.booted||window._dbgApp.booted())&&!document.getElementById('bootCover')"):
                     self.wait(settle)
                     return
             except CdpError:
                 pass   # 読み込み途中で実行コンテキストが入れ替わった
             time.sleep(0.1)
-        raise CdpError(f"エディタの起動が {timeout} 秒以内に終わりませんでした")
+        raise CdpError(f"エディタの起動が {timeout} 秒以内に終わりませんでした\n{self._boot_diag()}")
+
+    def _boot_diag(self):
+        """起動待ちの時間切れの時に、どこで止まっていたかの手がかり（tests/README.md「たまに出るエラーの記録」用）"""
+        out = []
+        try:
+            st = self.call("Runtime.evaluate", returnByValue=True, expression=(
+                "(()=>{const a=window._dbgApp;let b=null;try{b=a&&a.booted?a.booted():null}catch(e){b=String(e)}"
+                "return {href:location.href,ready:document.readyState,dbgApp:!!a,rt:!!(window._dbg&&window._dbg.rt),"
+                "booted:b,bootCover:!!document.getElementById('bootCover'),hidden:document.hidden}})()"))
+            out.append(f"ページの状態: {json.dumps(st.get('result', {}).get('value'), ensure_ascii=False)}")
+        except Exception as e:
+            out.append(f"ページの状態: 取れない（{e}）")
+        try:
+            out.append(f"描画フレーム（0.5秒間）: {self.frames()}")
+        except Exception as e:
+            out.append(f"描画フレーム: 取れない（{e}）")
+        notable = ("Inspector.targetCrashed", "Inspector.detached", "Target.targetCrashed",
+                   "Runtime.executionContextDestroyed", "Page.javascriptDialogOpening")
+        for e in self._events:
+            m, p = e.get("method", ""), e.get("params", {})
+            if m == "Log.entryAdded" and p.get("entry", {}).get("level") in ("error", "warning"):
+                en = p["entry"]
+                out.append(f"ログ: {en.get('level')} [{en.get('source')}] {en.get('text', '')} {en.get('url', '')}".rstrip())
+            elif m in notable:
+                out.append(f"出来事: {m} {p.get('reason') or p.get('message') or ''}".rstrip())
+        out += self.errors()
+        return "\n".join(out[:40])
 
     def reload(self, fixture=None, clear_storage=True):
         """ページを開き直して初期状態に戻す（Edgeは起動したまま＝テストごとの起動待ちを省く）。
@@ -267,6 +423,8 @@ class Editor:
     def close(self):
         if self.ws:
             self.ws.close()
+        if self.pipe:
+            self.pipe.close()
         if self.edge:
             self.edge.kill()
             try:
@@ -284,23 +442,25 @@ class Editor:
         画像の比較など重い処理を、描画ループの回るエディタのページと分けて行うために使う"""
         # 裏で開き、エディタを前面に戻す。エディタのタブが裏に回ると描画ループ（requestAnimationFrame）が止まり、
         # 撮影がフレーム待ちで毎回3.5秒ほどかかる・入力が遅れる
-        tid = self.call("Target.createTarget", url=f"http://127.0.0.1:{self.port}/{path}", background=True)["targetId"]
+        # 補助タブのページはアプリのJS（合言葉を付ける settings-mirror.js）を持たないので、このタブの全通信に合言葉のヘッダーを
+        # 付ける設定をしてから開く。エディタのタブには使わない（アプリ側の付け忘れをテストで見逃さないため）
+        tid = self.call("Target.createTarget", url="about:blank", background=True)["targetId"]
         self.call("Page.bringToFront")
-        for _ in range(50):
-            tabs = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{self.dport}/json", timeout=2).read())
-            t = next((t for t in tabs if t.get("id") == tid and t.get("webSocketDebuggerUrl")), None)
-            if t:
-                tab = Tab(self, tid, _WebSocket(t["webSocketDebuggerUrl"]))
-                # 開いた直後のタブは、目的のページへ移る前に一瞬 about:blank（これも readyState は complete）になる。
-                # そこで返すと、入れたJSが直後のページ移動で消える・相対URLが使えない（PCが混んでいる時に画面テストが46件まとめて落ちた。
-                # tests/README.md「たまに出るエラーの記録」）。目的のページに移ったことも確かめる
-                for _ in range(200):
-                    if tab.js("location.protocol.startsWith('http')&&document.readyState==='complete'"):
-                        return tab
-                    time.sleep(0.05)
-                raise CdpError(f"補助タブが {path} を開けませんでした（10秒）")
-            time.sleep(0.1)
-        raise CdpError("タブを開けませんでした")
+        try:
+            tab = Tab(self, tid, self.pipe.attach(tid))
+            tab.call("Network.enable")
+            tab.call("Network.setExtraHTTPHeaders", headers={"X-NLM-Token": self.token})
+            tab.call("Page.navigate", url=f"http://127.0.0.1:{self.port}/{path}")
+        except CdpError:
+            raise CdpError("タブを開けませんでした") from None
+        # 開いた直後のタブは、目的のページへ移る前に一瞬 about:blank（これも readyState は complete）になる。
+        # そこで返すと、入れたJSが直後のページ移動で消える・相対URLが使えない（PCが混んでいる時に画面テストが46件まとめて落ちた。
+        # tests/README.md「たまに出るエラーの記録」）。目的のページに移ったことも確かめる
+        for _ in range(200):
+            if tab.js("location.protocol.startsWith('http')&&document.readyState==='complete'"):
+                return tab
+            time.sleep(0.05)
+        raise CdpError(f"補助タブが {path} を開けませんでした（10秒）")
 
     # ---- CDP基本 ----
     def call(self, method, **params):
@@ -368,6 +528,13 @@ class Editor:
     def _mods(self, ctrl=False, shift=False, alt=False):
         return (2 if ctrl else 0) | (8 if shift else 0) | (1 if alt else 0)
 
+    def _frame(self):
+        """描画ループを抑えている時（max_fps）は、ボタン・キーを押す前に1回の描画を待つ。エディタは、マウスの下にある物・置いたノーツの3Dの形・
+        NLEの◆の位置などを描画のたびに作り直すので、それより速く次の操作をすると古い状態に当たる（人の操作ではありえない速さ。
+        毎秒30回にした時に「置いた直後のノーツのクリック」「足した直後の◆のダブルクリック」が外れた）"""
+        if self.max_fps:
+            self.js("new Promise(r=>requestAnimationFrame(()=>r(0)))")
+
     def move(self, x, y, buttons=0, **mods):
         self.call("Input.dispatchMouseEvent", type="mouseMoved", x=x, y=y, buttons=buttons, modifiers=self._mods(**mods))
 
@@ -375,6 +542,7 @@ class Editor:
         m = self._mods(**mods)
         bmask = {"left": 1, "right": 2, "middle": 4}[button]
         self.move(x, y, **mods)
+        self._frame()
         self.call("Input.dispatchMouseEvent", type="mousePressed", x=x, y=y, button=button, buttons=bmask, clickCount=count, modifiers=m)
         self.call("Input.dispatchMouseEvent", type="mouseReleased", x=x, y=y, button=button, buttons=0, clickCount=count, modifiers=m)
 
@@ -382,14 +550,17 @@ class Editor:
         m = self._mods(**mods)
         bmask = {"left": 1, "right": 2, "middle": 4}[button]
         self.move(x0, y0, **mods)
+        self._frame()
         self.call("Input.dispatchMouseEvent", type="mousePressed", x=x0, y=y0, button=button, buttons=bmask, clickCount=1, modifiers=m)
         for i in range(1, steps + 1):
             t = i / steps
             self.call("Input.dispatchMouseEvent", type="mouseMoved", x=x0 + (x1 - x0) * t, y=y0 + (y1 - y0) * t,
                       button=button, buttons=bmask, modifiers=m)
+        self._frame()
         self.call("Input.dispatchMouseEvent", type="mouseReleased", x=x1, y=y1, button=button, buttons=0, clickCount=1, modifiers=m)
 
     def wheel(self, x, y, dy, dx=0, **mods):
+        self._frame()
         self.call("Input.dispatchMouseEvent", type="mouseWheel", x=x, y=y, deltaX=dx, deltaY=dy, modifiers=self._mods(**mods))
 
     _KEYS = {  # key → (code, windowsVirtualKeyCode)
@@ -410,6 +581,7 @@ class Editor:
             code, vk = self._KEYS.get(key, (key, 0))
             text = key if (len(key) == 1 and not (ctrl or alt)) else ""
         base = dict(key=key, code=code, windowsVirtualKeyCode=vk, nativeVirtualKeyCode=vk, modifiers=m)
+        self._frame()
         self.call("Input.dispatchKeyEvent", type="keyDown" if text else "rawKeyDown", text=text, **base)
         self.call("Input.dispatchKeyEvent", type="keyUp", **base)
 

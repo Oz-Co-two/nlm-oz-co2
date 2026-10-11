@@ -3,6 +3,7 @@
 素材 rich は BPM120（拍16から150）・音源16秒（=拍36で曲が終わる）・Hard/Expert の2難易度。basic は BPM120・音源16秒（=32拍）"""
 import copy
 import json
+import time
 
 from e2e_helpers import wait_until, counts, cell, place_at, switch_diff, hover_3d
 from nle_helpers import (open_nle, clips, select, hover, menu, clip_xy, export_dat, nle, nle_mouse, scr, lane_y,
@@ -97,9 +98,17 @@ def _swatch_xy(ed, clip):
 
 
 def _pixel(ed, x, y):
-    """NLEのキャンバスの画素（RGB）"""
-    return ed.js(f"(()=>{{const c=document.getElementById('ndcv'), r=c.getBoundingClientRect(), d=devicePixelRatio;"
-                 f"return [...c.getContext('2d').getImageData(Math.round(({x}-r.left)*d),Math.round(({y}-r.top)*d),1,1).data].slice(0,3)}})()")
+    """NLEのキャンバスの画素（RGB）。キャンバスは大きさを測り直すと（resize。開いた直後の自動解像度の切替でも呼ばれる）次の描画まで透明になるので、
+    不透明になるのを待ってから読む（テストの描画は毎秒30回までに抑えていて、その間に読むと [0,0,0] になった）。確かめと読み取りは同じ呼び出しで行う
+    （別々に呼ぶと、その間にまた測り直されることがある）"""
+    js = (f"(()=>{{const c=document.getElementById('ndcv'), r=c.getBoundingClientRect(), d=devicePixelRatio;"
+          f"return [...c.getContext('2d').getImageData(Math.round(({x}-r.left)*d),Math.round(({y}-r.top)*d),1,1).data]}})()")
+    end = time.time() + 5
+    while True:
+        px = ed.js(js)
+        if px[3] == 255 or time.time() > end:
+            return px[:3]
+        time.sleep(0.03)
 
 
 def _rgb(hexs):

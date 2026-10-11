@@ -149,7 +149,7 @@ def run_mc(ed, zp, diffs):
 
 
 def run_port(ed, info, diffs, dur):
-    ed.call("Page.navigate", url=f"http://127.0.0.1:{ed.port}/editor.html?dev=1")
+    ed.call("Page.navigate", url=ed.url())
     ed.wait(4)
     payload = json.dumps({"info": {"bpm": info["_beatsPerMinute"], "environment": info["_environmentName"], "previewStart": 12, "previewDuration": 10},
                           "diffs": [{"difficulty": d["dn"], "json": d["json"], "njs": d["njs"], "njsOffset": d["off"]} for d in diffs],

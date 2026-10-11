@@ -201,7 +201,7 @@ There are 10 lanes, one for each kind of light (RING ZOOM, CENTER, L LASER, etc.
 ![Lights placed in LIGHTING mode](images/tutorial-en/11-lighting.png)
 
 1. Choose the behavior (off / on / flash / fade / transition) with ②
-2. Choose the color with the color box ③
+2. Choose the color with the color box ③ (over the 3D view you can also press **1, 2 or 3**: ①, ② or white. Here the number keys do not switch the difficulty)
 3. As with notes, move to the beat and **left-click** a lane (right-click to delete)
 
 The lights you place are gathered into a clip in the **Light 1** row of the NLE.

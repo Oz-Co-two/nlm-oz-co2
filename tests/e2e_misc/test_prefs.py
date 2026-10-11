@@ -388,6 +388,43 @@ def test_prefs_shortcut_conflict_cancel_and_reset_all(t):
         t.no_errors()
 
 
+def _sheet_key(ed, sel, label):
+    """画面に浮かぶショートカット一覧（早見表）sel の、説明が label の行のキーの文字（行が無ければ None）"""
+    return ed.js(f"""(()=>{{const r=[...document.querySelectorAll('{sel} .mkrow')].find(r=>r.children[0].textContent==={json.dumps(label)});
+      return r?r.children[1].textContent:null}})()""")
+
+
+def test_prefs_shortcut_sheet_follows_remap(t):
+    '''早見表（画面に浮かぶショートカット一覧）はショートカット編集の割り当てで表示する: NOTESの「直前ノーツ表示 切替」・共通の「1コマ進む」・NLEの「レーン ロック」を
+    変えると、左上・右上・右列（NLE）の早見表のキーが変わる。「全て既定に戻す」で元へ。設定ファイル由来のキー名はHTMLとして解釈しない'''
+    with prefs_page(t) as ed:
+        before = (_sheet_key(ed, "#modeKeys", "直前ノーツ表示 切替"), _sheet_key(ed, "#commonKeys", "1コマ進む / 戻る"),
+                  _sheet_key(ed, "#nodeKeys", "ロック/ソロ/ミュート"))
+        t.eq(before, ("H", "→ ／ ←", "L / S / M"), "初期の早見表")
+        open_prefs(ed)
+        prefs_tab(ed, "keys")
+        _remap(ed, "直前ノーツ表示 切替", "j")
+        wait_until(ed, "Object.keys(JSON.parse(localStorage.getItem('bsnm_keymap')||'{}')).length===1", label="1件目の割り当て")
+        _remap(ed, "1コマ進む", "ArrowUp")
+        wait_until(ed, "Object.keys(JSON.parse(localStorage.getItem('bsnm_keymap')||'{}')).length===2", label="2件目の割り当て")
+        _remap(ed, "レーン ロック", "k")
+        wait_until(ed, "Object.keys(JSON.parse(localStorage.getItem('bsnm_keymap')||'{}')).length===3", label="3件目の割り当て")
+        after = (_sheet_key(ed, "#modeKeys", "直前ノーツ表示 切替"), _sheet_key(ed, "#commonKeys", "1コマ進む / 戻る"),
+                 _sheet_key(ed, "#nodeKeys", "ロック/ソロ/ミュート"))
+        t.eq(after, ("J", "↑ ／ ←", "K / S / M"), "割り当てを変えると早見表もすぐ変わる")
+        click_in_view(ed, "#keysResetAll", "全て既定に戻す")
+        wait_until(ed, "localStorage.getItem('bsnm_keymap')==='{}'", label="全て既定へ")
+        t.eq(_sheet_key(ed, "#modeKeys", "直前ノーツ表示 切替"), "H", "既定へ戻すと早見表も戻る")
+        close_prefs(ed)
+        # 設定ファイル（config/settings.json の bsnm_keymap）に細工したキー名が入っていても、文字として出すだけ
+        ed.js("""localStorage.setItem('bsnm_keymap',JSON.stringify({auxPrev:{k:'<img src=x id=nlmInj>',c:false,a:false,s:false}}))""")
+        wait_mirrored(ed, "bsnm_keymap")
+        reload_keep(ed)
+        t.eq(_sheet_key(ed, "#modeKeys", "直前ノーツ表示 切替"), "<img src=x id=nlmInj>", "キー名はそのままの文字で出る")
+        t.eq(ed.js("!!document.getElementById('nlmInj')"), False, "HTMLとしては解釈されない")
+        t.no_errors()
+
+
 # ---------------------------------------------------------------- 初期化
 def _wait_reloaded(ed, marker):
     """ページ自身が location.reload() した（印 window.<marker> が消え、起動が終わった）のを待つ。読み込み中のJS実行エラーは無視"""

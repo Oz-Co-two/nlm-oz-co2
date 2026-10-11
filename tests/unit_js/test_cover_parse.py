@@ -42,13 +42,14 @@ def flac_blocks(img):
     return (bytes([0x00]) + len(dummy).to_bytes(3, "big") + dummy + bytes([0x86]) + len(pic).to_bytes(3, "big") + pic)
 
 
-def ogg(img, opus=False):
+def ogg(img, opus=False, clen=None):
+    """clen: コメントの長さ欄に書く値（既定は実際の長さ。壊れたファイルの再現用）"""
     pic = base64.b64encode(flac_pic_body(img))
     head = b"OpusHead" + b"\0" * 11 if opus else b"\x01vorbis" + b"\0" * 23
     vendor = b"v"
     comment = (b"OpusTags" if opus else b"\x03vorbis") + struct.pack("<I", len(vendor)) + vendor + struct.pack("<I", 1)
     c = b"METADATA_BLOCK_PICTURE=" + pic
-    comment += struct.pack("<I", len(c)) + c
+    comment += struct.pack("<I", len(c) if clen is None else clen) + c
     if not opus:
         comment += b"\x01"
     lace = b""
@@ -141,4 +142,27 @@ def test_truncated_input_safe(t):
         except Exception as e:
             raise AssertionError(f"{name}: 切れた入力で例外 {e}")
         t.ok(r is None or r.get("data") is not None, f"{name}: nullか結果")
+    t.no_errors()
+
+
+def test_huge_length_safe(t):
+    '''ファイル中の長さ（MIME長・フレーム長・コメント長）が残りのバイト数を超えていても、その回数だけ回さずにすぐnull。
+    範囲内なら長いMIMEもファイルに書かれたまま返す'''
+    t.fresh()
+    huge = b"\xff\xff\xff\xff"
+    # FLAC: PICTUREブロック(type6) + picType + MIME長=0xFFFFFFFF だけ（ブロック長がバッファより短い/長い両方）
+    for blen in (8, 0xFFFFFF):
+        raw = bytes([0x86]) + blen.to_bytes(3, "big") + struct.pack(">I", 3) + huge
+        t.eq(run(t, "_flacPic", raw), None, f"FLAC: MIME長が残りを超える（ブロック長{blen}）")
+    # ID3v2.3: APICのフレーム長=0xFFFFFFFF・MIMEの終端が無い
+    frames = b"APIC" + huge + b"\0\0" + b"\0image/png"
+    raw = b"ID3" + bytes([3, 0, 0]) + synchsafe(len(frames)) + frames
+    t.eq(run(t, "_id3Pic", raw), None, "ID3: フレーム長が残りを超える")
+    # OGG: METADATA_BLOCK_PICTURE のコメント長=0xFFFFFFFF
+    t.eq(run(t, "_oggPic", ogg(PNG, clen=0xFFFFFFFF)), None, "OGG: コメント長が残りを超える")
+    # 範囲内の長いMIMEはそのまま
+    for mime in (b"x" * 300, b"image/svg+xml;" + b"p" * 260):
+        body = flac_pic_body(PNG, mime=mime)
+        r = _js(t, f"const r = m._parseFlacPic(U({list(body)}), 0, {len(body)}); return r && {{ mime: r.mime, data: Array.from(r.data) }};")
+        t.eq((r['mime'], bytes(r['data'])), (mime.decode(), PNG), f"範囲内の{len(mime)}文字のMIMEはそのまま")
     t.no_errors()

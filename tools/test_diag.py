@@ -111,7 +111,8 @@ def burst():
             def worker():
                 go.wait()
                 try:
-                    urllib.request.urlopen(f"http://127.0.0.1:{ed.port}/tools/fixtures/basic.wav", timeout=20).read()
+                    urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{ed.port}/tools/fixtures/basic.wav",
+                                                                  headers={"X-NLM-Token": ed.token}), timeout=20).read()
                     with lock:
                         res["ok"] += 1
                 except Exception as e:

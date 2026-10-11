@@ -122,7 +122,8 @@ BPMは80〜160に折り返して2倍・半分の誤認を無視している(譜�
 ## エディタを自動で動かして検証する（cdp.py / fixtures/）
 
 `tools/cdp.py` はヘッドレスEdgeでエディタを開き、スクリーンショット・本物のマウス/キー入力・JS実行を行う
-（標準ライブラリだけでDevTools Protocolを話す。Node/Playwright不要）。3Dビューもソフトウェア描画で写る。
+（標準ライブラリだけでDevTools Protocolを話す。Node/Playwright不要）。3Dビューも写る（画面は出さずにGPUで描画。
+GPUが無いPCではソフトウェア描画になる。環境変数 `NLM_TEST_SOFTWARE_GL=1` でソフトウェア描画に固定できる）。
 
 ```
 .venv-build/Scripts/python.exe tools/cdp.py shot out.png --fixture basic   # テスト素材を開いて撮影
@@ -133,6 +134,8 @@ Pythonから使う場合（検証スクリプトの書き方）はファイル�
 - ページは `editor.html?dev=1` で開くので、開発用窓口 `window._dbgApp`（読み取り専用。状態・未保存判定・
   マスの画面座標`cellScreen(x,y)`など）と `window._dbg`（ランタイム全体）が使える。どちらも配布版では作られない。
 - 設定の保存先は一時フォルダ（手元の `config/settings.json` は汚さない）。`Editor(keep_data=True)` で残せる。
+- serve.py は合言葉（`X-NLM-Token`）を求める。ページは `ed.url()`（合言葉 `#k=…` 付き）で開けばアプリが自動で付ける。
+  Python から直接サーバーへ要求する時は `headers={"X-NLM-Token": ed.token}` を付ける。補助タブ（`new_tab`）は自動で付く。
 - `ed.errors()` でページ内の例外・console.errorを回収できる。検証の最後に空であることを確認する。
 - 3Dビューの表示状態など「描画ループで更新される値」を見る検証では、`ed.frames()` が0でないこと
   （描画ループが動いていること）も確認する。ヘッドレスはバックグラウンド扱いで描画が止まることがあり、

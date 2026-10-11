@@ -103,6 +103,7 @@ You can change the key assignments in the **Shortcuts** tab of **Preferences**.
 - If the key is already used by another action, its frame turns red to let you know
 - Changed actions get a **Default** button so you can reset them one by one. **Reset all to default** resets them all at once
 - Only keyboard actions can be changed (mouse and wheel actions cannot)
+- The floating shortcut lists on the screen show the keys you assigned
 - The assignments are saved with your preferences, so they are kept after restarting the app
 
 <!-- chapter-nav -->

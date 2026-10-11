@@ -8,6 +8,33 @@ For basic usage, see the [tutorial](docs/tutorial.en.md), the [advanced tutorial
 <!-- Format: one "## v1.2.3-oz" heading per version. Top-level bold items ("- **...**") are the headlines shown in the in-app
 update notice (tools/make_release.py puts them into update.json). Keep the same versions and the same number of headlines as CHANGELOG.md. -->
 
+## v1.4.3-oz
+
+- **The on-screen shortcut list now includes missing actions and shows your own keys**
+  The shortcut list shown on screen now includes W (placement pie / light behavior pie), Esc (cancel / exit), Enter (confirm paste),
+  the arc winding direction (Shift + Alt + wheel), Ctrl + left click in LIGHTING (place on top of a light), and more.
+  - If you change a key on the "Shortcuts" tab of Preferences, the list now shows the new key (before, it kept showing the old one).
+- **In LIGHTING, the 1, 2 and 3 keys now pick a color**
+  With the mouse over the 3D view, 1, 2 and 3 pick ①, ② and white (left, right and white in Chroma mode). The hint shown when you enter
+  LIGHTING already said "1·2·3 = color", but pressing the keys did nothing. You can change the keys on the "Shortcuts" tab.
+- **Saving no longer asks for permission at the top edge of the screen**
+  When you saved over a project opened with "Open…" or by dragging it in, a small prompt asking whether to allow editing the file appeared
+  at the top edge of the screen (easy to miss, and saving waited until you answered it). In the exe version, saving to a file you picked
+  or dragged in no longer asks.
+- **Improved security**
+  NLM now better protects you when a file you received from someone else (.nlmf or an audio file) has been tampered with.
+  - Just opening a crafted .nlmf could make Windows connect to a network location written in it (`\\server\...`) and send your
+    sign-in credentials (NTLM authentication) to that server. NLM now connects to network locations only when you picked the file or folder
+    in a dialog on this PC.
+  - Because of this, if a project loads its song or cover image from a location like `\\server\...` (for example on a NAS), please select the
+    song or cover image again once after updating (not needed if you used a drive letter such as `Z:\`; export folders still reconnect
+    automatically as before).
+  - Adding a crafted audio file to MEDIA could freeze the editor. This is fixed.
+  - A crafted .nlmf could insert unwanted content into the INFO screen. This is fixed.
+  - When you use `python serve.py` (on Linux, etc.), open the editor with the URL that includes an access key, shown at startup (it opens
+    in your default browser automatically, and the key changes every time the server starts). This keeps other accounts on the same PC and
+    other devices on the network from using the local server. Nothing changes for the exe version.
+
 ## v1.4.2-oz
 
 - **You can now grab and move the notes at the ends of an arc**

@@ -208,8 +208,7 @@ function setNodeMode(m){ nodeMode='edit';   // INFOモードは廃止（ノー�
 // ノード列: NLE（レイヤー/Musicタイムライン＋ボリューム）⇄ INFO（曲情報バー）をTab/クリックで切替
 function setNodeColMode(m){ nodeColMode=m; const info=(m==='info'), gid=id=>document.getElementById(id);
   const ins=gid('inspcol'); if(ins) ins.style.display=info?'block':'none';
-  { const nk=gid('nodeKeys'), bd=nk&&(nk.querySelector('.mkbody')||nk); if(bd&&typeof KEYSHTML_NLE!=='undefined') bd.innerHTML=info?keysHtmlNode():KEYSHTML_NLE;
-    bd.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent=t(el.dataset.i18n,el.textContent); }); }   // KEYSHTML_NLE は起動時の日本語のHTML＝今の言語で訳し直す   // INFO=旧NODE流儀のショートカット表示（ヘッダーは温存しボディだけ差し替え）
+  renderModeKeys();   // 右列のショートカット表示をNLE/INFOの中身へ（ヘッダーは温存しボディだけ差し替え）
   if(typeof applyShowKeys==='function') applyShowKeys();   // NLE/INFOで表示トグルが別（設定5分割）
   const np=gid('nodepane'), ov=gid('overview'), sp=gid('specPane'), vm=gid('vmcol');
   if(np) np.style.display=info?'none':''; if(ov) ov.style.display=info?'none':''; if(sp) sp.style.display=info?'none':''; if(vm) vm.style.display=info?'none':'flex';
@@ -219,55 +218,75 @@ function setNodeColMode(m){ nodeColMode=m; const info=(m==='info'), gid=id=>docu
   setModeLabel('nodeColModeLabel', info?'info':'nle', info?'INFO':'NLE', info?'NLE':'INFO');   // 他モードラベルと同一様式（アイコン＋TABピル）
   if(!info) resize();
 }
+// 早見表（画面に浮かぶショートカット一覧）の行: [説明, 操作] / ['---']=区切り線。説明は sk:、操作は skk: で訳す（操作は {…} を含んだままの文字列が訳のキー）。
+// 操作の {id} は ACTIONS の今のキー＝ショートカット編集で変えると早見表も変わる（keyText）。再割当できないキーとマウス操作はそのまま書く。
+// 説明・操作は関数でもよい（モードで変わる行）。新しいショートカットを足したら、ここにも足す
 const KEYS_COMMON=[
   ['回転','🖱️ 中ドラッグ'],
   ['パン','Shift + 🖱️ 中ドラッグ'],
   ['ズーム','Ctrl + 🖱️ ホイール'],
   ['範囲選択','🖱️ 左ドラッグ'],
   ['追加選択','Shift + 🖱️ 左クリック/ドラッグ'],
-  ['選択解除','A'],
+  ['選択解除','{deselect}'],
+  ['キャンセル・解除','Esc'],   // 3D=押すたびに1つずつ（壁の作成→貼り付けの追従→ギズモ→LIGHTING→配置モード）/ NLE=貼り付けの取消・分割モードと選択の解除
   ['---'],
-  ['削除','X / Del'],
-  ['取り消し','Ctrl + Z'],
-  ['やり直し','Shift + Ctrl + Z'],
-  ['コピー / 貼り付け / カット','Ctrl + C ／ Ctrl + V ／ Ctrl + X'],
+  ['削除','{del} / Del'],
+  ['取り消し','{undo}'],
+  ['やり直し','{redo}'],
+  ['コピー / 貼り付け / カット','{copy} ／ {paste} ／ {cut}'],
   ['---'],
-  ['再生 / 停止','Space'],
+  ['再生 / 停止','{play}'],
   ['タイムライン操作','🖱️ ホイール'],
-  ['1コマ進む / 戻る','→ ／ ←'],
-  ['スタート / 曲末へ','Ctrl + ← ／ →'],
-  ['4拍イージング','Shift + Ctrl + ← ／ →'],
+  ['1コマ進む / 戻る','{frameNext} ／ {framePrev}'],
+  ['スタート / 曲末へ','{jumpStart} ／ {jumpEnd}'],
+  ['4拍イージング','Ctrl + Shift + ← ／ →'],
   ['---'],
-  ['スナップパイ','，'],
-  ['再生ヘッドにジャンプ','.'],
-  ['---'],
-  ['マーカー挿入','Ctrl + E'],
-  ['前/次のマーカーへ','Ctrl + [ ／ Ctrl + ]'],
-  ['---'],
-  ['難易度切替','1〜5（Easy〜Expert+）'],
+  ['スナップパイ','{snapPie}'],
+  ['再生ヘッドにジャンプ','{jumpHead}'],
+  ['マーカー挿入','{markerAdd}'],   // 区切り線はここまでで打ち止め（3Dビューの高さに収める。Escの行を足した時に、最後の行が下にはみ出した）
+  ['前/次のマーカーへ','{markerPrev} ／ {markerNext}'],
+  ['難易度切替',()=>lightMode?'1〜5（Easy〜Expert+・LIGHTINGでは3Dの外で）':'1〜5（Easy〜Expert+）'],   // LIGHTINGの3D上の数字は色を選ぶ
 ];
 const KEYS_NOTE=[
-  ['配置モード / カメラ固定モード切替','Q'],
+  ['配置モード / カメラ固定モード切替','{camMode}'],
   ['追加','🖱️ 左クリック'],
   ['削除','🖱️ 右クリック'],
+  ['配置パイ（ノーツ/ボム/壁）','{notePie}'],
   ['向き回転','Alt + 🖱️ ホイール'],
-  ['ドットにする','D'],
-  ['色の反転','F'],
-  ['アーク / チェーン','2個以上 Ctrl+R ／ Ctrl+T・C（同色連続ペア）'],
+  ['ドットにする','{noteDot}'],
+  ['色の反転','{noteFlip}'],
+  ['アーク / チェーン','2個以上 {noteArc} ／ {noteChain}・C（同色連続ペア）'],
   ['アーク','Alt + 🖱️ ホイール = mu（頭曲率）／ Ctrl + Alt + 🖱️ ホイール = tmu（尾曲率）'],
+  ['アークの巻き方向','Shift + Alt + 🖱️ ホイール'],
+  ['アークの端・チェーンの頭の向き','その上で Alt + 🖱️ ホイール'],
   ['チェーン','Shift + 🖱️ ホイール = 分割数 ／ Ctrl + Alt + 🖱️ ホイール = squish（詰め）'],
-  ['壁のサイズ','S'],
-  ['直前ノーツ表示 切替','H'],
+  ['壁のサイズ','{noteWall}'],
+  ['貼り付けの確定','Enter'],
+  ['直前ノーツ表示 切替','{auxPrev}'],
 ];
 const KEYS_LIGHT=[
-  ['配置モード / カメラ固定モード切替','Q'],
+  ['配置モード / カメラ固定モード切替','{camMode}'],
   ['追加','🖱️ 左クリック'],
+  ['重ねて置く','Ctrl + 🖱️ 左クリック'],
   ['削除(ライト)','🖱️ 右クリック'],
-  ['数値の増減','Alt + 🖱️ ホイール'],
-  ['色を回転','F'],
-  ['カラーパイ','C'],
-  ['数値を±1刻みで増減','Ctrl + Alt + 🖱️ ホイール'],
+  ['ライト動作パイ','{lightPie}'],
+  [()=>chromaMode?'色を選ぶ（左・右・白）':'色を選ぶ（①・②・白）','{lightCol1} / {lightCol2} / {lightCol3}'],
+  ['色を回転','{lightCycle}'],
+  ['カラーパイ','{lightColorPie}'],
+  ['強さの増減','Alt + 🖱️ ホイール（±10）'],
+  ['強さを±1刻みで増減','Ctrl + Alt + 🖱️ ホイール'],
+  ['レーザー速度の増減','SPEEDレーンで Alt + 🖱️ ホイール（±1）'],
 ];
+const KEYS_NLE=[   // 右列（NLE）
+  ['時間移動','🖱️ ホイール'],
+  ['ズーム','Ctrl + 🖱️ ホイール'],
+  ['表示の移動','🖱️ 中ドラッグ'],
+  ['カット','{nleCut}'],
+  ['分割モード（クリックで分割）','R'],
+  ['マージ','{nleMerge}'],
+  ['ロック/ソロ/ミュート','{nleLock} / {nleSolo} / {nleMute}'],
+];
+const KEYS_NODE=[['新規ノード','🖱️ 右クリック'],['全ノードの中央へ','{jumpHead}']];   // 右列（INFO）
 // ================= ショートカット リマップ基盤（データ駆動・ヘルバ様指定 2026-07-15）=================
 // ACTIONS = 再割当できるキー系ショートカットの一元定義。def=既定バインド {k:キー, c:Ctrl, a:Alt, s:Shift}。
 // マウス/ホイール操作は再割当対象外（ショートカット表に参考表示）。
@@ -308,6 +327,9 @@ const ACTIONS=[
   {id:'lightCycle',  cat:'light',  label:'色を回転',              def:{k:'f'}},
   {id:'lightPie',    cat:'light',  label:'ライト動作パイ',        def:{k:'w'}},
   {id:'lightColorPie',cat:'light', label:'カラーパイ',            def:{k:'c'}},
+  {id:'lightCol1',   cat:'light',  label:'色を選ぶ ①',            def:{k:'1'}},   // 3Dの上だけ（他のペインの数字は難易度切替）。クロマ時は ①=左・②=右の色
+  {id:'lightCol2',   cat:'light',  label:'色を選ぶ ②',            def:{k:'2'}},
+  {id:'lightCol3',   cat:'light',  label:'色を選ぶ 白',           def:{k:'3'}},
   // NLE
   {id:'nleCut',      cat:'nle',    label:'カット',                def:{k:'c'}},
   {id:'nleMerge',    cat:'nle',    label:'マージ',                def:{k:'g', c:true}},
@@ -320,7 +342,8 @@ function actLabel(a){ return a&&a.id?t('act.'+a.id,a.label):((a&&a.label)||''); 
 const ACT_CATS=[['common','共通'],['notes','NOTES'],['light','LIGHTING'],['nle','NLE']];
 let _keymap={};   // ユーザー上書き {id:{k,c,a,s}}。既定と異なるものだけ保持
 try{ _keymap=JSON.parse(localStorage.getItem('bsnm_keymap')||'{}')||{}; }catch(_){ _keymap={}; }
-function saveKeymap(){ try{ localStorage.setItem('bsnm_keymap',JSON.stringify(_keymap)); }catch(_){} }   // bsnm_* なので config/settings.json へ自動ミラー
+function saveKeymap(){ try{ localStorage.setItem('bsnm_keymap',JSON.stringify(_keymap)); }catch(_){}   // bsnm_* なので config/settings.json へ自動ミラー
+  renderModeKeys(); }   // 早見表を新しいキーで描き直す
 function effBind(id){ const a=ACT_BY_ID[id]; if(!a) return null; return _keymap[id]||a.def; }   // 実効バインド（上書き優先）
 function _normKey(k){ return (k&&k.length===1)?k.toLowerCase():k; }   // 1文字キーは小文字化（大小無視）
 function comboFromEvent(e){ return {k:_normKey(e.key), c:!!e.ctrlKey||!!e.metaKey, a:!!e.altKey, s:!!e.shiftKey}; }
@@ -331,10 +354,19 @@ function comboStr(b){ if(!b) return '—';
   let s=''; if(b.c) s+='Ctrl + '; if(b.a) s+='Alt + '; if(b.s) s+='Shift + ';
   const k=b.k===' '?'Space':b.k==='ArrowLeft'?'←':b.k==='ArrowRight'?'→':b.k==='ArrowUp'?'↑':b.k==='ArrowDown'?'↓':(b.k&&b.k.length===1?b.k.toUpperCase():b.k);
   return s+k; }
-function renderModeKeys(){
-  const rows=arr=>arr.map(([d,k])=>d==='---'?'<div class="mksep"></div>':`<div class="mkrow"><span class="mkd">${t('sk:'+d,d)}</span><span class="mk">${t('skk:'+k,k)}</span></div>`).join('');   // '---'=区切り線／ラベル・操作列はt()で翻訳（英語=skk:キーは日本語を含む操作のみ辞書化・純キーはそのまま）
-  const el=document.getElementById('modeKeys'); if(el) (el.querySelector('.mkbody')||el).innerHTML=rows(lightMode?KEYS_LIGHT:KEYS_NOTE);
-  const ck=document.getElementById('commonKeys'); if(ck) (ck.querySelector('.mkbody')||ck).innerHTML=rows(KEYS_COMMON);
+/** 早見表の操作の文字: 訳してから {id} を ACTIONS の今のキーに置き換える（英語=skk:キーは日本語を含む操作のみ辞書化・純キーはそのまま） */
+function keyText(tpl){ const vars={};
+  for(const m of tpl.match(/\{\w+\}/g)||[]){ const id=m.slice(1,-1); if(ACT_BY_ID[id]) vars[id]=comboStr(effBind(id)); }
+  return tf('skk:'+tpl,tpl,vars); }
+function keyRows(arr){ const v=x=>typeof x==='function'?x():x;
+  // キーは config/settings.json（bsnm_keymap）由来なので escHtml を通す
+  return arr.map(([d,k])=>d==='---'?'<div class="mksep"></div>'
+    :`<div class="mkrow"><span class="mkd">${escHtml(t('sk:'+v(d),v(d)))}</span><span class="mk">${escHtml(keyText(v(k)))}</span></div>`).join(''); }
+function renderModeKeys(){   // 3つの早見表を、今のモード・言語・キーの割り当てで描く
+  const put=(id,arr)=>{ const el=document.getElementById(id); if(el) (el.querySelector('.mkbody')||el).innerHTML=keyRows(arr); };
+  put('modeKeys',lightMode?KEYS_LIGHT:KEYS_NOTE);
+  put('commonKeys',KEYS_COMMON);
+  put('nodeKeys',nodeColMode==='info'?KEYS_NODE:KEYS_NLE);
 }
 function updateMainModeLabel(){
   renderModeKeys();
@@ -1030,6 +1062,10 @@ function cycleLightChroma(){   // F(Chroma時)=左ノーツ→右ノーツ→白
 }
 function cycleLightBase(){   // F(バニラ時)=配置色①(赤/base4)→②(青/base0)→白(base8) を巡回＋選択/マウス下の色ライトのiベースも変更（ヘルバ様指定 2026-07-13）
   const order=[4,0,8]; applyLightBase(order[(order.indexOf(lightBrush.base)+1)%3]);
+}
+function pickLightColor(i){   // 数字キー（lightCol1〜3・既定1/2/3）: バニラ=①・②・白 / クロマ=左・右・白（Cパイの先頭3つ）。適用先は F・Cパイと同じ（選択中→マウス下→ブラシ）
+  if(chromaMode){ _lightPalIdx=i; setBrushChroma(lightChromaSeq()[i]); }   // Fの巡回はここから続ける
+  else applyLightBase([4,0,8][i]);
 }
 function applyLightBase(nb){   // バニラの配置色を nb（4=①赤/0=②青/8=白）にし、選択中→無ければマウス下の色ライトも同じ色へ（F と Cパイ共通）
   setLightColor(nb);
@@ -4693,7 +4729,7 @@ applyShowKeys();
       // 400msデバウンスを待たず settings.json へ即確定＝トグル直後にリロードしても保存が消えない（ヘルバ様報告の修正 2026-07-13）
       try{ const data={}; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.indexOf('bsnm_')===0) data[k]=localStorage.getItem(k); }
         fetch('__settings/save',{method:'POST',headers:{'Content-Type':'application/json','X-NLM-Request':'1'},body:JSON.stringify({data})}); }catch(_){}
-      try{ updateChromaUI(); }catch(_){} stat(cm.checked?'Chromaモード ON（各ライト自由色・要Mod）':'バニラ配色モード（Mod無しでも全員に見える）'); }); } }
+      try{ updateChromaUI(); renderModeKeys(); }catch(_){} stat(cm.checked?'Chromaモード ON（各ライト自由色・要Mod）':'バニラ配色モード（Mod無しでも全員に見える）'); }); } }
 // ---- ショートカット表示のフローティング化: 上部ドラッグで移動（親ペインの外へは出ない）・▾たたむ・✕閉じる=設定のチェックOFF（再表示は設定から） ----
 { const posSaved=JSON.parse(localStorage.getItem('bsnm_keypos')||'{}');
   const foldSaved=JSON.parse(localStorage.getItem('bsnm_keyfold')||'{}');
@@ -8156,7 +8192,9 @@ addEventListener('keydown', e=>{
   // ---- タイムライン再生系（全画面共通・どのペインにマウスがあっても効く） ----
   if(hit(e,'play')){ e.preventDefault(); playing?pause():play(); return; }   // Phase2: 実効バインドで判定（再割当対応）
   { const _mp=hit(e,'markerPrev'), _mn=hit(e,'markerNext'); if(_mp||_mn){ e.preventDefault(); if(!e.repeat) jumpMarker(_mp?-1:1); return; } }   // 前/次のマーカーへ（全画面共通）
-  if(/^[1-5]$/.test(e.key)&&!e.ctrlKey&&!e.altKey&&!e.shiftKey&&!(lightMode&&hoverPane==='main')){   // 1〜5=難易度切替（LIGHTモードの3D上では1・2・3=色選択を優先）
+  if(lightMode&&hoverPane==='main'){ const ci=[1,2,3].find(i=>hit(e,'lightCol'+i));   // LIGHTINGの3D上: 色を選ぶ（既定1/2/3）
+    if(ci){ e.preventDefault(); if(!e.repeat) pickLightColor(ci-1); return; } }
+  if(/^[1-5]$/.test(e.key)&&!e.ctrlKey&&!e.altKey&&!e.shiftKey&&!(lightMode&&hoverPane==='main')){   // 1〜5=難易度切替（LIGHTINGの3D上では数字で難易度を変えない＝1〜3は色を選ぶ・4/5は何もしない）
     if(!e.repeat) switchDiffByIndex(+e.key-1); return; }
   { const _js=hit(e,'jumpStart'), _je=hit(e,'jumpEnd'), _fp=hit(e,'framePrev'), _fn=hit(e,'frameNext');
     const _ease4=(e.ctrlKey&&e.shiftKey&&(e.key==='ArrowLeft'||e.key==='ArrowRight'));   // 未登録=Shift+Ctrl+←/→=4拍イージング
@@ -8822,16 +8860,17 @@ function layoutInfoNodes(){
   renderOutCards();
   infoCamApply(); drawInfoEdges();
 }
+function infoCoord(v){ return (typeof v==='number'&&isFinite(v))?v:0; }   // ファイル由来の座標は数だけ通す（ポート座標はdrawInfoEdgesでSVGのinnerHTMLへ入るため。文字列のままだと要素を差し込める）
 function infoPortOf(id){   // ソースノード（インスタンス）の出力ポート（右辺中央）のワールド座標
   const n=infoGraph.nodes[id]; if(!n) return null;
   const el=inspEl.querySelector(`.iGrp[data-node="${id}"]`);
-  return {x:n.x+(el?el.offsetWidth:340), y:n.y+(el?el.offsetHeight:120)/2};
+  return {x:infoCoord(n.x)+(el?el.offsetWidth:340), y:infoCoord(n.y)+(el?el.offsetHeight:120)/2};
 }
 function infoOutPortOf(oid,k){   // 書き出しノードの入力ポート（左辺・縦中央に3つ・色分け）
   const o=infoGraph.outs[oid]||{x:0,y:0};
   const el=infoWorldEl&&infoWorldEl.querySelector(`.iGrp[data-out="${oid}"]`);
   const h=(el&&el.offsetHeight)||160;
-  return {x:o.x,y:o.y+h/2+(INFO_SRCS.indexOf(k)-(INFO_SRCS.length-1)/2)*20};
+  return {x:infoCoord(o.x),y:infoCoord(o.y)+h/2+(INFO_SRCS.indexOf(k)-(INFO_SRCS.length-1)/2)*20};
 }
 function drawInfoEdges(){   // エッジ={s:ノードid,o:出力id}。同タイプは1つのoutに1本（繋ぎ替え=差し替え）。休止outへの線は薄く
   let under='', over='';   // under=ポートラベル（カードの下層）/ over=ドラッグ中のゴースト線のみ
@@ -9029,10 +9068,6 @@ function deleteSrcNode(id){ const n=infoGraph.nodes[id]; if(!n) return;
   applyInfoGraph(); layoutInfoNodes(); metaDirty=true; stat('ノードを削除しました'); }
 setInterval(()=>{ if(nodeColMode==='info') drawInfoEdges(); },400);   // カード高さの変化（カバー画像読込等）に追従
 layoutInfoNodes(); applyInfoGraph();
-// INFOモード時のショートカット表示（旧NODE流儀）。NLEに戻したら元の表示へ
-const KEYSHTML_NLE=(document.querySelector('#nodeKeys .mkbody')||document.getElementById('nodeKeys')).innerHTML;
-const KEYS_NODE=[['新規ノード','🖱️ 右クリック'],['全ノードの中央へ','.']];
-function keysHtmlNode(){ return KEYS_NODE.map(([d,k])=>`<div class="mkrow"><span class="mkd">${escHtml(t('sk:'+d,d))}</span><span class="mk">${escHtml(t('skk:'+k,k))}</span></div>`).join(''); }   // 言語に合わせて毎回作る
 document.getElementById('iMapCheck').addEventListener('click',()=>mapCheckPanel.open());
 document.getElementById('iRating').addEventListener('click',()=>ratingPanel.open());
 document.getElementById('iExport').onclick=()=>{   // 必須項目（音源/ノーツ/フォルダー名/出力先）が揃うまで書き出しは止める
@@ -10044,6 +10079,8 @@ setTimeout(_bootReveal,3500);
 _bootReady.catch(()=>{}).then(()=>{ try{ openFromNativeArg(); }catch(_){} });
 addEventListener('load',()=>setTimeout(()=>{ try{ openFromNativeArg(); }catch(_){} },200));
 setTimeout(()=>{ try{ openFromNativeArg(); }catch(_){} },1500);
+// 合言葉（URL の #k=…）なしで開いた時は、保存・環境設定・アセットがサーバーに断られる（serve.py の SESSION_TOKEN）。開き直しを案内する
+_bootReady.catch(()=>{}).then(()=>{ if(window.__nlmNoToken) showErr(t('msg.noToken','このURLには合言葉が付いていないため、保存・環境設定・アセットが使えません。サーバーを起動した時に表示されたURL（#k=… 付き）で開き直してください。')); });
 function makeSplit(id, start, move){
   const el = document.getElementById(id);
   if(!el) return;
@@ -10114,6 +10151,7 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.KEYS_COMMON = KEYS_COMMON; } catch (_) {}
   try { rt.KEYS_NOTE = KEYS_NOTE; } catch (_) {}
   try { rt.KEYS_LIGHT = KEYS_LIGHT; } catch (_) {}
+  try { rt.KEYS_NLE = KEYS_NLE; rt.KEYS_NODE = KEYS_NODE; } catch (_) {}
   try { rt.orbitDrag = orbitDrag; } catch (_) {}
   try { rt.panDrag = panDrag; } catch (_) {}
   try { rt.bgGrid = bgGrid; } catch (_) {}
@@ -10469,8 +10507,6 @@ let perfFrames=0, perfLast=performance.now();
   try { rt._inSel = _inSel; } catch (_) {}
   try { rt._inBand = _inBand; } catch (_) {}
   try { rt._bandEl = _bandEl; } catch (_) {}
-  try { rt.KEYSHTML_NLE = KEYSHTML_NLE; } catch (_) {}
-  try { rt.KEYS_NODE = KEYS_NODE; rt.keysHtmlNode = keysHtmlNode; } catch (_) {}
   try { rt.pv4On = pv4On; } catch (_) {}
   try { rt._PV4 = _PV4; } catch (_) {}
   try { rt._pv4Hist = _pv4Hist; } catch (_) {}

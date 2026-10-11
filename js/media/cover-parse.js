@@ -12,7 +12,10 @@ export function _rd32be(u,p){ return (u[p]<<24|u[p+1]<<16|u[p+2]<<8|u[p+3])>>>0;
 export function _parseFlacPic(u,s,e){
   let p=s;
   p+=4;                                   // picture type
-  const mlen=_rd32be(u,p); p+=4; let mime=''; for(let i=0;i<mlen;i++) mime+=String.fromCharCode(u[p+i]); p+=mlen;
+  const mlen=_rd32be(u,p); p+=4;
+  // MIME長がブロック/バッファの残りを超える＝画像は取れない（以前もこの場合はnullだった）。ファイル中の値のまま回すと最大約43億回の連結で固まる
+  if(mlen>Math.min(e,u.length)-p) return null;
+  let mime=''; for(let i=0;i<mlen;i++) mime+=String.fromCharCode(u[p+i]); p+=mlen;
   const dlen=_rd32be(u,p); p+=4; p+=dlen; // description
   p+=16;                                  // width,height,depth,colors
   const plen=_rd32be(u,p); p+=4;
@@ -25,6 +28,7 @@ export function _id3Pic(u){
   const size=(u[6]<<21)|(u[7]<<14)|(u[8]<<7)|u[9];   // synchsafe
   let p=10; const end=Math.min(u.length,10+size);
   const parseAPIC=(s,e,v22)=>{
+    e=Math.min(e,u.length);                           // フレーム長はファイル中の値（最大約43億）。バッファの外まで1バイトずつ回さない
     let p=s; const enc=u[p]; p++; let mime='';
     if(v22){ mime=/png/i.test(String.fromCharCode(u[p],u[p+1],u[p+2]))?'image/png':'image/jpeg'; p+=3; }
     else { while(p<e&&u[p]!==0){ mime+=String.fromCharCode(u[p]); p++; } p++; }
@@ -88,7 +92,9 @@ export function _oggPic(u){    // OggS ページを再構成し、コメント�
   const vlen=rd(); q+=vlen;                            // vendor
   const n=rd();
   for(let i=0;i<n&&q<cu.length;i++){
-    const clen=rd(); let j=q, key='';
+    const clen=rd();
+    if(clen>cu.length-q) return null;                  // コメント長がパケットの残りを超える＝壊れている（以前もこの場合はnullだった）。最大約43億回の連結で固まるのを防ぐ
+    let j=q, key='';
     while(j<q+clen&&cu[j]!==0x3D){ key+=String.fromCharCode(cu[j]); j++; }
     if(key.toUpperCase()==='METADATA_BLOCK_PICTURE'){
       try{

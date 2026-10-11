@@ -52,10 +52,13 @@ def server():
     return s
 
 
-def req(method, path, host=None, headers=None, body=None, origin=None):
-    """生のHTTP要求を送って (status, headers, body bytes) を返す。path は加工せずそのまま送る"""
+def req(method, path, host=None, headers=None, body=None, origin=None, token=True):
+    """生のHTTP要求を送って (status, headers, body bytes) を返す。path は加工せずそのまま送る。
+    token=True なら合言葉（serve.SESSION_TOKEN）を X-NLM-Token に付ける（False＝付けない・文字列＝その値を付ける）"""
     s = server()
     h = {"Host": s_host(s) if host is None else host}
+    if token:
+        h["X-NLM-Token"] = s.serve.SESSION_TOKEN if token is True else token
     if origin:
         h["Origin"] = origin
     h.update(headers or {})

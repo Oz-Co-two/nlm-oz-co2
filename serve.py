@@ -1,6 +1,6 @@
 # NLM開発サーバー: キャッシュ無効ヘッダ付き（Chromeの古いファイル使い回しを根絶）
 # ＋ アセット(asset/)クリップの保存/改名/削除API（ローカル専用。Tauri化時はネイティブ書込みへ置換）
-import http.server, json, math, os, posixpath, re, shutil, subprocess, sys, tempfile, threading, time
+import hmac, http.server, json, math, os, posixpath, re, secrets, shutil, subprocess, sys, tempfile, threading, time
 from urllib.parse import unquote, urlsplit, parse_qs
 from rating_plugin import RatingPlugin, PluginError
 from app_update import Updater, UpdateError
@@ -38,6 +38,40 @@ def _safe(name):
 # カンマ区切りでホスト名を追加する（例: NLM_ALLOWED_HOSTS=nlm.local,192.168.0.10）。
 ALLOWED_HOSTS = {'127.0.0.1', 'localhost', '::1'} | {
     h.strip().lower() for h in (os.environ.get('NLM_ALLOWED_HOSTS') or '').split(',') if h.strip()}
+
+# ---- 合言葉（2026-10-11・セキュリティ点検 2026-10-10 の F8） ----
+# 上の①〜③はブラウザ経由の攻撃への対策で、ブラウザ以外のプログラムから直接送られると全部通る（固定の値なので誰でも付けられる）。
+# 同じPCの別アカウントや、ポート転送で届く LAN の他の機器から API を使われないよう、起動ごとの合言葉を X-NLM-Token ヘッダーで求める。
+#  - 画面へは URL の #k=… で渡す（access_url。# 以降はサーバーへも Referer にも送られない）。JS は settings-mirror.js が
+#    同じオリジンへの fetch/XHR に自動で付ける。
+#  - Cookie では渡さない: 127.0.0.1 の Cookie はポートを区別しないため、別ポートに立てられたページへも送られて盗まれる。
+#  - 合言葉なしで返すのは PUBLIC_* の静的ファイル（<script src>・<link>・<img>・import() はヘッダーを付けられない）だけ。
+#    守る場所を列挙すると取りこぼす（asset/ 内のジャンクションで抜けられた）ので、返してよい物だけを列挙する。
+SESSION_TOKEN = secrets.token_urlsafe(32)
+PUBLIC_FILES = {'editor.html'}
+PUBLIC_DIRS = {'js', 'css', 'icons', 'fonts', 'preview-v4'}
+
+
+def access_url(port, host='127.0.0.1'):
+    """合言葉付きの、エディタを開く URL"""
+    return 'http://%s:%d/editor.html#k=%s' % (host, port, SESSION_TOKEN)
+
+
+def _url_parts(path):
+    """URL のパスを translate_path と同じ手順で要素に分ける（? # を落とし、%xx を戻して .. を畳む）"""
+    rel = posixpath.normpath(unquote(path.split('?', 1)[0].split('#', 1)[0]))
+    return [p for p in rel.split('/') if p and p != '.']
+
+
+def _is_public(path):
+    """合言葉なしで返してよい静的ファイルか。名前の完全一致だけで判定する（大文字小文字のみ同一視）。
+    8.3 形式の短い名前・末尾の点などの別名は一致しない＝合言葉が要る側に倒れる"""
+    parts = [p.lower() for p in _url_parts(path)]
+    if not parts:
+        return False
+    if len(parts) == 1:
+        return parts[0] in PUBLIC_FILES
+    return parts[0] in PUBLIC_DIRS
 
 def _hostname(hostport):
     """'127.0.0.1:8138' / '[::1]:8138' / 'localhost' → ホスト名部分（小文字）"""
@@ -78,16 +112,18 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             return False
         if write and self.headers.get('X-NLM-Request') != '1':
             return False
+        if write or not _is_public(self.path):   # 合言葉（SESSION_TOKEN の説明）
+            given = (self.headers.get('X-NLM-Token') or '').encode('utf-8', 'replace')
+            return hmac.compare_digest(given, SESSION_TOKEN.encode('ascii'))
         return True
 
     def _deny(self):
         self._drain()   # 拒否する時も本体を読み捨ててから応答する（_drain の説明）
-        self.send_error(403, 'Forbidden (NLM local server: access from this host/origin is not allowed)')
+        self.send_error(403, 'Forbidden (NLM local server: this host/origin is not allowed, or the access key is missing.'
+                             ' Open the URL shown when the server started.)')
 
     def translate_path(self, path):
-        path = path.split('?', 1)[0].split('#', 1)[0]
-        rel = posixpath.normpath(unquote(path))
-        parts = [p for p in rel.split('/') if p and p != '.']
+        parts = _url_parts(path)
         # Windowsでは '\' やドライブ名('C:')もパス区切りとして効くため、1要素でもそれを含めば配信しない。
         # （例: /C:%5CWindows%5Cwin.ini がフォルダ外の実ファイルを返していた。元のSimpleHTTPRequestHandlerが
         #   持っていたこの検査を独自実装で落としていた。セキュリティ点検 2026-09-28）
@@ -431,4 +467,23 @@ def make_server(port=8138, bind='127.0.0.1'):
 
 if __name__ == '__main__':
     os.chdir(BASE_DIR)
-    http.server.test(HandlerClass=NoCacheHandler, port=8138, bind='127.0.0.1')
+    port = next((int(a.split('=', 1)[1]) for a in sys.argv[1:] if a.startswith('--port=')), 8138)
+    httpd = make_server(port=port)
+    url = access_url(port)
+    # 表示は英語(ASCII)だけ: 日本語は、日本語を表せない文字コードの環境で出力をファイルへ回すと変換に失敗して起動前に落ちる
+    print('NLM local server is running. Open this URL in Chrome / Edge'
+          ' (it contains an access key that changes every time the server starts):', flush=True)
+    print('  ' + url, flush=True)
+    print('Press Ctrl+C to stop.', flush=True)
+    if '--no-browser' not in sys.argv:   # 合言葉付きの URL を既定のブラウザで開く（開けなくても上の URL を開けばよい）
+        try:
+            import webbrowser
+            webbrowser.open(url)
+        except Exception:
+            pass
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()

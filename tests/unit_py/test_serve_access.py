@@ -141,3 +141,116 @@ def test_settings_fallback_default(t):
     H.post_json("/__settings/save", {"data": {"bsnm_test": "1"}})
     st, _, body = H.req("GET", "/config/settings.json")
     t.ok(b"bsnm_test" in body, "保存した設定が返る")
+
+
+def test_token_required(t):
+    '''API・利用者のデータ（設定・アセット・開いたファイル）・翻訳・開発用のファイルは、合言葉（X-NLM-Token）が無い・違う・
+    Cookie や URL で渡した時は403。ヘッダーで正しく渡せば通る（ブラウザ以外の同じPCの別アカウントや LAN から使わせない）'''
+    s = H.server()
+    tok = s.serve.SESSION_TOKEN
+    t.ok(len(tok) >= 40, "合言葉の長さ")
+    gets = ["/__openarg", "/config/settings.json", "/asset/", "/lang/ja.json", "/tools/fixtures/basic.nlmf", "/serve.py", "/"]
+    for bad in (False, "x" * len(tok), tok[:-1], tok + "x", "日本語".encode("utf-8")):   # ASCII 以外の値でも落ちずに断る
+        for p in gets:
+            st, _, _ = H.req("GET", p, token=bad)
+            t.eq(st, 403, f"GET {p} 合言葉={bad!r}")
+        st, _, _ = H.req("HEAD", "/config/settings.json", token=bad)
+        t.eq(st, 403, f"HEAD 合言葉={bad!r}")
+        for p in ("/__settings/save", "/__asset/delete", "/__openarg/save", "/__update/status", "/__nothing"):
+            st, _, _ = H.req("POST", p, headers={"X-NLM-Request": "1"}, body=b"{}", token=bad)
+            t.eq(st, 403, f"POST {p} 合言葉={bad!r}")
+    for how in ({"Cookie": f"X-NLM-Token={tok}"}, {"Cookie": f"nlm_session_{s.port}={tok}"}, {"Authorization": f"Bearer {tok}"}):
+        st, _, _ = H.req("GET", "/config/settings.json", headers=how, token=False)
+        t.eq(st, 403, f"ヘッダー以外では渡せない: {list(how)}")
+    st, _, _ = H.req("GET", f"/config/settings.json?k={tok}", token=False)
+    t.eq(st, 403, "URLの ?k= では渡せない")
+    st, _, _ = H.req("GET", "/config/settings.json", headers={"x-nlm-token": tok}, token=False)
+    t.eq(st, 200, "ヘッダー名の大文字小文字は問わない")
+    for p in ("/config/settings.json", "/asset/", "/lang/ja.json"):
+        st, _, _ = H.req("GET", p)
+        t.eq(st, 200, f"合言葉付き {p}")
+
+
+def test_public_static_without_token(t):
+    '''画面の部品（editor.html・js・css・icons・fonts・preview-v4）は合言葉なしで返す（<script src>・<link>・<img>・import() は
+    ヘッダーを付けられない）'''
+    font = next((H.ROOT / "fonts").glob("*.ttf")).name
+    for p in ("/editor.html", "/editor.html?dev=1", "/js/main.js", "/js/vendor/three/three.module.js", "/css/base.css",
+              "/icons/app_icon.svg", f"/fonts/{font}", "/preview-v4/preview-v4.js", "/preview-v4/env/DefaultEnvironment.json"):
+        st, _, _ = H.req("GET", p, token=False)
+        t.eq(st, 200, p)
+
+
+def test_token_aliases_and_junction(t):
+    '''合言葉なしで返す物は名前の完全一致で決める＝別名（大文字・末尾の点・%xx・.. で戻る・二重スラッシュ）や、
+    asset/ 内のジャンクション経由では、守っている場所を合言葉なしで読めない'''
+    s = H.server()
+    settings = (H.ROOT / "config" / "settings.default.json").read_bytes()
+    for p in ("/ASSET/", "/asset./", "/%61sset/", "/js/../config/settings.json", "/js/%2e%2e/config/settings.json",
+              "/editor.html/../config/settings.json", "/./config/settings.json", "//config/settings.json",
+              "/CONFIG~1/SETTIN~1.JSO", "/config./settings.json", "/js/..%5Cconfig%5Csettings.json", "/fonts/../serve.py"):
+        st, _, body = H.req("GET", p, token=False)
+        t.ok(st in (403, 404), f"{p} -> {st}")
+        t.ok(body != settings and b"import http.server" not in body, f"中身を返した: {p}")
+    import subprocess
+    import tempfile
+    outside = Path(tempfile.mkdtemp(prefix="nlm_unitpy_out_"))
+    (outside / "secret.nlmclip").write_text('{"secret":1}', encoding="utf-8")
+    link = Path(s.data_dir) / "asset" / "linked"
+    try:
+        os.symlink(str(outside), str(link), target_is_directory=True)
+    except (OSError, NotImplementedError):
+        if subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(outside)], capture_output=True).returncode != 0:
+            t.skip("リンクを作れない環境")
+    try:
+        for p in ("/asset/linked/", "/asset/linked/secret.nlmclip"):
+            st, _, body = H.req("GET", p, token=False)
+            t.eq(st, 403, f"ジャンクション経由・合言葉なし {p}")
+        st, _, body = H.req("GET", "/asset/linked/secret.nlmclip")
+        t.eq((st, body), (200, b'{"secret":1}'), "合言葉付きなら従来どおり読める")
+    finally:
+        os.rmdir(str(link))   # リンク（シンボリックリンク・ジャンクション）だけを外す。リンク先は消えない
+
+
+def test_standalone_start_message(t):
+    '''python serve.py 単体の起動: 合言葉付きの URL を英語(ASCII)で表示し、日本語を表せない文字コードで出力をファイルへ回しても
+    落ちずに待ち受ける（以前の修正案は日本語の表示で起動前に落ちた）。表示された合言葉で使える'''
+    import http.client
+    import re
+    import subprocess
+    import tempfile
+    import time
+    port = H._free_port()
+    env = dict(os.environ, NLM_DATA_DIR=tempfile.mkdtemp(prefix="nlm_unitpy_sa_"), PYTHONIOENCODING="cp1252", PYTHONUTF8="0")
+    env.pop("NLM_OPEN_FILE", None)
+    p = subprocess.Popen([sys.executable, str(H.ROOT / "serve.py"), f"--port={port}", "--no-browser"], cwd=str(H.ROOT),
+                         env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    try:
+        def get(path, tok=None):
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            try:
+                c.request("GET", path, headers={"Host": f"127.0.0.1:{port}", **({"X-NLM-Token": tok} if tok else {})})
+                return c.getresponse().status
+            finally:
+                c.close()
+        for _ in range(100):
+            if p.poll() is not None:
+                break
+            try:
+                if get("/editor.html") == 200:
+                    break
+            except OSError:
+                time.sleep(0.1)
+        t.ok(p.poll() is None, "起動して待ち受けている: " + (p.stderr.read().decode("cp1252", "replace") if p.poll() is not None else ""))
+        out = b"".join(p.stdout.readline() for _ in range(3))   # 待ち受ける前に表示し終えている
+        t.ok(out.isascii(), "表示は ASCII だけ")
+        m = re.search(rb"http://127\.0\.0\.1:%d/editor\.html#k=([A-Za-z0-9_-]+)" % port, out)
+        t.ok(m, "合言葉付きの URL を表示: " + out.decode("ascii", "replace"))
+        t.eq(get("/config/settings.json"), 403, "合言葉なし")
+        t.eq(get("/config/settings.json", m.group(1).decode("ascii")), 200, "表示された合言葉で使える")
+    finally:
+        p.terminate()
+        try:
+            p.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            p.kill()

@@ -7,8 +7,8 @@ import json
 from urllib.parse import quote
 
 from e2e_helpers import wait_until
+from misc_helpers import stub_convert, convert_calls   # e2e_info を読み込み先に足すので info_helpers より先に（このファイルだけを回す時に要る）
 from info_helpers import to_info
-from misc_helpers import stub_convert, convert_calls
 from test_native import OUT_BASE, _native_project, _reopen, _export_and_wait, _text
 
 

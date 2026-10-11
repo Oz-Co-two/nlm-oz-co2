@@ -1,9 +1,30 @@
 // editor.html から分離（2026-09-28）: CSP(Content-Security-Policy)でインラインスクリプトを禁止するため外部ファイル化。
+// ※ 先頭の合言葉の部分は、他のどの通信よりも前に動く必要がある（ここが最初に読まれるスクリプト）。
 // モジュール(main.js)より前に同期で読み込まれる必要がある＝editor.htmlでは type="module" を付けずに読み込むこと。
 // 個人の環境設定(bsnm_*)を config/settings.json にミラー保存＝localStorage喪失(サイトデータ削除/別オリジン)対策。
 // localStorage は従来どおり作業キャッシュとして使い、起動時にファイル→localStorage、変更時にlocalStorage→ファイル。
 // ※UIレイアウト系(パネル位置/画面比率/色履歴)は高頻度・マシン依存のためファイル対象外＝localStorage専用。
 // ※フォルダ/音源のFileHandle(IndexedDB)はJSON化不可なので対象外（従来どおりIndexedDB保持）。
+// 合言葉（2026-10-11）: serve.py は起動ごとの合言葉を X-NLM-Token ヘッダーで求める（静的ファイルを除く。serve.py の SESSION_TOKEN）。
+// 画面へは URL の #k=… で渡る。同じオリジンへの fetch / XHR に自動で付ける＝個々の通信で付け忘れない（このファイルが最初に読まれる）。
+(function(){
+  var m=/(?:^#|&)k=([A-Za-z0-9_-]+)/.exec(location.hash), tok=m?m[1]:'';
+  if(!tok){ if(location.protocol.indexOf('http')===0) window.__nlmNoToken=true; return; }   // 案内は editor-app.js（言語の読込後）
+  function same(u){ try{ return new URL(u,location.href).origin===location.origin; }catch(_){ return false; } }
+  var _fetch=window.fetch;
+  window.fetch=function(input,init){
+    var req=(typeof Request!=='undefined'&&input instanceof Request);
+    if(same(req?input.url:String(input))){
+      init=Object.assign({},init||{});
+      var h=new Headers(init.headers||(req?input.headers:undefined));   // init.headers は Request 側のヘッダーを丸ごと置き換えるので合成する
+      h.set('X-NLM-Token',tok); init.headers=h;
+    }
+    return _fetch.call(window,input,init);
+  };
+  var _open=XMLHttpRequest.prototype.open, _send=XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open=function(method,url){ this._nlmTok=same(url); return _open.apply(this,arguments); };
+  XMLHttpRequest.prototype.send=function(){ if(this._nlmTok) this.setRequestHeader('X-NLM-Token',tok); return _send.apply(this,arguments); };
+})();
 (function(){
   // ファイルにミラーしない=localStorage専用（Tauri住み分け: UIレイアウト/高頻度/マシン依存）
   var LOCAL_ONLY={bsnm_keypos:1,bsnm_keyfold:1,bsnm_split:1};

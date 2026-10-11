@@ -5,6 +5,7 @@
 #   - ローカルの空きポートで serve.py を起動し、WebView2 のネイティブウィンドウで表示する。
 #     serve.py をそのまま使うので、フォルダ走査・保存・書き出し等のフロント実装は一切変更不要。
 import os, sys, json, socket, threading
+from urllib.parse import urlsplit
 
 # ★pywebview(WinForms) が使う pythonnet のランタイムを .NET Framework(netfx) に固定する。
 #   pythonnet 3.x は既定で coreclr(.NET 6+) を優先するが、素の Windows 11 は .NET ランタイム
@@ -247,6 +248,25 @@ def _npath(p):
     """比較用の正規化パス（ジャンクション/シンボリックリンクも実体へ解決・大文字小文字を無視）。"""
     return os.path.normcase(os.path.realpath(os.path.abspath(str(p))))
 
+def _lpath(p):
+    """比較用の正規化パス（字面だけ＝ファイルシステムに触れない。大文字小文字を無視）。"""
+    return os.path.normcase(os.path.normpath(p))
+
+def _path_kind(p):
+    """JSから来たパスを字面だけで分類する（ファイルシステムには触れない）。
+    'local'=ドライブ名から始まる絶対パス(C:\\...) / 'unc'=ネットワーク上のパス(\\\\server\\share\\...) / None=それ以外。
+    \\\\?\\・\\\\.\\（デバイスパス）、\\??\\（NTパス）、\\から始まるパス、相対パス、C:foo は None。"""
+    if not isinstance(p, str) or not p or '\0' in p:
+        return None
+    s = p.replace('/', '\\')
+    if len(s) >= 3 and s[0].isascii() and s[0].isalpha() and s[1] == ':' and s[2] == '\\':
+        return 'local'
+    if s.startswith('\\\\') and len(s) > 2 and s[2] not in '?.\\':
+        host, _, rest = s[2:].partition('\\')
+        if host and rest.split('\\')[0]:
+            return 'unc'
+    return None
+
 def _is_under(root, p):
     try:
         return os.path.commonpath([root, p]) == root
@@ -254,29 +274,65 @@ def _is_under(root, p):
         return False
 
 class _NativeAccess:
+    # ネットワーク上のパス(UNC)は、存在確認・実体の解決をするだけでWindowsがそのサーバーへ接続し、利用者のNTLM認証を送る。
+    # 細工した.nlmfに \\攻撃者\... を書かれると開いただけで送ってしまうため、UNCは「このPCでダイアログから選んだファイル」か
+    # 「許可済み出力フォルダの中」に字面で一致する時だけ触る（may_touch）。一致の判定に使う字面の一覧も保存先jsonに残す。
     def __init__(self, store_file):
         self.store_file = store_file
         self.picked_files = set()   # このセッションでダイアログから選ばれたファイル（拡張子が想定外でも読めるように）
+        self.out_dirs, self.unc_out_dirs, self.unc_files = set(), set(), set()
         try:
             with open(store_file, 'r', encoding='utf-8') as f:
-                self.out_dirs = {_npath(d) for d in json.load(f).get('out_dirs', []) if isinstance(d, str)}
+                data = json.load(f)
+            self.out_dirs = {_npath(d) for d in data.get('out_dirs', []) if isinstance(d, str)}
+            # ダイアログで選んだUNCの出力フォルダ・ファイル（字面のまま。DFS等で実体のパスと違っても一致させるため）
+            self.unc_out_dirs = {_lpath(d) for d in data.get('unc_out_dirs', []) if _path_kind(d) == 'unc'}
+            self.unc_files = {_lpath(d) for d in data.get('unc_files', []) if _path_kind(d) == 'unc'}
         except Exception:
-            self.out_dirs = set()
+            pass
 
-    def approve_dir(self, path):
-        self.out_dirs.add(_npath(path))
+    def _save(self):
         try:
             os.makedirs(os.path.dirname(self.store_file), exist_ok=True)
             with open(self.store_file, 'w', encoding='utf-8') as f:
-                json.dump({'out_dirs': sorted(self.out_dirs)}, f, ensure_ascii=False, indent=1)
+                json.dump({'out_dirs': sorted(self.out_dirs), 'unc_out_dirs': sorted(self.unc_out_dirs),
+                           'unc_files': sorted(self.unc_files)}, f, ensure_ascii=False, indent=1)
         except OSError:
             pass   # 保存に失敗しても今回のセッションは使える（次回は再接続が必要になるだけ）
 
+    def approve_dir(self, path):
+        self.out_dirs.add(_npath(path))
+        if _path_kind(path) == 'unc':
+            self.unc_out_dirs.add(_lpath(path))
+        self._save()
+
+    def approve_file(self, path):   # ダイアログで選ばれたファイル。UNCなら次回以降の自動読込のために字面を保存する
+        self.picked_files.add(_npath(path))
+        if _path_kind(path) == 'unc':
+            self.unc_files.add(_lpath(path))
+            self._save()
+
+    def may_touch(self, path):
+        """JSから来たパスにファイルシステムで触れて（存在確認・実体の解決・読み書き）よいか。字面だけで判定する。
+        ドライブ名から始まる絶対パスは可。UNCはこのPCでダイアログから選んだファイル・許可済み出力フォルダの中だけ。他は不可。"""
+        k = _path_kind(path)
+        if k == 'local':
+            return True
+        if k != 'unc':
+            return False
+        p = _lpath(path)
+        dirs = self.unc_out_dirs | {d for d in self.out_dirs if _path_kind(d) == 'unc'}
+        return p in self.unc_files or any(_is_under(d, p) for d in dirs)
+
     def in_out_dir(self, path):
+        if not self.may_touch(path):   # 実体の解決(realpath)も接続を起こすので、その前に字面で確かめる
+            return False
         p = _npath(path)
         return any(_is_under(d, p) for d in self.out_dirs)
 
     def can_read(self, path):
+        if not self.may_touch(path):
+            return False
         return (os.path.splitext(path)[1].lower() in _READ_EXTS
                 or _npath(path) in self.picked_files or self.in_out_dir(path))
 
@@ -284,6 +340,208 @@ class _NativeAccess:
         name = os.path.basename(path)
         return (':' not in name and os.path.splitext(name)[1].lower() in _WRITE_EXTS
                 and self.in_out_dir(os.path.dirname(path)))
+
+# ---- ファイルの書き込みの許可（WebView2・2026-10-11）----
+# 「開く…」等のファイル選択画面（File System Access API）で選んだファイルは読み込みの許可しか付かず、保存の時に
+# requestPermission で書き込みの許可を求めると、WebView2 が画面の上の端に枠も無い確認を出す（見落としやすく、見た目も位置も変えられない）。
+# exe版ではこの確認を出さずに許可する。書き込み先にできるのは利用者が選んだ（またはドラッグした）ファイル・フォルダだけで
+# （画面のコードからパスを指定してつかむことはできない）、書き出し先フォルダの決まり（ダイアログで選んだ所だけ）と同じ考え方。
+# 許可するのは次の両方を満たす時だけ（利用者と決めた条件）: ファイルの読み書きの種類／このアプリ自身の画面（この起動の
+# http://127.0.0.1:<port>）から。許可はプロファイルに保存しない。他の種類（カメラ等）は既定の確認のまま。
+# 「利用者の操作から始まった要求だけ」も条件にする予定だったが、WebView2 はこの種類の要求の IsUserInitiated を、クリックの中で
+# すぐ求めても常に False と報告するため使えない（2026-10-11に実機で確認）。操作の無い要求も問い合わせまで届く。
+# ただ画面に悪いスクリプトが入り込んだ場合、それは利用者の次のクリックを待てば済むので、この条件ではほとんど守れない（利用者と相談して外した）。
+def _file_rw_allowed(uri, origin, is_file_rw):
+    """WebView2 の許可の問い合わせを確認なしで許可してよいか。origin は 'http://127.0.0.1:<port>'（大文字小文字は区別しない・完全一致）"""
+    if not is_file_rw:
+        return False
+    try:
+        u = urlsplit(str(uri))
+    except ValueError:
+        return False
+    return f'{u.scheme}://{u.netloc}'.lower() == origin.lower()   # netloc の完全一致＝別のポート・userinfo（http://127.0.0.1:p@別のサイト）は通らない
+
+
+def _file_rw_handler(origin, file_rw_kind, allow_state):
+    """CoreWebView2.PermissionRequested に足すハンドラーを作る（.NET の値は引数で受け取る＝単体テストで偽物を渡せる）。
+    UIスレッドで呼ばれるので、ここで画面（JS）の応答を待たないこと（待つとデッドロックする）"""
+    def on_permission(sender, args):
+        try:
+            if not _file_rw_allowed(args.Uri, origin, args.PermissionKind == file_rw_kind):
+                return   # 何もしない＝WebView2 の既定の確認
+            try:
+                args.SavesInProfile = False   # 次の起動に持ち越さない（古い WebView2 には無い項目）
+            except Exception:
+                pass
+            args.State = allow_state
+        except Exception:
+            pass   # 失敗したら既定の確認のまま
+    return on_permission
+
+
+_PERMISSION_HANDLERS = []   # .NET へ渡したハンドラーを生かしておく（Python 側で消えないように）
+
+
+def _auto_allow_file_rw(win, origin):
+    """最初のページの読み込みが終わった時に、WebView2 本体へ許可の問い合わせのハンドラーを1回だけ足す。
+    pywebview の内部（win.native.browser.webview）を使うので、無い・失敗した時は何もしない（既定の確認のまま）。
+    loaded は pywebview が別スレッドで呼ぶ＝UIスレッドへ Invoke して足す（CoreWebView2 はUIスレッドからしか触れない）"""
+    done = []
+
+    def on_loaded():
+        if done:
+            return
+        done.append(True)
+        try:
+            from System import Action
+            from Microsoft.Web.WebView2.Core import CoreWebView2PermissionKind, CoreWebView2PermissionState
+            kind = getattr(CoreWebView2PermissionKind, 'FileReadWrite', None)
+            wv = getattr(getattr(win.native, 'browser', None), 'webview', None)
+            if kind is None or wv is None:
+                return
+            handler = _file_rw_handler(origin, kind, CoreWebView2PermissionState.Allow)
+            _PERMISSION_HANDLERS.append(handler)
+
+            def add():
+                wv.CoreWebView2.PermissionRequested += handler
+            wv.Invoke(Action(add))
+        except Exception:
+            pass
+    win.events.loaded += on_loaded
+
+
+def _make_api(access, data_root, close_state, webview):
+    """JS（window.pywebview.api）へ渡す窓口を作る。main() の外に置いて、単体テストから本物の入口を呼べるようにしてある
+    （webview は main() で import したもの。テストでは偽物を渡す）。"""
+    class Api:
+        def set_dirty(self, on):
+            close_state['dirty'] = bool(on)
+
+        def quit_app(self):
+            close_state['force'] = True
+            threading.Thread(target=lambda: webview.windows[0].destroy(), daemon=True).start()
+
+
+        # ブラウザのFile System Access APIは絶対パスを一切JSへ渡さないため、再オープン時の
+        # 自動読込ができない（handleをIndexedDBに保存する手も別問題でWebView2をクラッシュさせる）。
+        # pywebviewのネイティブダイアログは実パスを返すので、音源だけこちら経由にして
+        # そのパスをプロジェクトJSONへ保存 → 次回はダイアログ無しでPythonが直接読み込む。
+        def pick_song_file(self):
+            tx = _DLG_TEXT[_ui_lang(data_root)]
+            paths = webview.windows[0].create_file_dialog(
+                webview.FileDialog.OPEN,
+                file_types=(tx['audio'] + ' (*.egg;*.ogg;*.oga;*.opus;*.mp3;*.m4a;*.aac;*.wav;*.flac;*.weba;*.webm)',
+                            tx['all'] + ' (*.*)'))
+            if paths:
+                access.approve_file(paths[0])
+            return paths[0] if paths else None
+
+        def read_song_file(self, path):   # 名前は曲用だが、カバー画像・出力フォルダ内の目印ファイルの読込にも使う汎用読込
+            import base64
+            try:
+                if not path:
+                    return {'ok': False, 'error': 'not-found'}
+                if not access.may_touch(path):   # 存在確認より前に（UNCは確認しただけで接続・認証が起きる）
+                    return {'ok': False, 'error': 'not-allowed'}
+                if not os.path.isfile(path):
+                    return {'ok': False, 'error': 'not-found'}
+                if not access.can_read(path):
+                    return {'ok': False, 'error': 'not-allowed'}
+                with open(path, 'rb') as f:
+                    data = f.read()
+                return {'ok': True, 'name': os.path.basename(path), 'mtime': os.path.getmtime(path),
+                        'data': base64.b64encode(data).decode('ascii')}
+            except Exception as e:
+                return {'ok': False, 'error': str(e)}
+
+        # ---- 出力フォルダ / カバー画像もネイティブ方式（曲と同じ理由）----
+        # 出力フォルダ・カバー画像もブラウザのFile System Access APIだと絶対パスが取れず、再オープンのたびに
+        # 選び直しになり、しかも id指定で覚える「前回の場所」が現在のパスとズレて古い場所で開いてしまう。
+        # ネイティブダイアログの実パスをプロジェクトへ保存し、JS側の疑似ハンドル(mkNativeDir/mkNativeFile)が
+        # 下のfs_*を呼ぶ＝書き出し処理はFileSystemHandleと同じ呼び方のまま動く。
+        def pick_folder(self, start=''):
+            kw = {'directory': start} if start and access.may_touch(start) and os.path.isdir(start) else {}
+            paths = webview.windows[0].create_file_dialog(webview.FileDialog.FOLDER, **kw)
+            if paths:
+                access.approve_dir(paths[0])   # ユーザーが自分で選んだ＝書き出し先として許可（次回以降も自動接続できる）
+            return paths[0] if paths else None
+
+        def pick_image_file(self, start=''):
+            d = os.path.dirname(start) if start and access.may_touch(start) else ''
+            kw = {'directory': d} if d and os.path.isdir(d) else {}
+            tx = _DLG_TEXT[_ui_lang(data_root)]
+            paths = webview.windows[0].create_file_dialog(
+                webview.FileDialog.OPEN,
+                file_types=(tx['image'] + ' (*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp)', tx['all'] + ' (*.*)'), **kw)
+            if paths:
+                access.approve_file(paths[0])
+            return paths[0] if paths else None
+
+        @staticmethod
+        def _child(base, name):   # 名前は1階層分のみ許可（'..'や区切り文字で外へ出さない）
+            if not name or name in ('.', '..') or any(c in name for c in '/\\:'):
+                return None
+            return os.path.join(base, name)
+
+        def out_dir_ok(self, path):
+            # 保存済みの出力フォルダへ自動接続してよいか: 'ok'=許可済み / 'unapproved'=このPCで未選択 / 'missing'=存在しない
+            if not path:
+                return 'missing'
+            if not access.may_touch(path):   # このPCで選んでいないネットワーク上のフォルダ等は、存在確認もしない
+                return 'unapproved'
+            if not os.path.isdir(path):
+                return 'missing'
+            return 'ok' if access.in_out_dir(path) else 'unapproved'
+
+        def fs_isfile(self, path):
+            return bool(path) and access.may_touch(path) and os.path.isfile(path) and access.can_read(path)
+
+        def fs_subdir(self, base, name, create):
+            try:
+                if not base or not access.in_out_dir(base):
+                    return {'ok': False, 'error': 'not-allowed'}
+                p = self._child(base, name)
+                if not p:
+                    return {'ok': False, 'error': 'bad-name'}
+                if create:
+                    os.makedirs(p, exist_ok=True)
+                if not os.path.isdir(p):
+                    return {'ok': False, 'error': 'not-found'}
+                return {'ok': True, 'path': p}
+            except Exception as e:
+                return {'ok': False, 'error': str(e)}
+
+        def fs_file(self, base, name, create):
+            try:
+                if not base or not access.in_out_dir(base):
+                    return {'ok': False, 'error': 'not-allowed'}
+                p = self._child(base, name)
+                if not p:
+                    return {'ok': False, 'error': 'bad-name'}
+                if not create and not os.path.isfile(p):
+                    return {'ok': False, 'error': 'not-found'}
+                return {'ok': True, 'path': p}   # create時の実体作成はfs_writeが行う
+            except Exception as e:
+                return {'ok': False, 'error': str(e)}
+
+        def fs_write(self, path, b64):
+            import base64
+            try:
+                if not path:
+                    return {'ok': False, 'error': 'no-dir'}
+                if not access.may_touch(path):
+                    return {'ok': False, 'error': 'not-allowed'}
+                if not os.path.isdir(os.path.dirname(path)):
+                    return {'ok': False, 'error': 'no-dir'}
+                if not access.can_write(path):
+                    return {'ok': False, 'error': 'not-allowed'}
+                with open(path, 'wb') as f:
+                    f.write(base64.b64decode(b64))
+                return {'ok': True}
+            except Exception as e:
+                return {'ok': False, 'error': str(e)}
+    return Api()
+
 
 def main():
     # 自動更新の差し替え役として起動された（旧版が _update/new/ に展開したこの exe を起動した）時は、
@@ -320,125 +578,9 @@ def main():
     close_state = {'dirty': False, 'force': False}
     access = _NativeAccess(os.path.join(data_root, 'config', 'native_out_dirs.json'))
 
-    class Api:
-        def set_dirty(self, on):
-            close_state['dirty'] = bool(on)
+    api = _make_api(access, data_root, close_state, webview)
 
-        def quit_app(self):
-            close_state['force'] = True
-            threading.Thread(target=lambda: webview.windows[0].destroy(), daemon=True).start()
-
-
-        # ブラウザのFile System Access APIは絶対パスを一切JSへ渡さないため、再オープン時の
-        # 自動読込ができない（handleをIndexedDBに保存する手も別問題でWebView2をクラッシュさせる）。
-        # pywebviewのネイティブダイアログは実パスを返すので、音源だけこちら経由にして
-        # そのパスをプロジェクトJSONへ保存 → 次回はダイアログ無しでPythonが直接読み込む。
-        def pick_song_file(self):
-            tx = _DLG_TEXT[_ui_lang(data_root)]
-            paths = webview.windows[0].create_file_dialog(
-                webview.FileDialog.OPEN,
-                file_types=(tx['audio'] + ' (*.egg;*.ogg;*.oga;*.opus;*.mp3;*.m4a;*.aac;*.wav;*.flac;*.weba;*.webm)',
-                            tx['all'] + ' (*.*)'))
-            if paths:
-                access.picked_files.add(_npath(paths[0]))
-            return paths[0] if paths else None
-
-        def read_song_file(self, path):   # 名前は曲用だが、カバー画像・出力フォルダ内の目印ファイルの読込にも使う汎用読込
-            import base64
-            try:
-                if not path or not os.path.isfile(path):
-                    return {'ok': False, 'error': 'not-found'}
-                if not access.can_read(path):
-                    return {'ok': False, 'error': 'not-allowed'}
-                with open(path, 'rb') as f:
-                    data = f.read()
-                return {'ok': True, 'name': os.path.basename(path), 'mtime': os.path.getmtime(path),
-                        'data': base64.b64encode(data).decode('ascii')}
-            except Exception as e:
-                return {'ok': False, 'error': str(e)}
-
-        # ---- 出力フォルダ / カバー画像もネイティブ方式（曲と同じ理由）----
-        # 出力フォルダ・カバー画像もブラウザのFile System Access APIだと絶対パスが取れず、再オープンのたびに
-        # 選び直しになり、しかも id指定で覚える「前回の場所」が現在のパスとズレて古い場所で開いてしまう。
-        # ネイティブダイアログの実パスをプロジェクトへ保存し、JS側の疑似ハンドル(mkNativeDir/mkNativeFile)が
-        # 下のfs_*を呼ぶ＝書き出し処理はFileSystemHandleと同じ呼び方のまま動く。
-        def pick_folder(self, start=''):
-            kw = {'directory': start} if start and os.path.isdir(start) else {}
-            paths = webview.windows[0].create_file_dialog(webview.FileDialog.FOLDER, **kw)
-            if paths:
-                access.approve_dir(paths[0])   # ユーザーが自分で選んだ＝書き出し先として許可（次回以降も自動接続できる）
-            return paths[0] if paths else None
-
-        def pick_image_file(self, start=''):
-            d = os.path.dirname(start) if start else ''
-            kw = {'directory': d} if d and os.path.isdir(d) else {}
-            tx = _DLG_TEXT[_ui_lang(data_root)]
-            paths = webview.windows[0].create_file_dialog(
-                webview.FileDialog.OPEN,
-                file_types=(tx['image'] + ' (*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp)', tx['all'] + ' (*.*)'), **kw)
-            if paths:
-                access.picked_files.add(_npath(paths[0]))
-            return paths[0] if paths else None
-
-        @staticmethod
-        def _child(base, name):   # 名前は1階層分のみ許可（'..'や区切り文字で外へ出さない）
-            if not name or name in ('.', '..') or any(c in name for c in '/\\:'):
-                return None
-            return os.path.join(base, name)
-
-        def out_dir_ok(self, path):
-            # 保存済みの出力フォルダへ自動接続してよいか: 'ok'=許可済み / 'unapproved'=このPCで未選択 / 'missing'=存在しない
-            if not path or not os.path.isdir(path):
-                return 'missing'
-            return 'ok' if access.in_out_dir(path) else 'unapproved'
-
-        def fs_isfile(self, path):
-            return bool(path) and os.path.isfile(path) and access.can_read(path)
-
-        def fs_subdir(self, base, name, create):
-            try:
-                if not base or not access.in_out_dir(base):
-                    return {'ok': False, 'error': 'not-allowed'}
-                p = self._child(base, name)
-                if not p:
-                    return {'ok': False, 'error': 'bad-name'}
-                if create:
-                    os.makedirs(p, exist_ok=True)
-                if not os.path.isdir(p):
-                    return {'ok': False, 'error': 'not-found'}
-                return {'ok': True, 'path': p}
-            except Exception as e:
-                return {'ok': False, 'error': str(e)}
-
-        def fs_file(self, base, name, create):
-            try:
-                if not base or not access.in_out_dir(base):
-                    return {'ok': False, 'error': 'not-allowed'}
-                p = self._child(base, name)
-                if not p:
-                    return {'ok': False, 'error': 'bad-name'}
-                if not create and not os.path.isfile(p):
-                    return {'ok': False, 'error': 'not-found'}
-                return {'ok': True, 'path': p}   # create時の実体作成はfs_writeが行う
-            except Exception as e:
-                return {'ok': False, 'error': str(e)}
-
-        def fs_write(self, path, b64):
-            import base64
-            try:
-                if not path or not os.path.isdir(os.path.dirname(path)):
-                    return {'ok': False, 'error': 'no-dir'}
-                if not access.can_write(path):
-                    return {'ok': False, 'error': 'not-allowed'}
-                with open(path, 'wb') as f:
-                    f.write(base64.b64decode(b64))
-                return {'ok': True}
-            except Exception as e:
-                return {'ok': False, 'error': str(e)}
-
-    api = Api()
-
-    url = 'http://127.0.0.1:%d/editor.html' % port
+    url = serve.access_url(port)   # 合言葉（#k=…）付き。serve.py の SESSION_TOKEN の説明
     win = webview.create_window(
         ('Non-Linear Mapper ' + _app_version(app_root)).strip(),   # 例: Non-Linear Mapper v1.1.0-oz（スクリーンショットで版が分かるように）
         url,
@@ -464,6 +606,7 @@ def main():
         threading.Thread(target=ask, daemon=True).start()
         return False
     win.events.closing += _on_closing
+    _auto_allow_file_rw(win, f'http://127.0.0.1:{port}')   # 選んだファイルへの書き込みの許可の確認を出さない（上の「ファイルの書き込みの許可」）
     try:
         webview.start()   # WebView2 (Edge Chromium) を使用。既定でメインスレッドをブロック。
     finally:
