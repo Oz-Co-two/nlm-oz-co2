@@ -6,6 +6,7 @@
 - open_fixture(t, 素材名): ページを開き直して素材を読む（t.fresh の短い待ち版）
 - wait_until(ed, js式): 状態の待ち合わせ（固定の sleep を避ける）
 - 入力の小道具: hover_3d / switch_diff / place_cell など
+- media_lib_load(ed, extra): MEDIA の記録したライブラリにテスト素材 tools/fixtures/media_lib を出す（画面テスト・英語表示の点検でも使う）
 """
 import json
 import time
@@ -170,3 +171,105 @@ def switch_diff(ed, name):
     ed.key(DIFF_KEY[name])
     wait_until(ed, f"window._dbgApp.state().diff==='{name}Standard.dat'", label=f"難易度 {name} への切替")
     ed.wait(0.1)
+
+
+# ---- MEDIA の記録したライブラリ（2026-10-12）----
+from pathlib import Path as _Path
+MEDIA_LIB = _Path(__file__).resolve().parents[2] / "tools" / "fixtures" / "media_lib"
+_EXTRA_JS = r"""(()=>{ window.__libExtra=%s;
+  if(window.__libExtraHooked) return true; window.__libExtraHooked=true;
+  const of=window.fetch;
+  window.fetch=async function(u,init){ const r=await of.apply(this,arguments);
+    if(String(u&&u.url||u).endsWith('__lib/extra')){ const j=await r.clone().json(), X=window.__libExtra||{};
+      if(j&&j.extra) for(const k in X) j.extra[k]=Object.assign({},j.extra[k]||{},X[k]);
+      return new Response(JSON.stringify(j),{status:200,headers:{'Content-Type':'application/json; charset=utf-8'}}); }
+    return r; };
+  return true; })()"""
+
+
+def media_lib_record(ed, *paths):
+    """config/library.json に記録を書く（exe 版のフォルダ選択ダイアログで選んだのと同じ状態。JS から記録を増やす口は無い）"""
+    cfg = _Path(ed.data_dir) / "config"
+    cfg.mkdir(parents=True, exist_ok=True)
+    (cfg / "library.json").write_text(json.dumps({"libs": [{"path": str(p)} for p in paths]}, ensure_ascii=False), encoding="utf-8")
+
+
+def media_lib_extra(ed, extra):
+    """/__lib/extra の応答に extra（{rel: {net?, play?, est?}}）を重ねる（ページ内の fetch を包む。開き直すと消える）"""
+    ed.js(_EXTRA_JS % json.dumps(extra, ensure_ascii=False))
+
+
+def media_lib_wait(ed, timeout=20):
+    """記録したライブラリの走査（見つからない物を除く）と、その後の extra の読み込みが終わるまで待つ"""
+    return wait_until(ed, """(s=>{ const n=s.libs.filter(l=>l.native); return n.length>0&&n.every(l=>l.state!=='ok'||(!l.scanning&&l.extra===l.songs&&l.songs>0)); })(window._dbgApp.lib())""",
+                      timeout=timeout, label="ライブラリの走査")
+
+
+# ネット・プラグインの窓口（/__lib/details・beatsaver・rate・playdata）の応答をページ内で差し替える。ネットとプラグインには出ない
+# （テストのサーバーは NLM_NO_NET でネットへ出ないが、差し替えれば「取得できた」「見つかった」「混んでいる」等の応答を作れる）。
+# 差し替えた窓口への要求は __libMock.calls に残り、同時に処理中だった数の最大を __libMock.max に数える（★の計算の同時の数の確認）。
+# /__lib/extra は差し替えずに要求だけを残す（全曲データの ON/OFF で net:false を送るかの確認）
+_MOCK_JS = r"""(()=>{ const M=window.__libMock=window.__libMock||{calls:[],h:{},inflight:{},max:{}};
+  if(window.__libMockHooked) return true; window.__libMockHooked=true;
+  const of=window.fetch;
+  window.fetch=async function(u,init){
+    const m=/__lib\/(details|beatsaver|rate|playdata|extra)$/.exec(String(u&&u.url||u)), h=m&&M.h[m[1]];
+    let body={}; if(m){ try{ body=JSON.parse((init&&init.body)||'{}'); }catch(_){} }
+    if(m&&m[1]==='extra') M.calls.push({act:'extra',body});
+    if(!h) return of.apply(this,arguments);
+    const act=m[1];
+    M.calls.push({act,body});
+    M.inflight[act]=(M.inflight[act]||0)+1; M.max[act]=Math.max(M.max[act]||0,M.inflight[act]);
+    try{ const r=await h(body); return new Response(JSON.stringify(r),{status:200,headers:{'Content-Type':'application/json; charset=utf-8'}}); }
+    finally{ M.inflight[act]--; } };
+  return true; })()"""
+# 全曲データの見本の状態（2026-10-12 06:30 時点のデータ・取得済み）。画面テスト・英語表示の点検でも使う
+SAMPLE_AS_OF = 1791754200   # 2026-10-12 06:30（日本時間）
+SAMPLE_DETAILS = "b=>({state:'ok',asOf:%d,fetchedAt:%d,did:b.act==='update'?'throttled':undefined})" % (SAMPLE_AS_OF, SAMPLE_AS_OF + 3600)
+
+
+def media_lib_mock(ed, **handlers):
+    """/__lib/<窓口> の応答をページ内で差し替える。値は JS の関数の式（要求の本体 b を受けて応答を返す。async 可）。None で差し替えをやめる。
+    例: media_lib_mock(ed, rate="async b=>{ await new Promise(r=>setTimeout(r,200)); return {ok:false,error:'notInstalled'}; }")"""
+    ed.js(_MOCK_JS)
+    for act, fn in handlers.items():
+        ed.js(f"window.__libMock.h[{json.dumps(act)}]={fn or 'undefined'};true")
+
+
+def media_lib_calls(ed, act=None):
+    """差し替えた窓口へ来た要求 [{act, body}]（act を渡すとその窓口だけ）"""
+    cs = ed.js("window.__libMock?window.__libMock.calls:[]")
+    return [c for c in cs if act is None or c["act"] == act]
+
+
+def media_lib_load(ed, extra=None, paths=None, covers=0, details=None):
+    """ライブラリ（既定は tools/fixtures/media_lib）を記録してページに読ませ（起動時と同じ loadNativeLibs）、走査が終わるまで待つ。
+    covers: 読み込みを待つカバー・画像の数（見えている物から読む）。details: 全曲データの状態の応答の差し替え（JS の関数の式。
+    SAMPLE_DETAILS＝取得済み。渡さなければテストのサーバーの本物＝未取得か取得の失敗）"""
+    media_lib_record(ed, *(paths or [MEDIA_LIB]))
+    if extra:
+        media_lib_extra(ed, extra)
+    if details:
+        media_lib_mock(ed, details=details)
+    ed.js("window._dbg.rt.loadNativeLibs().then(()=>{ window._dbg.rt.libOnline.ensureDetails(); return true; })")   # 起動時と同じ（全曲データの取得を頼む）
+    media_lib_wait(ed)
+    if details:
+        wait_until(ed, "(s=>s.details&&s.details.state==='ok'&&!s.detailsBusy)(window._dbgApp.libOnline())", label="全曲データの状態")
+    if covers:
+        wait_until(ed, f"window._dbgApp.lib().libs.filter(l=>l.native).reduce((a,l)=>a+l.covers,0)>={covers}", label="カバーの読み込み")
+    ed.wait(0.15)   # 一覧の描き直し（refreshSoon）
+
+
+def media_lib_sample_extra():
+    """画面テスト・英語表示の点検用の、ネット・NLM推定の値（BL★・NLM推定・全曲データに無い曲）"""
+    import datetime
+    t = lambda y, m, d: int(datetime.datetime(y, m, d, 12).timestamp())
+    return {
+        "1a01 (Alpha Song - MapperA)": {"net": {"src": "dump", "match": "hash", "key": "1a01", "uploaded": t(2024, 5, 1), "up": 90, "down": 10,
+                                                "ranked": {"bl": True, "blq": False, "ss": True, "ssq": False}, "tags": ["tech", "anime"],
+                                                "diffs": {"Standard/Expert": {"bl": 7.25}, "Standard/ExpertPlus": {"bl": 9.5, "ss": 8.1}}}},
+        "1b02 (Beta Song - MapperB)": {"net": {"src": "dump", "match": "key", "key": "1b02", "uploaded": t(2023, 1, 1), "up": 5, "down": 5, "tags": [], "diffs": {}},
+                                       "est": {"version": "0.1.0", "diffs": {"Standard/Hard": {"stars": 4.56}, "Standard/Easy": {"skipped": "tooFewNotes"}}}},
+        "1c03 (Gamma V4 - MapperC)": {"net": {"src": "none"}},
+        "Delta Noodle": {"net": {"src": "none"}, "est": {"version": "0.1.0", "diffs": {"Standard/ExpertPlus": {"stars": 11.11}}}},
+    }

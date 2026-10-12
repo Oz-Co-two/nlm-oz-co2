@@ -244,7 +244,9 @@ def main():
         seek_to(ed, 8);  place_note(t, 1, 0, 0, 1)
         seek_to(ed, 10); place_note(t, 0, 2, 0, 0)
         seek_to(ed, 12); place_note(t, 2, 2, 1, 1)
-        seek_to(ed, 13); place_note(t, 3, 0, 1, 1)
+        # チェーンの尾はドットにする（尾の向きはチェーンに使われない。12拍と同じ「下」にすると
+        # 「同じ向きの連続の警告」の赤枠が08に写り、基本編では説明していないので紛らわしい）
+        seek_to(ed, 13); place_note(t, 3, 0, 1, 8)
         seek_to(ed, 7)
         ed.move(960, 800); ed.key("q"); ed.wait(2.5)
         objs = [o for o in ed.js("window._dbgApp.objScreen()") if o["kind"] == "note"]
@@ -292,7 +294,9 @@ def main():
                 ed.move(q["x"], q["y"]); ed.wait(0.2); ed.click(q["x"], q["y"]); ed.wait(0.2)
         seek_to(ed, 0)
         ed.move(300, 800); ed.wait(0.5)
-        t.shot("11-lighting", marks="[{t:'#mainModeLabel',n:1,at:'r'},{t:'#tbgLBehav',n:2,at:'b'},{t:'#tbgLColor',n:3,at:'b'}]",
+        # 左上のモード表示は「［TAB］ 次の画面名」(.mlNext) まで含め、余白を広めにとる（既定の3pxだと枠が文字に接して見える）
+        t.shot("11-lighting", marks="[{t:[%d,%d,%d,%d],n:1,at:'r',pad:7},{t:'#tbgLBehav',n:2,at:'b'},{t:'#tbgLColor',n:3,at:'b'}]"
+               % tuple(_union(t, "#mainModeLabel", "#mainModeLabel .mlNext")),
                clip=(0, 560, 1500, 520))
         ed.move(960, 800); ed.key("Tab"); ed.wait(1.0)   # NOTESへ戻す
 
@@ -300,7 +304,8 @@ def main():
         ed.move(300, 300); ed.wait(0.3); ed.key("Tab"); ed.wait(1.0)   # 左上の枠でTab = MEDIA⇄PREVIEW
         seek_to(ed, 1)
         ed.move(300, 300); ed.wait(1.5)
-        t.shot("12-preview", marks="[{t:'#pvModeLabel',n:1,at:'r'},{t:'#transportBar',n:2,at:'l'}]")
+        t.shot("12-preview", marks="[{t:[%d,%d,%d,%d],n:1,at:'r',pad:7},{t:'#transportBar',n:2,at:'l'}]"
+               % tuple(_union(t, "#pvModeLabel", "#pvModeLabel .mlNext")))
         ed.move(300, 300); ed.key("Tab"); ed.wait(0.5)
 
         # 13〜14 INFO画面: 曲情報・難易度・カバー・書き出し

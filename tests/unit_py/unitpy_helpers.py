@@ -38,7 +38,9 @@ def server():
     s = Server()
     s.data_dir = tempfile.mkdtemp(prefix="nlm_unitpy_data_")
     os.environ["NLM_DATA_DIR"] = s.data_dir
+    os.environ["NLM_PLAYDATA"] = os.path.join(s.data_dir, "no-playdata", "PlayerData.dat")   # 利用者の本物のプレイ記録を読まない
     os.environ["NLM_ALLOWED_HOSTS"] = EXTRA_HOST
+    os.environ["NLM_NO_NET"] = "1"   # 全曲データ・BeatSaver の取得でネットへ出ない（serve.py の _no_net）
     os.environ.pop("NLM_OPEN_FILE", None)
     sys.path.insert(0, str(ROOT))
     if "serve" in sys.modules:

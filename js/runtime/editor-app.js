@@ -28,9 +28,15 @@ import { installTickLoop } from '../loop/tick-loop.js';
 import { installEditorRuntimeHelpers } from '../runtime/editor-runtime.js';
 import { installMapCheckPanel } from '../mapcheck/mapcheck-panel.js';
 import { installRatingPanel } from '../rating/rating-panel.js';
+import { createRatingClient } from '../rating/rating-client.js';
 import { installUpdater } from '../update/update-dialog.js';
 import { generateAutoLights, showAutoLightDialog } from '../lighting/auto-light.js';
 import { fitCoverImage, measureCoverFit, coverNeedsFix, coverFitSize, showCoverFitDialog } from '../media/cover-fit.js';
+import { libPost, libFileHandle, libDirHandle, dirOf as libDirOf, infoToV2, quickInfo, entryFromInfo, runScan, makeCoverLoader, nativeFilePath } from '../media/lib-native.js';   // MEDIAの記録したフォルダ（serve.py の /__lib/*）
+import { installLibTable, charName as libCharName } from '../media/lib-table.js';   // MEDIAの詳細表示（1行＝1難易度）・並べ替え・選択
+import { installLibFilter } from '../media/lib-filter.js';   // MEDIAの検索・絞り込み・件数
+import { installLibLayout } from '../media/lib-layout.js';   // MEDIAの見出しの行（帯の右へ並べる）・カタログの幅のドラッグ
+import { installLibOnline } from '../media/lib-online.js';   // MEDIAの全曲データ・🔍（BeatSaver）・★のまとめての計算・環境設定の MEDIA タブ
 
 /**
  * Editor runtime — original closure (behavior-preserving).
@@ -180,7 +186,7 @@ async function loadLang(){
   document.querySelectorAll('[data-i18n-t]').forEach(el=>{ el.title=t(el.dataset.i18nT,el.title); });
   document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ el.placeholder=t(el.dataset.i18nPh,el.placeholder); });
   document.documentElement.style.setProperty('--srcon', JSON.stringify('● '+t('ui.srcActive','出力中')));   // CSS ::after（出力中バッジ）の翻訳
-  setPvMode(pvMode); setNodeMode(nodeMode); updateMainModeLabel();
+  setPvMode(pvMode); setNodeMode(nodeMode); updateMainModeLabel(); updateNodeColLabel();
   if(typeof refreshInspector==='function') refreshInspector();   // INFOノードカード/曲情報など動的生成テキストを再翻訳（言語切替時）
   if(document.getElementById('tbDirPanel')) buildDirPanel();
   if(typeof updateModeIndicator==='function') updateModeIndicator();   // 配置/編集モード表示は動的管理（data-i18n非依存）＝言語切替でも現在モードの訳語を出す
@@ -188,13 +194,23 @@ async function loadLang(){
   try{ updateLightColorTB(); }catch(_){}   // 配置色ボタンの説明（ツールチップ）
   try{ if(document.getElementById('keyEditBody')) renderKeyEditor(); }catch(_){}   // ショートカット編集の操作名
   try{ if(typeof renderLibList==='function') renderLibList(); }catch(_){}   // MEDIAの「アセット」など
+  try{ libView.relabel(); libFilter.relabel(); libView.refresh(); libOnline.relabel(); }catch(_){}   // MEDIAの詳細表示の見出し・件数・出どころ・★の計算の帯・環境設定の状態（起動の途中で呼ばれた時はまだ無い）
 }
 // ---- ペインモード（Tabで切替。マウスの乗っているペインが対象） ----
 let curTab='tabFolder', pvMode='media', nodeMode='edit', nodeColMode='nle', hoverPane='main';   // 起動時はMEDIAを先に表示（ヘルバ様指示）
 async function setModeLabel(id,icon,txt,nextTxt){ const el=document.getElementById(id);
+  const tip=escHtml(tf('ui.mlNext','クリックで {mode} へ切り替え',{mode:nextTxt.toUpperCase()}));
   el.innerHTML=(await tbIcon(icon))+`<span class="mlMain">${txt.toUpperCase()}</span>`
-    +`<span class="mlNext">${await tbIcon('cycle_tab')}<span>${nextTxt.toUpperCase()}</span></span>`;
+    +`<span class="mlNext" title="${tip}">${await tbIcon('cycle_tab')}<span>${nextTxt.toUpperCase()}</span></span>`;
 }
+// 「[TAB] 次の画面名」はクリックでも切り替える（Tabキーと同じ＝浮いているメニューを閉じてから切り替え・2026-10-12）。
+// ラベル全体はクリックを下の3D/NLEへ通す（pointer-events:none）が、.mlNext だけは受ける。下の配置・範囲選択などを始めないよう伝播を止める
+{ const onNext=(id,fn)=>{ const el=document.getElementById(id); if(!el) return;
+    el.addEventListener('pointerdown',e=>{ if(e.target.closest('.mlNext')) e.stopPropagation(); });
+    el.addEventListener('click',e=>{ if(!e.target.closest('.mlNext')) return; e.stopPropagation(); closeFloatUI(); fn(); }); };
+  onNext('pvModeLabel',()=>setPvMode(pvMode==='preview'?'media':'preview'));
+  onNext('nodeColModeLabel',()=>setNodeColMode(nodeColMode==='nle'?'info':'nle'));
+  onNext('mainModeLabel',()=>setLightMode(!lightMode)); }
 function setPvMode(m){ pvMode=m; curTab=(m==='preview')?'bodyPv':'tabFolder';
   document.getElementById('bodyPv').classList.toggle('on',m==='preview');
   document.getElementById('tabFolder').classList.toggle('on',m!=='preview');
@@ -215,9 +231,11 @@ function setNodeColMode(m){ nodeColMode=m; const info=(m==='info'), gid=id=>docu
   { const dt=gid('diffTools'); if(dt) dt.style.display=info?'none':'flex'; }   // 難易度バーはNLE専用（INFOでは隠す）
   { const mb=gid('musicBar'); if(mb) mb.style.display=info?'none':'flex'; }   // BPM/メトロ/プレビュー秒の帯もNLE専用
   if(info&&typeof layoutInfoNodes==='function'){ layoutInfoNodes(); if(typeof infoAutoCenter==='function') infoAutoCenter(); }   // センタリングは他パネルを隠してinspcolが最終サイズになった後（先に呼ぶと縮んだ矩形で計算され上に寄る）
-  setModeLabel('nodeColModeLabel', info?'info':'nle', info?'INFO':'NLE', info?'NLE':'INFO');   // 他モードラベルと同一様式（アイコン＋TABピル）
+  updateNodeColLabel();
   if(!info) resize();
 }
+function updateNodeColLabel(){ const info=(nodeColMode==='info');   // 他モードラベルと同一様式（アイコン＋TABピル）。言語切替でも作り直す（ツールチップの訳）
+  setModeLabel('nodeColModeLabel', info?'info':'nle', info?'INFO':'NLE', info?'NLE':'INFO'); }
 // 早見表（画面に浮かぶショートカット一覧）の行: [説明, 操作] / ['---']=区切り線。説明は sk:、操作は skk: で訳す（操作は {…} を含んだままの文字列が訳のキー）。
 // 操作の {id} は ACTIONS の今のキー＝ショートカット編集で変えると早見表も変わる（keyText）。再割当できないキーとマウス操作はそのまま書く。
 // 説明・操作は関数でもよい（モードで変わる行）。新しいショートカットを足したら、ここにも足す
@@ -363,10 +381,13 @@ function keyRows(arr){ const v=x=>typeof x==='function'?x():x;
   return arr.map(([d,k])=>d==='---'?'<div class="mksep"></div>'
     :`<div class="mkrow"><span class="mkd">${escHtml(t('sk:'+v(d),v(d)))}</span><span class="mk">${escHtml(keyText(v(k)))}</span></div>`).join(''); }
 function renderModeKeys(){   // 3つの早見表を、今のモード・言語・キーの割り当てで描く
-  const put=(id,arr)=>{ const el=document.getElementById(id); if(el) (el.querySelector('.mkbody')||el).innerHTML=keyRows(arr); };
-  put('modeKeys',lightMode?KEYS_LIGHT:KEYS_NOTE);
-  put('commonKeys',KEYS_COMMON);
-  put('nodeKeys',nodeColMode==='info'?KEYS_NODE:KEYS_NLE);
+  // 題名＝環境設定「ショートカット表示」の項目名（たたむと題名だけが残る＝何の一覧か分かるように）
+  const put=(id,arr,title)=>{ const el=document.getElementById(id); if(!el) return;
+    (el.querySelector('.mkbody')||el).innerHTML=keyRows(arr);
+    const tt=el.querySelector('.mktitle'); if(tt) tt.textContent='⌨ '+title; };
+  put('modeKeys',lightMode?KEYS_LIGHT:KEYS_NOTE,lightMode?t('set.k.light','LIGHTING'):t('set.k.notes','NOTES'));
+  put('commonKeys',KEYS_COMMON,t('set.k.common','標準操作'));
+  put('nodeKeys',nodeColMode==='info'?KEYS_NODE:KEYS_NLE,nodeColMode==='info'?t('set.k.info','INFO'):t('set.k.node','NLE'));
 }
 function updateMainModeLabel(){
   renderModeKeys();
@@ -2744,6 +2765,7 @@ function drawLayers(curV){
     if(invalid){   // ドロップ不可（種別不一致 or 音楽ファイル or 現在の難易度が無い）→ 中央1行で案内（短いレーンでも縦に潰れない）
       const msg=_dragMedia.isImage?t('msg.imgToCoverShort','画像はカバー画像へ')
         :_dragMedia.isMusic?t('msg.dragMusicLane','音楽ファイルは Music レーンへ')
+        :_dragMedia._v4?t('msg.v4Short','v4 形式の譜面は未対応')
         :laneBad?(clipLk==='n'?t('msg.clipToNotes','NOTESクリップは NOTES レーンへ'):t('msg.clipToLight','LIGHTクリップは LIGHT レーンへ'))   // 種別不一致（ヘルバ様指定）
         :(glk==='l'?t('msg.noDiffLights','この難易度のライティングは含まれていません')
                    :t('msg.noDiffNotes','この難易度のノーツは含まれていません'));   // ドラッグ先レーン種でノーツ/ライティングを出し分け
@@ -4730,7 +4752,8 @@ applyShowKeys();
       try{ const data={}; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.indexOf('bsnm_')===0) data[k]=localStorage.getItem(k); }
         fetch('__settings/save',{method:'POST',headers:{'Content-Type':'application/json','X-NLM-Request':'1'},body:JSON.stringify({data})}); }catch(_){}
       try{ updateChromaUI(); renderModeKeys(); }catch(_){} stat(cm.checked?'Chromaモード ON（各ライト自由色・要Mod）':'バニラ配色モード（Mod無しでも全員に見える）'); }); } }
-// ---- ショートカット表示のフローティング化: 上部ドラッグで移動（親ペインの外へは出ない）・▾たたむ・✕閉じる=設定のチェックOFF（再表示は設定から） ----
+// ---- ショートカット表示のフローティング化: 上部ドラッグで移動（親ペインの外へは出ない）・—たたむ・✕閉じる=設定のチェックOFF（再表示は設定から） ----
+// 上部の帯には題名（renderModeKeys が書く）。たたむと題名とボタンだけの幅に縮む（左基準の位置なら縮む向きは右端が左へ寄る）
 { const posSaved=JSON.parse(localStorage.getItem('bsnm_keypos')||'{}');
   const foldSaved=JSON.parse(localStorage.getItem('bsnm_keyfold')||'{}');
   const clampXY=(el,x,y)=>{ const p=el.offsetParent||document.body;
@@ -4739,7 +4762,7 @@ applyShowKeys();
     const bd=document.createElement('div'); bd.className='mkbody';
     while(el.firstChild) bd.appendChild(el.firstChild);   // 既存の中身はボディへ（レンダラはボディだけ書き換える）
     const hd=document.createElement('div'); hd.className='mkhead';
-    hd.innerHTML=`<span style="flex:1"></span><button class="mkbtn mkFold" data-i18n-t="mk.fold" title="${escHtml(t('mk.fold','たたむ / ひらく'))}">—</button>`
+    hd.innerHTML=`<span class="mktitle"></span><button class="mkbtn mkFold" data-i18n-t="mk.fold" title="${escHtml(t('mk.fold','たたむ / ひらく'))}">—</button>`
       +`<button class="mkbtn mkClose" data-i18n-t="mk.close" title="${escHtml(t('mk.close','閉じる（設定のショートカット表示で再表示）'))}">✕</button>`;
     el.append(hd,bd);
     if(foldSaved[id]) el.classList.add('keysFolded');
@@ -4747,7 +4770,13 @@ applyShowKeys();
       el.style.left=x+'px'; el.style.top=y+'px'; el.style.right='auto'; }
     hd.querySelector('.mkFold').addEventListener('click',ev=>{ ev.stopPropagation();
       const on=el.classList.toggle('keysFolded');
-      foldSaved[id]=on?1:0; localStorage.setItem('bsnm_keyfold',JSON.stringify(foldSaved)); });
+      foldSaved[id]=on?1:0; localStorage.setItem('bsnm_keyfold',JSON.stringify(foldSaved));
+      if(el.style.right==='auto'){   // 動かした早見表を端の近くでひらくと、広がった分がペインの外へはみ出す＝中へ押し戻す
+        const x0=parseFloat(el.style.left)||0, y0=parseFloat(el.style.top)||0;
+        el.style.left='0px';   // 幅は左端で測る（右端の近くのままだと、残りの幅に合わせて折り返し縦に伸びる）
+        const [x,y]=clampXY(el,x0,y0);
+        el.style.left=x+'px'; el.style.top=y+'px';
+        posSaved[id]={x,y}; localStorage.setItem('bsnm_keypos',JSON.stringify(posSaved)); } });
     hd.querySelector('.mkClose').addEventListener('click',ev=>{ ev.stopPropagation();
       const [key,ls,chk]=closeInfo();
       keyShow[key]=false; localStorage.setItem(ls,'0');
@@ -4846,6 +4875,7 @@ function initScratchDiff(){
 }
 // ============ MEDIAライブラリ（CustomLevels一覧 → ドラッグでライン追加） ============
 let libDirs=[], _dragMedia=null, _mediaGhostNd=null, _mediaGhostOv=null;   // ゴースト=ドラッグ中のドロップ位置プレビュー
+let _dragPick=null;   // ドラッグ中に入れる難易度 {char,diff}（詳細表示の行＝その行の難易度・絞り込み中のグリッドのカード＝合う難易度）。null＝今開いている難易度と同名の Standard
 let _restoringLibs=false;   // 起動時のライブラリ復元中は saveLibDirs の途中保存を抑止（未処理フォルダの取りこぼし＝SCANDAL消失バグ対策）
 const lineSrc=new Map();   // uid → {dir,info,sheetId,cur} ドロップしたラインの元フォルダ（難易度切替用・セッション限り）
 function fillDiffSelectFromInfo(info,selName){
@@ -4877,18 +4907,244 @@ async function loadLineDiff(fname){
     stat(tf('msg.diffSwitched','難易度を切り替えました: {name}',{name:sec._diffName||fname}));
   }catch(err){ showErr(tf('msg.diffLoadFail','難易度の読込に失敗: {err}',{err})); }
 }
-{ const sl=document.getElementById('libSize'), lg=document.getElementById('libGrid');
-  const apply=v=>{ lg.style.gridTemplateColumns=`repeat(${10-v},1fr)`; };   // 左=6列(小) 右=2列(大) : v4→6列, v8→2列
-  const sv=+localStorage.getItem('bsnm_libsz');
-  sl.value=(sv>=4&&sv<=8)?sv:5;
-  apply(+sl.value);
-  sl.addEventListener('input',()=>{ apply(+sl.value); localStorage.setItem('bsnm_libsz',sl.value); }); }
+// MEDIA の大きさのスライダー（#libSize）は lib-table.js（グリッド＝サムネイルの大きさ・詳細＝文字の大きさの兼用）
 document.getElementById('libAddBtn').addEventListener('click', async ()=>{
-  let dh;
+  const napi=window.pywebview&&window.pywebview.api;
+  if(napi&&typeof napi.lib_pick_folder==='function'){   // exe版: ネイティブのフォルダ選択＝記録して次回も自動で読む（app.py の Api.lib_pick_folder）
+    let r=null;
+    try{ r=await napi.lib_pick_folder(); }catch(e){ showErr(tf('msg.libAddFail','フォルダを追加できませんでした: {err}',{err:e})); return; }
+    if(!r) return;   // 選ばなかった
+    if(r.error){ showErr(tf('msg.libAddFail','フォルダを追加できませんでした: {err}',{err:libErrText(r.error)})); return; }
+    await libAddNative({id:r.id,name:r.name,state:'ok'},true);
+    return;
+  }
+  let dh;   // ブラウザ版: その時限りのフォルダ（File System Access API。記録はしない）
   try{ dh=await showDirectoryPicker(); }catch(e){ return; }
   stat('ライブラリをスキャンしています…');
   await scanLibrary(dh);
 });
+// ---- 記録したライブラリ（2026-10-12・serve.py の /__lib/*・media_library.py）----
+// 起動時に /__lib/list の記録を左のカタログに出し、/__lib/scan を done まで呼んで曲を順に並べる（lib-native.js の runScan）。
+// 曲の項目は疑似ハンドル（item.dir.getFileHandle → /__lib/file）で包む＝ドラッグ・曲データを読み込む・INFO へのドロップは今のコードのまま動く。
+// item.info は走査の結果から作った v2 の形（quickInfo）。試聴区間など Info.dat の全部が要る所は ensureItemInfo で本物を読む。
+let libPlayState=null;   // プレイ記録の状態（/__lib/list の playdata）
+const libNativeById=id=>libDirs.find(l=>l.native&&l.id===id);
+const LIB_ERR={'unknown-lib':'記録にないライブラリです','missing':'フォルダが見つかりません','not-found':'見つかりません','not-allowed':'許可されていない場所です',
+  'bad-path':'場所の指定が正しくありません','too-large':'ファイルが大きすぎます','network':'通信に失敗しました','scan-failed':'走査に失敗しました'};
+function libErrText(code){ code=String(code||''); return LIB_ERR[code]?t('lib.err.'+code,LIB_ERR[code]):code; }
+/** 記録したライブラリを読み直して画面に出す（起動時。記録から外れた物は画面からも外す）。走査は待たない。
+ * 呼び出しは順番に（前の呼び出しの古い一覧の応答が後から届いて、新しく出したライブラリを外してしまわないように） */
+let _libListQ=Promise.resolve();
+function loadNativeLibs(){ return (_libListQ=_libListQ.then(_loadNativeLibs,_loadNativeLibs)); }
+async function _loadNativeLibs(){
+  let r; try{ r=await libPost('list',{}); }catch(e){ return; }
+  if(!r||!r.ok) return;
+  libPlayState=r.playdata||null;
+  libOnline.setDetails(r.details);   // 全曲データの状態（取得は走査が終わった後の libAfterScans）
+  const ids=new Set((r.libs||[]).map(l=>l.id));
+  for(const lib of libDirs.filter(l=>l.native&&!ids.has(l.id))) libDropLib(lib);
+  for(const l of r.libs||[]){ const had=libNativeById(l.id); if(had){ had.path=String(l.path||''); continue; } libAddNative(l,false); }
+  renderLibList(); libView.refreshSoon(0);
+  libAfterScans();   // 走査するライブラリが無い時（全部見つからない等）はここで全曲データの取得を頼む
+}
+/** 記録したライブラリの走査が全部終わったら、全曲データの取得を1回頼む（設定が ON の時だけ。1日1回の決まりは Python）。
+ * 走査と同時に取得すると、初回の走査（全譜面の JSON の解析で約1分 CPU を使い切る）に押されて取得が時間切れになる（exe 版で確認・2026-10-12） */
+function libAfterScans(){ if(!libDirs.some(l=>l.native&&l.scanning)) libOnline.ensureDetails(); }
+async function libAddNative(l,user){
+  const had=libNativeById(l.id);
+  if(had){   // 同じフォルダをもう一度選んだ＝前の記録のまま。そのフォルダを表示する
+    if(user){ _libActiveCat=had; updateLibCatSel(); applyLibFilter(); stat(tf('msg.libAlready','すでにライブラリにあります: {name}',{name:libDisp(had)})); }
+    return;
+  }
+  // path＝ライブラリの実際の場所（/__lib/list。音源の nativePath を作るのに使う。ダイアログから足した直後は無い＝必要な時に聞く）
+  const lib={native:true,id:String(l.id),name:String(l.name||''),path:String(l.path||''),state:l.state==='ok'?'ok':'missing',els:[],urls:[],items:[],scanning:false,progress:null};
+  libDirs.push(lib);
+  renderLibList();
+  if(lib.state==='ok'){ if(user) stat('ライブラリをスキャンしています…'); await libScanNative(lib,null); }
+}
+/** 記録したライブラリの曲・音楽ファイルの音源の実際のパス（songNode.nativePath 用。開き直した時に exe 版がダイアログ無しで読む）。
+ * ドライブ名から始まるライブラリの時だけ（nativeFilePath）。分からなければ '' */
+async function libSongNativePath(item){
+  const lib=item&&item.lib;
+  if(!item||!item.native||!lib||!lib.native||typeof item.rel!=='string') return '';
+  if(!lib.path){ try{ const r=await libPost('list',{}); const l=r&&r.ok&&(r.libs||[]).find(x=>x.id===lib.id); if(l) lib.path=String(l.path||''); }catch(_){} }
+  if(item.isMusic) return nativeFilePath(lib.path,item.rel,'');
+  if(!item.entry) return '';
+  const f=item.entry.songFile||(item.info&&item.info._songFilename)||'';   // 走査で見つけた実際のファイル名を優先
+  return f?nativeFilePath(lib.path,item.rel,f):'';
+}
+/** 走査を done まで進めながら、届いた曲を順に並べる（first＝rescan の応答） */
+async function libScanNative(lib,first){
+  const gen=lib.gen=(lib.gen||0)+1;
+  lib.scanning=true; lib.progress={done:0,total:0}; renderLibList();
+  const alive=()=>libDirs.includes(lib)&&lib.gen===gen;
+  const r=await runScan(lib.id,{alive,
+    maps:ms=>{ for(const m of ms) addLibItem(libMapItem(lib,m),lib); libView.refreshSoon(250); },
+    progress:p=>{ lib.progress={done:+p.done||0,total:+p.total||0}; libCatProgress(lib); libView.refreshSoon(250); }},first);
+  if(!alive()) return;
+  lib.scanning=false;
+  if(!r||r.ok===false){
+    if(r&&r.error==='missing') lib.state='missing';
+    renderLibList(); libView.refresh();
+    showErr(tf('msg.libScanFail','ライブラリを読み込めませんでした: {name}（{err}）',{name:libDisp(lib),err:libErrText(r&&r.error)}));
+    libAfterScans();
+    return;
+  }
+  lib.state='ok';
+  let mc=0, ic=0;
+  for(const f of r.files||[]){ const it=libFileItem(lib,f); if(!it) continue; addLibItem(it,lib); if(it.isMusic) mc++; else ic++; }
+  renderLibList(); libView.refresh();
+  const n=lib.items.filter(it=>it.entry).length, parts=[];
+  if(n) parts.push(tf(n===1?'lib.songs1':'lib.songsN','{n}曲',{n})); if(mc) parts.push(tf('lib.musicN','音楽{n}件',{n:mc})); if(ic) parts.push(tf('lib.imagesN','画像{n}件',{n:ic}));
+  stat(tf('msg.libLoaded','ライブラリ: {name} から {parts} 読み込みました',{name:libDisp(lib),parts:parts.join(t('word.listSep','・'))||t('word.zeroItems','0件')}));
+  await libRefreshExtra(lib.id);
+  libAfterScans();   // 初めてライブラリを足した時も（起動時に記録が無かった場合）
+}
+function libMapItem(lib,m){
+  const it={name:m.name||String(m.rel).split('/').pop(),entry:m,native:true,rel:m.rel,dir:libDirHandle(lib.id,m.rel),info:quickInfo(m),_infoFull:false,coverURL:null,extra:null};
+  if(m.fmt===4) it._v4=true;   // v4 の譜面は NLM の読み込みが未対応（一覧・並べ替え・絞り込み・音源の配置はできる）
+  return it;
+}
+function libFileItem(lib,f){   // 譜面フォルダの外の音源・画像
+  if(!f||typeof f.rel!=='string') return null;
+  if(f.kind==='music') return {name:String(f.name||''),isMusic:true,native:true,rel:f.rel,songFh:libFileHandle(lib.id,f.rel,'')};
+  if(f.kind==='image') return {name:String(f.name||''),fileName:f.rel.split('/').pop(),isImage:true,native:true,rel:f.rel,imgFh:libFileHandle(lib.id,f.rel,''),coverURL:null};
+  return null;
+}
+/** Info.dat の全部が要る所（試聴区間・曲情報のノード・曲データを読み込む）の前に、記録したライブラリの曲の本物の Info.dat を読む */
+async function ensureItemInfo(item){
+  if(!item||!item.native||!item.entry||item._infoFull) return item&&item.info;
+  try{ const f=await (await item.dir.getFileHandle('Info.dat')).getFile();
+    item.info=infoToV2(JSON.parse(await f.text())); item._infoFull=true; }
+  catch(e){ console.warn('Info.dat の読込に失敗',e); }
+  return item.info;
+}
+/** ネット・プレイ記録・NLM推定の値（/__lib/extra）を取り直して表示する。走査が終わった後に呼ぶ。
+ * 次の担当: 環境設定（全曲データ ON/OFF）の切り替え・🔍・★の計算の後もこれ（1曲だけなら libSetItemExtra） */
+async function libRefreshExtra(id){
+  const useNet=libOnline.netOn();   // 環境設定で全曲データを OFF にした時（bsnm_libNetData='0'）は net:false＝全曲データの値を使わない
+  try{ const r=await libPost('playdata',{act:'status'}); if(r&&r.state) libPlayState=r; }catch(_){}
+  for(const lib of libDirs.filter(l=>l.native&&l.state==='ok'&&!l.scanning&&(!id||l.id===id))){
+    let r; try{ r=await libPost('extra',{id:lib.id,net:useNet}); }catch(e){ continue; }
+    if(!r||!r.ok||!r.extra) continue;
+    for(const it of lib.items) if(it.entry){ const e=r.extra[it.rel]; it.extra=(e&&typeof e==='object')?e:null; }
+  }
+  libView.refresh(); libOnline.afterExtra();
+}
+/** 1曲の extra を書き足す（🔍 や★の計算の結果を、一覧を取り直さずに反映する） */
+function libSetItemExtra(id,rel,patch){
+  const lib=libNativeById(id), it=lib&&lib.items.find(x=>x.entry&&x.rel===rel);
+  if(!it) return false;
+  it.extra=Object.assign({},it.extra||{},patch); libView.refreshSoon();
+  return true;
+}
+/** カタログのフォルダを読み直す（右クリック「読み直す」・見つからないフォルダのクリック） */
+async function libRescan(lib){
+  if(lib.native){
+    let r; try{ r=await libPost('rescan',{id:lib.id}); }catch(e){ showErr(tf('msg.libScanFail','ライブラリを読み込めませんでした: {name}（{err}）',{name:libDisp(lib),err:libErrText(e.code)})); return; }
+    if(!r||!('done' in r)){ showErr(tf('msg.libScanFail','ライブラリを読み込めませんでした: {name}（{err}）',{name:libDisp(lib),err:libErrText(r&&r.error)})); return; }
+    libClearItems(lib); lib.state='ok'; libView.refresh();
+    stat('ライブラリをスキャンしています…');
+    await libScanNative(lib,r);
+  } else if(lib.dh&&!lib.pending){   // ブラウザ版の一時的なフォルダ: 同じハンドルで走査し直す
+    libClearItems(lib); libView.refresh();
+    await scanLibrary(lib.dh,lib);
+  }
+}
+function libClearItems(lib){
+  for(const el of lib.els){ libCovers.unobserve(el); el.remove(); }
+  for(const u of lib.urls) URL.revokeObjectURL(u);
+  for(const it of lib.items||[]) it._libGone=true;
+  lib.els.length=0; lib.urls.length=0; if(lib.items) lib.items.length=0;
+}
+function libDropLib(lib){   // 画面から外す（記録の削除は呼び出し側）
+  libClearItems(lib); lib.gen=(lib.gen||0)+1;
+  libDirs=libDirs.filter(l=>l!==lib);
+  if(_libActiveCat===lib) _libActiveCat=null;
+}
+/** 曲・音楽ファイル・画像の「フォルダの場所を開く」: 記録したライブラリだけ（serve.py がエクスプローラーで開く）。曲はその譜面フォルダ、ファイルはそのファイルのあるフォルダ */
+async function libOpenFolder(item){
+  const lib=item.lib;
+  if(!(lib&&lib.native&&typeof item.rel==='string')){
+    showErr(t('msg.openFolderExeOnly','「フォルダの場所を開く」は、デスクトップ版（exe）で「フォルダを追加」したライブラリの中の物だけで使えます')); return; }
+  const rel=item.entry?item.rel:libDirOf(item.rel);
+  try{ const r=await libPost('open',{id:lib.id,rel});
+    if(r&&r.ok) stat(tf('msg.folderOpened','📂 フォルダを開きました: {name}',{name:rel||libDisp(lib)}));
+    else showErr(tf('msg.openFolderFail','フォルダを開けませんでした: {err}',{err:libErrText(r&&r.error)})); }
+  catch(e){ showErr(tf('msg.openFolderFail','フォルダを開けませんでした: {err}',{err:libErrText(e.code)})); }
+}
+// サムネイル（カバー・画像・音楽の埋め込みアートワーク）は、記録したライブラリの物は見えている物から1件ずつ読む（1000曲を先読みしない）
+const libCovers=makeCoverLoader(async it=>{
+  if(it.isImage) return await it.imgFh.getFile();
+  if(it.isMusic) return await extractArtwork(it.songFh);
+  if(it.entry&&it.entry.coverFile) return await (await it.dir.getFileHandle(it.entry.coverFile)).getFile();
+  return null;
+},(it,blob)=>{ applyArtwork(it,blob,it.lib); libView.invalidate('cover'); });   // カバーが届いただけ＝列の幅は測り直さない
+// 検索・絞り込み（lib-filter.js）と詳細表示・並べ替え・グリッドの並び（lib-table.js）
+const libFilter=installLibFilter({t,tf,onChange:()=>libView.refreshSoon(0)});
+// 全曲データ・🔍（BeatSaver に1曲だけ）・★のまとめての計算・環境設定の MEDIA タブ（lib-online.js）
+const libOnline=installLibOnline({t,tf,askYesNo,showErr,showOk,stat,
+  refreshExtra:id=>libRefreshExtra(id), setItemExtra:(id,rel,patch)=>libSetItemExtra(id,rel,patch),
+  invalidate:()=>libView.invalidate(), rows:kind=>libView.rowObjs(kind),
+  items:()=>libDirs.filter(l=>l.native).flatMap(l=>l.items||[]), hasNativeLibs:()=>libDirs.some(l=>l.native),
+  playState:()=>libPlayState, setPlayState:r=>{ libPlayState=r; }, errText:code=>libErrText(code),
+  openRatingPanel:()=>ratingPanel.open()});
+const libView=installLibTable({t,tf,
+  items:()=>{ const out=[]; for(const lib of libDirs){ if(_libActiveCat&&lib!==_libActiveCat) continue; for(const it of lib.items||[]) out.push(it); } return out; },
+  filter:()=>libFilter,
+  scanState:()=>{ let done=0,total=0,on=false;   // 走査中のライブラリ（カタログで選んだ範囲）の進み具合の合計。無ければ null
+    for(const l of libDirs) if(l.native&&l.scanning&&(!_libActiveCat||l===_libActiveCat)){ on=true; done+=(l.progress&&l.progress.done)||0; total+=(l.progress&&l.progress.total)||0; }
+    return on?{done,total}:null; },
+  wantCover:it=>{ if(it.native) libCovers.want(it,true); },
+  playOk:()=>!!(libPlayState&&libPlayState.state==='ok'),
+  onRowDragStart:(row,el,ev)=>libDragStart(row.item,row.d?{char:row.d.char,diff:row.d.diff}:null,null,ev),
+  onRowDragEnd:()=>libDragEnd(),
+  onRowContext:(row,ev)=>libItemMenu(row.item,ev.clientX,ev.clientY,true),
+  netMissing:(row,td)=>libOnline.netMissing(row,td),   // 全曲データに無い曲の「未照合 🔍」
+  netMissingText:row=>libOnline.netMissingText(row),   // その文字だけ（列の幅を測る時。セルを作らない）
+  starBusy:row=>libOnline.starBusy(row),               // ★を計算中の曲
+  onCellButton:(row,act)=>libOnline.onCellButton(row,act),
+});
+const libLayout=installLibLayout();   // MEDIA の見出しの行の先頭の空き（帯の幅を測る）・左のカタログの幅（境目のドラッグ・bsnm_libSideW）
+/** 入れる難易度の表示名（例 Expert+／Expert+（1本））。char が Standard か無しなら難易度だけ */
+function libDiffLabel(diff,ch){ return dispDiff(diff)+(ch&&ch!=='Standard'?t('word.parenL','（')+libCharName(ch,t)+t('word.parenR','）'):''); }
+/** 曲の項目・詳細表示の行のドラッグの始まり（共通）。pick＝入れる難易度。el＝追従アイコンの元（無ければ小さなカードを作る） */
+let _libDragGen=0;   // ドラッグの通し番号（前のドラッグの後片付けが、次のドラッグの中身を消さないように）
+function libDragStart(item,pick,el,ev){
+  _libDragGen++; _dragMedia=item; _dragPick=pick;
+  prepareMediaFrag(item,pick); prepareMediaWave(item);   // 先読み: ピアノロール+波形ゴースト
+  if(item.native&&!item.coverURL) libCovers.now(item);   // INFO へのゴースト・カバー画像ノード用
+  ev.dataTransfer.setData('text/plain',item.name); ev.dataTransfer.effectAllowed='copy';
+  try{ ev.dataTransfer.setDragImage(_emptyDragImg,0,0); }catch(_){}   // ネイティブのドラッグ画像を消す＝独自の追従アイコンで制御
+  if(!el){ el=document.createElement('div'); el.className='libItem';
+    const th=document.createElement('div'); th.className='libThumb';
+    if(item.coverURL){ const im=document.createElement('img'); im.src=item.coverURL; th.appendChild(im); } else th.textContent='♪';
+    const nm=document.createElement('div'); nm.className='libName'; nm.textContent=item.name+(pick?' '+libDiffLabel(pick.diff,pick.char):'');
+    el.append(th,nm); }
+  startMediaDragIcon(el,ev.clientX,ev.clientY);
+}
+function libDragEnd(){ const g=_libDragGen; removeMediaDragIcon();
+  setTimeout(()=>{ if(g!==_libDragGen) return;   // 200ms の間に次のドラッグが始まっていたら消さない（素早く続けてドラッグした時に、次のドロップが無視されていた）
+    _dragMedia=null; _dragPick=null; _mediaGhostNd=null; _mediaGhostOv=null; },200); }
+/** 曲・ファイルの右クリックメニュー（グリッドのカード・詳細表示の行で共通）。fromTable＝詳細表示の行（★のまとめての計算を足す） */
+function libItemMenu(item,x,y,fromTable){
+  const menu=(item._asset&&item.isClip)
+    ? [ [t('ctx.rename2','✏️ 名前を変更'),()=>{   // 名前の入力欄はグリッドのカードにある＝詳細表示からはグリッドへ切り替えてから
+          if(libView.mode()!=='grid'){ libView.setView('grid'); try{ item._el.scrollIntoView({block:'nearest'}); }catch(_){} }
+          renameAssetClip(item); }],
+        [t('ctx.delClip2','🗑 クリップを削除'),()=>deleteAssetClip(item)] ]
+    : [ [t('ctx.openFolder','📁 フォルダの場所を開く'),()=>libOpenFolder(item)],
+        ...((item.isClip||item.isImage||item.isMusic)?[]:[ ['---'], [t('ctx.loadSongData','📥 曲データを読み込む'),()=>bulkLoadSongData(item)] ]) ];
+  if(fromTable&&libDirs.some(l=>l.native)){   // 記録したライブラリの曲の★（NLM推定）をまとめて計算（公式の★も NLM推定も無い曲だけ・曲単位）
+    const nSel=libOnline.countTargets('selected'), nFilt=libOnline.countTargets('filtered');   // 1曲の時は単数形の訳（英語の 1 song）
+    menu.push(['---'],
+      [tf(nSel===1?'ctx.rateSel1':'ctx.rateSel','★ 選んだ行の★を計算（NLM推定・{n}曲）',{n:nSel}),()=>libOnline.rateRows('selected')],
+      [tf(nFilt===1?'ctx.rateFilt1':'ctx.rateFilt','★ 絞り込んだ行の★を計算（NLM推定・{n}曲）',{n:nFilt}),()=>libOnline.rateRows('filtered')]);
+  }
+  showMenu(x,y,menu);
+}
+/** 開発用窓口・次の担当用: 詳細表示で選んだ行（並んでいる順） */
+function libSelectedRows(){ return libView.selectedRows(); }
 const AUDIO_EXTS=new Set(['egg','ogg','mp3','wav','flac','m4a','aac','opus']);
 const IMAGE_EXTS=new Set(['png','jpg','jpeg','webp','gif','bmp']);   // MEDIAフォルダ内の画像=カバー画像アイテム（INFOのカバーノードへドラッグ可）
 // 音楽アイテム/カスタム曲どちらでも音源FileHandleを返す（isMusic=直下ファイル、それ以外=曲フォルダ内の_songFilename）
@@ -4937,9 +5193,9 @@ function extractCoverBatch(mapItems,lib,alive){
     try{ const cf=await dirH.getFileHandle(coverName); const blob=await cf.getFile(); applyArtwork(item,blob,lib); }catch(e){}
     await _idleYield(); } })();
 }
-async function scanLibrary(dh){
-  const lib={dh,els:[],urls:[]};
-  libDirs.push(lib);
+async function scanLibrary(dh,reuse){   // reuse＝読み直す時の同じフォルダ（カタログの位置・表示名をそのまま）
+  const lib=reuse||{dh,els:[],urls:[],items:[]};
+  if(!reuse) libDirs.push(lib);
   // libTitle（「ライブラリ（ジャケットをNODEへ…）」の案内文）は廃止（ヘルバ様指示）
   let count=0, mcount=0, icount=0; const musicItems=[], mapCoverItems=[];
   const MAXDEPTH=8;   // アーティスト/アルバム/曲… の深い階層も辿る（暴走防止の上限）
@@ -4954,9 +5210,10 @@ async function scanLibrary(dh){
           try{ infoFh=await h.getFileHandle(nm); break; }catch(e){} }
         if(infoFh){
           try{
-            const info=JSON.parse(await (await infoFh.getFile()).text());
+            const raw=JSON.parse(await (await infoFh.getFile()).text()), v4=Array.isArray(raw&&raw.difficultyBeatmaps);
+            const info=infoToV2(raw);   // v4 の Info.dat は v2 の形に写す（一覧・音源・曲情報用。v4 の譜面は読み込めない＝_v4）
             // カバー画像はここで同期抽出しない＝音楽ファイルの埋め込みアートワークと同じく背景で1件ずつ（大量の譜面フォルダ登録時にUIが固まるバグの対策）
-            const mit={name:info._songName||h.name, info, dir:h, coverURL:null};
+            const mit={name:info._songName||h.name, info, dir:h, coverURL:null, entry:entryFromInfo(info,h.name,v4?4:2), _v4:v4};   // entry＝詳細表示・絞り込み用（数は分からない）
             addLibItem(mit,lib);
             if(info._coverImageFilename) mapCoverItems.push({item:mit, dirH:h, coverName:info._coverImageFilename});
             count++;
@@ -4979,7 +5236,7 @@ async function scanLibrary(dh){
   }
   await walk(dh,0);
   renderLibList(); if(!_restoringLibs) saveLibDirs();   // 復元中は保存しない（復元完了後に一括保存＝全フォルダ揃ってから）
-  const parts=[]; if(count) parts.push(tf('lib.songsN','{n}曲',{n:count})); if(mcount) parts.push(tf('lib.musicN','音楽{n}件',{n:mcount})); if(icount) parts.push(tf('lib.imagesN','画像{n}件',{n:icount}));
+  const parts=[]; if(count) parts.push(tf(count===1?'lib.songs1':'lib.songsN','{n}曲',{n:count})); if(mcount) parts.push(tf('lib.musicN','音楽{n}件',{n:mcount})); if(icount) parts.push(tf('lib.imagesN','画像{n}件',{n:icount}));
   stat(tf('msg.libLoaded','ライブラリ: {name} から {parts} 読み込みました',{name:dh.name,parts:parts.join(t('word.listSep','・'))||t('word.zeroItems','0件')}));
   if(!count&&!mcount&&!icount) showErr(tf('msg.libNotFound','{name} に譜面フォルダ・音楽ファイルが見つかりませんでした',{name:dh.name}));
   // 埋め込みアートワークを背景で抽出（1件ずつ＝UIをブロックしない。無ければ波形アイコンのまま）
@@ -4989,8 +5246,8 @@ async function scanLibrary(dh){
 // アセット=アプリ配下の asset/ フォルダをHTTP経由で常時接続（起動時に自動読込・CustomLevelsの上に固定）
 async function scanAssetLibrary(){
   let lib=libDirs.find(l=>l.asset);
-  if(lib){ for(const el of lib.els) el.remove(); lib.els.length=0; for(const u of lib.urls) URL.revokeObjectURL(u); lib.urls.length=0; }
-  else { lib={asset:true,name:'アセット',els:[],urls:[]}; libDirs.unshift(lib); }   // 先頭=Allの直下
+  if(lib) libClearItems(lib);
+  else { lib={asset:true,name:'アセット',els:[],urls:[],items:[]}; libDirs.unshift(lib); }   // 先頭=Allの直下
   let ccount=0, mcount=0; const musicItems=[]; const MAXDEPTH=8;
   const httpFh=(url,name)=>({name,getFile:async()=>new File([await (await fetch(url)).blob()],name)});
   async function walk(path,depth){
@@ -5070,13 +5327,14 @@ function saveLibDirs(){ /* 無効化: FileSystemHandleのIndexedDB保存がWebVi
 (async()=>{
   await new Promise(r2=>setTimeout(r2,0));   // モジュール評価完了後に実行（idbの初期化前アクセスを回避）
   try{ await scanAssetLibrary(); }catch(e){}   // アセット=常時接続（asset/ フォルダをHTTPで自動読込・先頭固定）
+  try{ await loadNativeLibs(); }catch(e){}   // 記録したライブラリ（exe版で追加したフォルダ）。走査は裏で進む（待たない）
   _restoringLibs=true;   // 復元中は途中保存を止める（全フォルダが揃う前にscanLibrary→saveLibDirsが走ると、まだ処理していないフォルダをidbから消す＝SCANDAL消失の原因）
   try{
     const saved=(await idbGet('libDirs'))||[];
     for(const dh of saved){
       try{
         if((await dh.queryPermission({mode:'read'}))==='granted') await scanLibrary(dh);
-        else { libDirs.push({dh,els:[],urls:[],pending:true}); renderLibList(); }   // 権限が外れていても pending として保持（薄く表示・クリックで再接続）
+        else { libDirs.push({dh,els:[],urls:[],items:[],pending:true}); renderLibList(); }   // 権限が外れていても pending として保持（薄く表示・クリックで再接続）
       }catch(e){}
     }
   }catch(e){}
@@ -5084,8 +5342,7 @@ function saveLibDirs(){ /* 無効化: FileSystemHandleのIndexedDB保存がWebVi
   renderLibList();   // ライブラリ0件でも左カタログに「All」を表示
 })();
 let _libActiveCat=null;   // 選択中カタログ（null=All、それ以外=libオブジェクト）
-function applyLibFilter(){ const g=document.getElementById('libGrid'); if(!g) return;
-  for(const el of g.children){ el.style.display=(!_libActiveCat||el._lib===_libActiveCat)?'':'none'; } }
+function applyLibFilter(){ libView.refresh(); }   // カタログ（All/フォルダ）・検索・絞り込み・並べ替えをグリッドと詳細表示へ（lib-table.js）
 function updateLibCatSel(){ const box=document.getElementById('libList'); if(!box) return;   // 選択ハイライトだけ更新（リスト再構築なし＝要素が消えずダブルクリックが効く）
   for(const c of box.children){ c.classList.toggle('on',(c._lib||null)===(_libActiveCat||null)); } }
 // アセットクリップのサムネアイコン: NOTES=赤青ブロック / LIGHT=横バー
@@ -5110,40 +5367,50 @@ function renderLibMark(item){
 }
 function addLibItem(item,lib){
   const grid=document.getElementById('libGrid');
-  const el=document.createElement('div'); el.className='libItem'; el.draggable=true; el._lib=lib; item._el=el;   // アートワーク後追い反映用
+  const el=document.createElement('div'); el.className='libItem'; el.draggable=true; el._lib=lib; el._item=item; item._el=el;   // アートワーク後追い反映用
+  item.lib=lib; (lib.items||(lib.items=[])).push(item);   // lib.items＝詳細表示・絞り込みの元（lib-table.js）
   const th=document.createElement('div'); th.className='libThumb';
   if(item.coverURL){ const im=document.createElement('img'); im.src=item.coverURL; th.appendChild(im); }
   else if(item.isClip){ th.classList.add('libClip', item.clipType==='light'?'libClipL':'libClipN'); th.innerHTML=item.clipType==='light'?LIB_CLIP_LIGHT_ICO:LIB_CLIP_NOTES_ICO; }   // クリップ=種別アイコン
   else if(item.isMusic){ th.classList.add('libWave'); th.innerHTML=LIB_WAVE_ICO; }   // アートワーク無しの音楽ファイル=緑枠に波形
-  else th.textContent='♪';
+  else th.textContent=item.isImage?'🖼':'♪';   // 記録したライブラリの画像は見えた時に読む（libCovers）
   th.appendChild(Object.assign(document.createElement('div'),{className:'libMark'}));   // 保有データの色チップ
   const nm=document.createElement('div'); nm.className='libName'; nm.textContent=item.name; nm.title=item.name;
   el.append(th,nm);
   renderLibMark(item);   // el に th を append した後（querySelectorが効くように）
   el.addEventListener('click',()=>{ for(const s of grid.querySelectorAll('.libItem.sel')) s.classList.remove('sel'); el.classList.add('sel'); });   // 選択ハイライト
-  if(_libActiveCat&&lib!==_libActiveCat) el.style.display='none';   // 現在のカタログ絞り込みを反映
-  el.addEventListener('dragstart',ev=>{ _dragMedia=item; prepareMediaFrag(item); prepareMediaWave(item);   // 先読み: ピアノロール+波形ゴースト
-    ev.dataTransfer.setData('text/plain',item.name); ev.dataTransfer.effectAllowed='copy';
-    try{ ev.dataTransfer.setDragImage(_emptyDragImg,0,0); }catch(_){}   // ネイティブのドラッグ画像を消す＝独自の追従アイコンで制御（NLE上では隠せる・ヘルバ様指定 2026-07-14）
-    startMediaDragIcon(el,ev.clientX,ev.clientY); });
-  el.addEventListener('dragend',()=>{ removeMediaDragIcon(); setTimeout(()=>{ _dragMedia=null; _mediaGhostNd=null; _mediaGhostOv=null; },200); });
-  el.addEventListener('contextmenu',ev=>{ ev.preventDefault();
-    const menu=(item._asset&&item.isClip)
-      ? [ [t('ctx.rename2','✏️ 名前を変更'),()=>renameAssetClip(item)],
-          [t('ctx.delClip2','🗑 クリップを削除'),()=>deleteAssetClip(item)] ]
-      : [ [t('ctx.openFolder','📁 フォルダの場所を開く'),()=>showOk(tf('msg.openFolder','📂 フォルダを開く…（デスクトップ版で実動作に対応予定: {name}）',{name:item.name}))],   // 統一様式: 通常📁・押したら📂（実処理はTauri化時）
-          ...((item.isClip||item.isImage||item.isMusic)?[]:[ ['---'], [t('ctx.loadSongData','📥 曲データを読み込む'),()=>bulkLoadSongData(item)] ]) ];
-    showMenu(ev.clientX,ev.clientY,menu); });
+  el.addEventListener('dragstart',ev=>{   // 絞り込み中は合う難易度（今開いている難易度と同名、無ければ一番難しい物）を入れる（libView.pickForCard）
+    const so=document.getElementById('diff').selectedOptions[0];
+    libDragStart(item,libView.pickForCard(item,so?so.textContent:''),el,ev); });
+  el.addEventListener('dragend',()=>libDragEnd());
+  el.addEventListener('contextmenu',ev=>{ ev.preventDefault(); libItemMenu(item,ev.clientX,ev.clientY); });
   lib.els.push(el);
   if(item.coverURL) lib.urls.push(item.coverURL);
   grid.appendChild(el);
+  if((_libActiveCat&&lib!==_libActiveCat)||libFilter.active()) el.style.display='none';   // 並び・表示は次の libView.refresh で決まる（カタログ・検索・絞り込み・並べ替え）
+  if(item.native) libCovers.observe(el,item);
+  libView.refreshSoon();
 }
 const LIB_ALL_ICO='<svg viewBox="0 0 24 24" width="14" height="14" style="display:block"><rect x="4.5" y="4.5" width="15" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1" fill="currentColor"/></svg>';   // 画像1の「All」＝四角＋中点
 // アートワーク無しの音楽ファイル用: 緑枠＋波形（テーマ緑 #56ffc1）
 const LIB_WAVE_ICO='<svg viewBox="0 0 48 48" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block"><g fill="none" stroke="#56ffc1" stroke-width="2.4" stroke-linecap="round"><line x1="9" y1="21" x2="9" y2="27"/><line x1="14" y1="16" x2="14" y2="32"/><line x1="19" y1="12" x2="19" y2="36"/><line x1="24" y1="9" x2="24" y2="39"/><line x1="29" y1="14" x2="29" y2="34"/><line x1="34" y1="17" x2="34" y2="31"/><line x1="39" y1="20" x2="39" y2="28"/></g></svg>';
 function libLabels(){ try{ return JSON.parse(localStorage.getItem('bsnm_libLabels')||'{}'); }catch(_){ return {}; } }   // フォルダの表示名（実フォルダ名→カスタム名）
-function libDisp(lib){ if(lib.asset) return t('lib.assets','アセット'); return libLabels()[lib.dh.name]||lib.dh.name; }
-function setLibLabel(key,label){ const m=libLabels(); if(label&&label!==key) m[key]=label; else delete m[key]; localStorage.setItem('bsnm_libLabels',JSON.stringify(m)); }
+// 表示名の鍵: 記録したライブラリは 'lib:'+id（同じ名前のフォルダが別の場所にあっても混ざらない）、ブラウザ版のフォルダは実フォルダ名（従来どおり）
+function libKey(lib){ return lib.native?'lib:'+lib.id:(lib.dh?lib.dh.name:''); }
+function libRawName(lib){ return lib.native?lib.name:(lib.dh?lib.dh.name:''); }
+function libDisp(lib){ if(lib.asset) return t('lib.assets','アセット'); return libLabels()[libKey(lib)]||libRawName(lib); }
+function setLibLabel(key,label,raw){ const m=libLabels(); if(label&&label!==(raw!=null?raw:key)) m[key]=label; else delete m[key]; localStorage.setItem('bsnm_libLabels',JSON.stringify(m)); }
+/** 記録したライブラリの走査の進み具合だけを書き換える（カタログを作り直さない＝表示名の変更中の入力欄を壊さない） */
+function libCatProgress(lib){
+  const box=document.getElementById('libList'); if(!box) return;
+  const c=[...box.children].find(x=>x._lib===lib); if(!c) return;
+  let p=c.querySelector('.libCatProg');
+  if(!lib.scanning){ if(p) p.remove(); return; }
+  if(!p){ p=document.createElement('span'); p.className='libCatProg'; const del=c.querySelector('.libDel'); c.insertBefore(p,del||null); }
+  const g=lib.progress||{done:0,total:0};
+  p.textContent=g.total?`${g.done}/${g.total}`:'…';
+  p.title=t('lib.scanningTip','読み込み中');
+}
 function renderLibList(){   // 左カタログ列（Blender風）: All＋各フォルダ。クリックでグリッドを絞り込み
   const box=document.getElementById('libList'); if(!box) return; box.innerHTML='';
   if(_libActiveCat&&!libDirs.includes(_libActiveCat)) _libActiveCat=null;
@@ -5163,6 +5430,8 @@ function renderLibList(){   // 左カタログ列（Blender風）: All＋各フ�
     }
     const c=mkCat('<span style="display:inline-block;width:14px;text-align:center;font-size:13px;color:#9a9aa2">›</span>', libDisp(lib), lib);   // フォルダ項目の左に「›」（ヘルバ様指示）
     if(lib.pending){ c.querySelector('.libCatIco').style.opacity=.4; c.title=libDisp(lib)+t('lib.reconnectTip','（クリックで再接続）'); }   // 未接続=フォルダを薄く
+    const missing=lib.native&&lib.state==='missing';
+    if(missing){ c.classList.add('missing'); c.querySelector('.libCatIco').style.opacity=.4; c.title=libDisp(lib)+t('lib.missingTip','（見つかりません。クリックで探し直す）'); }   // 記録したフォルダが無い（ドライブを外した等）
     c.querySelector('.libCatName').addEventListener('dblclick',ev=>{ ev.stopPropagation();   // ダブルクリックで表示名を変更
       const span=ev.currentTarget;
       const inp=document.createElement('input'); inp.type='text'; inp.value=libDisp(lib);
@@ -5170,22 +5439,29 @@ function renderLibList(){   // 左カタログ列（Blender風）: All＋各フ�
       span.replaceWith(inp); inp.focus(); inp.select();
       inp.addEventListener('click',e2=>e2.stopPropagation());
       inp.addEventListener('keydown',e2=>{ e2.stopPropagation();
-        if(e2.key==='Enter'){ setLibLabel(lib.dh.name,inp.value.trim()); renderLibList(); }
+        if(e2.key==='Enter'){ setLibLabel(libKey(lib),inp.value.trim(),libRawName(lib)); renderLibList(); }
         else if(e2.key==='Escape'){ renderLibList(); } });
-      inp.addEventListener('blur',()=>{ setLibLabel(lib.dh.name,inp.value.trim()); renderLibList(); }); });
+      inp.addEventListener('blur',()=>{ setLibLabel(libKey(lib),inp.value.trim(),libRawName(lib)); renderLibList(); }); });
     const del=document.createElement('button'); del.className='libDel'; del.textContent='−';
     del.title=t('lib.removeTip','このフォルダをライブラリから外す');
-    del.onclick=(e)=>{ e.stopPropagation();
-      for(const el of lib.els) el.remove();
-      for(const u of lib.urls) URL.revokeObjectURL(u);
-      libDirs=libDirs.filter(l=>l!==lib);
-      if(_libActiveCat===lib) _libActiveCat=null;
+    del.onclick=async(e)=>{ e.stopPropagation();
+      const name=libDisp(lib);
+      if(lib.native){   // 記録から外す（フォルダの中身には触れない）
+        try{ const r=await libPost('remove',{id:lib.id}); if(!r||!r.ok){ showErr(tf('msg.libRemoveFail','ライブラリから外せませんでした: {err}',{err:libErrText(r&&r.error)})); return; } }
+        catch(e2){ showErr(tf('msg.libRemoveFail','ライブラリから外せませんでした: {err}',{err:libErrText(e2.code)})); return; }
+        setLibLabel(libKey(lib),'');
+      }
+      libDropLib(lib);
       renderLibList(); applyLibFilter(); saveLibDirs();
-      stat(tf('msg.libRemoved','ライブラリから外しました: {name}',{name:lib.dh.name})); };
+      stat(tf('msg.libRemoved','ライブラリから外しました: {name}',{name})); };
     c.appendChild(del);
+    if(lib.native&&lib.scanning) libCatProgress(lib);   // 走査の進み具合（−の左）
+    if(!lib.pending&&(lib.native||lib.dh)) c.addEventListener('contextmenu',ev=>{ ev.preventDefault();   // 右クリック「読み直す」
+      showMenu(ev.clientX,ev.clientY,[[t('ctx.libRescan','🔄 読み直す'),()=>libRescan(lib)]]); });
     if(lib.pending){ c.onclick=async(e)=>{ if(e.target.closest('.libDel')) return;   // 未接続=クリックで再接続
         try{ if((await lib.dh.requestPermission({mode:'read'}))!=='granted') return; }catch(_){ return; }
         libDirs=libDirs.filter(l=>l!==lib); await scanLibrary(lib.dh); }; }
+    else if(missing) c.onclick=(e)=>{ if(e.target.closest('.libDel')) return; libRescan(lib); };   // 見つからない＝クリックで探し直す
     else c.onclick=(e)=>{ if(e.target.closest('.libDel')) return; _libActiveCat=lib; updateLibCatSel(); applyLibFilter(); };   // 選択更新のみ（再構築しない）
   });
 }
@@ -5196,7 +5472,7 @@ function _overNLE(x,y){ for(const cv of [ndcv,ovcv,document.getElementById('prcv
   const r=cv.getBoundingClientRect(); if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom) return true; } return false; }
 function startMediaDragIcon(el,x,y){ removeMediaDragIcon();
   const ic=el.cloneNode(true); ic.classList.add('libDragIcon');   // サムネイル(img/SVG/文字)ごと複製＝ネイティブ画像と同じ見た目
-  ic.style.cssText='position:fixed;margin:0;pointer-events:none;z-index:99999;opacity:.9;width:'+el.offsetWidth+'px;transform:translate(-50%,-50%);';
+  ic.style.cssText='position:fixed;margin:0;pointer-events:none;z-index:99999;opacity:.9;width:'+(el.offsetWidth||92)+'px;transform:translate(-50%,-50%);';   // 詳細表示の行は画面に無い小さなカードを渡す（幅0＝既定の大きさ）
   document.body.appendChild(ic); _mediaDragIcon=ic; moveMediaDragIcon(x,y); }
 function moveMediaDragIcon(x,y){ if(!_mediaDragIcon) return;
   _mediaDragIcon.style.display=_overNLE(x,y)?'none':'';   // NLE上ではアイコンを隠す＝ゴーストだけ
@@ -5211,10 +5487,10 @@ ndcv.addEventListener('drop',e=>{
   e.preventDefault();
   const r=ndcv.getBoundingClientRect(), sx=e.clientX-r.left, sy=e.clientY-r.top;
   const [wx,wy]=ndFromScreen(sx,sy);
-  const item=_dragMedia; _dragMedia=null; _mediaGhostNd=null;
+  const item=_dragMedia, pick=_dragPick; _dragMedia=null; _dragPick=null; _mediaGhostNd=null;
   if(item.isImage){ showErr(t('msg.imgToCover','画像はINFOのカバー画像ノードへドラッグしてください')); return; }   // 画像はカバー専用
   { const la=laneAtY(sy);
-    addSongLine(item,wx,wy,{beat:Math.max(0,snapV(lXToBeat(sx))),lk:la.lk,track:la.gi}); }   // ドロップ位置（拍・レーン種・レーン）に配置
+    addSongLine(item,wx,wy,{beat:Math.max(0,snapV(lXToBeat(sx))),lk:la.lk,track:la.gi,pick}); }   // ドロップ位置（拍・レーン種・レーン）に配置。pick＝入れる難易度
 });
 // Musicレーンへのドロップ = 音源をその位置に配置（譜面・曲情報は変更しない）
 ovcv.addEventListener('dragover',e=>{ if(_dragMedia){ e.preventDefault(); e.dataTransfer.dropEffect='copy';
@@ -5233,6 +5509,7 @@ ovcv.addEventListener('drop',e=>{
 // ライブラリの曲の音源だけをMusicレーンへ読み込む（配置拍=beat）
 async function loadSongFromItem(item,beat){
   try{
+    await ensureItemInfo(item);   // 記録したライブラリの曲: BPM・試聴区間を本物の Info.dat から
     const fh=await getSongFile(item);
     const f=await fh.getFile();
     if(playing) pause();
@@ -5248,13 +5525,17 @@ async function loadSongFromItem(item,beat){
     buildWaveData();
     document.getElementById('tbgTime').style.display='';
     songDeleted=false; ensureGraphIO();
-    if(songNode){ songNode.name=f.name; songNode.handle=fh; songNode.nativePath=''; }
+    // 記録したライブラリの音源は実際のパスも持つ＝保存して開き直した時に exe 版がダイアログ無しで読む（tryAutoLoadSongNative）。
+    // この起動の間は疑似ハンドル（/__lib/file）で読む。ブラウザで選んだフォルダの曲はパスが分からない（その起動の間だけ）
+    const np=await libSongNativePath(item);
+    if(songNode){ songNode.name=f.name; songNode.handle=fh; songNode.nativePath=np; }
     musicBeat=Math.max(0,beat); musicSegs=null; musicSelSet=new Set([0]); metaDirty=true;
     showOk(tf('msg.audioPlaced','音源を配置しました: {name}（拍 {beat}{bpm}）',{name:f.name,beat:musicBeat,bpm:bpm>0?`${t('word.midDot','・')}BPM ${BPM}`:''}));
   }catch(err){ showErr(tf('msg.loadAudioFail','音源の読込に失敗: {err}',{err})); }
 }
 // INFO画面へのドロップ = 曲情報を「未接続のノード3枚」として配置（書き出しへは自分で繋ぐ=ヘルバ様指定）
 async function dropInfoNodesFromItem(item,wx,wy){
+  if(item.native){ await ensureItemInfo(item); if(!item.coverURL&&(item.isMusic||item.isImage)) await libCovers.now(item); }   // 記録したライブラリ: Info.dat・画像を今読む
   const info=item.info||{};
   if(item.isMusic||item.isImage){   // 音楽ファイル/画像ファイル=カバー画像ノードのみ（曲情報/設定は作らない・ヘルバ様指示）
     infoSnapshot(); _infoSnapSup=true;
@@ -5349,20 +5630,26 @@ async function prepareMediaWave(item){
   item._waveLoading=0;
 }
 // ドラッグ開始時の先読み: 譜面（Hard優先）をフラグメント化してゴースト表示・ドロップの即配置に使う
-async function prepareMediaFrag(item){   // 現在の難易度の譜面だけを先読み（無い曲は_noDiff=？ゴースト）
+// 入れる難易度の Info の項目。pick＝{char,diff}（詳細表示の行・絞り込み中のカード）。無ければ今開いている難易度と同名の Standard（無ければ最初のモード）
+function libFindBm(item,pick,curDn){
+  const sets=(item.info&&item.info._difficultyBeatmapSets)||[];
+  if(pick){ const st=sets.find(s2=>s2._beatmapCharacteristicName===pick.char); return ((st&&st._difficultyBeatmaps)||[]).find(b2=>b2._difficulty===pick.diff)||null; }
+  const std=sets.find(s2=>s2._beatmapCharacteristicName==='Standard')||sets[0];
+  return ((std&&std._difficultyBeatmaps)||[]).find(b2=>b2._difficulty===curDn)||null;
+}
+async function prepareMediaFrag(item,pick){   // 入れる難易度の譜面だけを先読み（無い曲は_noDiff=？ゴースト）。pick＝{char,diff}（無ければ今開いている難易度）
   if(item.isClip) return;   // クリップは読込済み(_fragは配列生成時にセット済み)
   if(item.isImage){ item._noDiff=1; return; }   // 画像=NLE/Musicレーンには置けない（カバー専用）→ _noDiffゴースト
+  if(item._v4){ item._noDiff=1; return; }   // v4 の譜面は読み込めない（ゴーストは赤で案内）
   const selOpt=document.getElementById('diff').selectedOptions[0];
   const curDn=selOpt?selOpt.textContent:'Hard';
+  const key=pick?pick.char+'/'+pick.diff:'*/'+curDn;
   if(item._fragLoading) return;
-  if(item._bmDiff===curDn&&(item._frag||item._noDiff)) return;   // 同じ難易度で読み込み済み
+  if(item._bmKey===key&&(item._frag||item._noDiff)) return;   // 同じ難易度で読み込み済み
   item._fragLoading=1; item._noDiff=0; item._frag=null;
   try{
-    const sets=(item.info&&item.info._difficultyBeatmapSets)||[];
-    const std=sets.find(s2=>s2._beatmapCharacteristicName==='Standard')||sets[0];
-    const bms=(std&&std._difficultyBeatmaps)||[];
-    const bm=bms.find(b2=>b2._difficulty===curDn);
-    item._bmDiff=curDn;
+    const bm=libFindBm(item,pick,curDn);
+    item._bmDiff=curDn; item._bmKey=key;
     if(!bm){ item._noDiff=1; }
     else { const df=await (await item.dir.getFileHandle(bm._beatmapFilename)).getFile();
       item._frag=parseDiffFragment(JSON.parse(await df.text()));
@@ -5425,19 +5712,21 @@ function placeClipLine(item,place){
   compileLayersToFlat(); metaDirty=true;
   showOk(tf('msg.assetClipPlaced','アセットクリップ「{name}」を配置しました（{lane}・拍 {beat}）',{name:item.name,lane:laneLabel(lk,tr),beat}));
 }
-async function addSongLine(item,wx,wy,place){   // place={beat,lk,track}: ドロップ位置。現在の難易度のノーツ/ライトだけ読み込む（他難易度には一切入れない）
+async function addSongLine(item,wx,wy,place){   // place={beat,lk,track,pick}: ドロップ位置。今開いている難易度へ、1つの難易度のノーツ/ライトだけ読み込む（他難易度には一切入れない）
   if(item.isClip){ placeClipLine(item,place); return; }
   if(item.isMusic){ showErr('音楽ファイルには譜面がありません（Musicレーンへドラッグすると音源を配置できます）'); return; }
+  if(item._v4){ showErr(t('msg.v4NotSupported','この曲は v4 形式の譜面のため、まだ読み込めません（一覧の表示・並べ替え・絞り込み・音源の配置はできます）')); return; }
   const info=item.info||{};
   const selOpt=document.getElementById('diff').selectedOptions[0];
   const curDn=selOpt?selOpt.textContent:'';
-  const sets=info._difficultyBeatmapSets||[];
-  const std=sets.find(s2=>s2._beatmapCharacteristicName==='Standard')||sets[0];
-  const bm=((std&&std._difficultyBeatmaps)||[]).find(b2=>b2._difficulty===curDn);
-  if(!bm){ showErr(tf('msg.noDiffChart','この曲に {diff} の譜面は含まれていません',{diff:dispDiff(curDn)})); return; }
+  const pick=(place&&place.pick)||null;   // 詳細表示の行＝その行の難易度（別の難易度・別のモードも可）。無ければ今開いている難易度と同名の Standard
+  const srcDn=pick?pick.diff:curDn, dl=pick?libDiffLabel(pick.diff,pick.char):dispDiff(curDn);
+  const bm=libFindBm(item,pick,curDn);
+  if(!bm){ showErr(tf('msg.noDiffChart','この曲に {diff} の譜面は含まれていません',{diff:dl})); return; }
+  const key=pick?pick.char+'/'+pick.diff:'*/'+curDn;
   let frag;
   try{
-    frag=(item._bmDiff===curDn&&item._frag)?item._frag   // dragstart/dragoverの先読みを再利用
+    frag=(item._bmKey===key&&item._frag)?item._frag   // dragstart/dragoverの先読みを再利用
       :parseDiffFragment(JSON.parse(await (await item.dir.getFileHandle(bm._beatmapFilename)).getFile().then(f=>f.text())));
   }catch(err){ showErr(tf('msg.chartLoadFail','譜面の読込に失敗: {err}',{err})); return; }
   const lk=(place&&place.lk)==='l'?'l':'n';
@@ -5446,7 +5735,7 @@ async function addSongLine(item,wx,wy,place){   // place={beat,lk,track}: ドロ
     ?{notes:cp(frag.notes),bombs:cp(frag.bombs),walls:cp(frag.walls),arcs:cp(frag.arcs),chains:cp(frag.chains),lights:[]}
     :{notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:cp(frag.lights)};
   const cnt=lk==='n'?(content.notes.length+content.bombs.length+content.walls.length+content.arcs.length+content.chains.length):content.lights.length;
-  if(!cnt){ showErr(tf('msg.chartNoContent','この譜面（{diff}）に{kind}がありません',{diff:dispDiff(curDn),kind:lk==='n'?t('word.notes','ノーツ'):t('word.lighting','ライティング')})); return; }
+  if(!cnt){ showErr(tf('msg.chartNoContent','この譜面（{diff}）に{kind}がありません',{diff:dl,kind:lk==='n'?t('word.notes','ノーツ'):t('word.lighting','ライティング')})); return; }
   const len=Math.max(4,Math.ceil((frag._max+1)/4)*4);
   const beat=Math.max(0,place?place.beat:snapV(cur));
   let tr=laneCountOf(lk)-1;   // 一番数字の低いトラック(Notes1/Light1=一番下)から詰める（重なる分だけ上へ・ドロップしたレーンには縛られない）
@@ -5454,7 +5743,7 @@ async function addSongLine(item,wx,wy,place){   // place={beat,lk,track}: ドロ
   if(tr<0){ showErr(tf('msg.laneFullNoStack','この位置は{grp}レーンが全て埋まっています（重ねて配置はできません）',{grp:lk==='n'?t('word.notes','ノーツ'):t('word.light','ライト')})); return; }
   // 置き場所が決まってから NJS の取得と履歴（以前は先に行い、置けなかった時も NJS が書き換わり空振りの Undo が残った）
   if(lk==='n'){ const k=(curDn+'Standard.dat').toLowerCase();   // ★ノーツ譜面を持ってきた時だけ、その難易度のNJS/オフセットを取得（ライト配置では一切変更しない）
-    njsCfg[k]={ njs:(+bm._noteJumpMovementSpeed>0)?+bm._noteJumpMovementSpeed:(_DIFF_NJS[curDn]||16), offset:+bm._noteJumpStartBeatOffset||0 };
+    njsCfg[k]={ njs:(+bm._noteJumpMovementSpeed>0)?+bm._noteJumpMovementSpeed:(_DIFF_NJS[srcDn]||16), offset:+bm._noteJumpStartBeatOffset||0 };   // 別の難易度を入れた時は、その難易度の NJS（その速さで作られた譜面のため）
     metaDirty=true; if(typeof refreshMusicHdr==='function') refreshMusicHdr(); }
   snapshot('node');
   edgesInited=true;                                        // 自動直列配線をここからの追加に走らせない
@@ -5463,7 +5752,8 @@ async function addSongLine(item,wx,wy,place){   // place={beat,lk,track}: ドロ
   sections.push(sec); relinkDiffEdges(); layerSel=new Set([sec.id]);
   lineSrc.set(sec.id,{dir:item.dir,info,sheetId:sec.id,cur:''});
   compileLayersToFlat(); metaDirty=true;
-  showOk(tf('msg.chartPlaced','「{name}」の{kind}を配置しました: {diff}（{lane}・拍 {beat}）',{name:info._songName||item.name,kind:lk==='n'?t('word.notes','ノーツ'):t('word.lighting','ライティング'),diff:dispDiff(curDn),lane:laneLabel(lk,tr),beat}));
+  showOk(tf('msg.chartPlaced','「{name}」の{kind}を配置しました: {diff}（{lane}・拍 {beat}）',{name:info._songName||item.name,kind:lk==='n'?t('word.notes','ノーツ'):t('word.lighting','ライティング'),diff:dl,lane:laneLabel(lk,tr),beat})
+    +(pick&&pick.filtered?t('msg.chartPickFiltered','　※フィルターに合う難易度から選びました'):''));
 }
 // 任意のsections配列に対する空きトラック探索（projDiffsの非アクティブ難易度はlaneCountOf/laneOverlapsが使えないため専用実装）
 function firstFreeTrackIn(secArr,lk,beat,len,maxTracks){
@@ -5481,6 +5771,8 @@ function firstFreeTrackIn(secArr,lk,beat,len,maxTracks){
 // 曲情報/カバーノードは既存仕様通り書き出しへは未接続のまま生成（手動配線・ヘルバ様指示は維持）。
 async function bulkLoadSongData(item){
   if(item.isClip||item.isImage||item.isMusic){ showErr(t('msg.bulkSongBadItem','曲データの読込対象はCustomLevelsの曲のみです')); return; }
+  if(item._v4){ showErr(t('msg.v4NotSupported','この曲は v4 形式の譜面のため、まだ読み込めません（一覧の表示・並べ替え・絞り込み・音源の配置はできます）')); return; }
+  await ensureItemInfo(item);   // 記録したライブラリの曲: 本物の Info.dat（試聴区間など）
   const info=item.info||{};
   try{
     const hasMusic=!!audioBuf&&!songDeleted;    // 既に音源が入っている＝Music(音源・BPM・プレビュー)は上書きせず読み込まない（ヘルバ様指定）
@@ -6197,6 +6489,21 @@ if(NLM_DEV) window._dbgApp=Object.freeze({
       clips:(st.sections||[]).filter(s=>secLk(s)==='l').map(s=>({label:s.label,track:s.track||0,n:((s.content||{}).lights||[]).length}))}]))}),
   /** 譜面チェックに渡す入力（書き出しと同じ内容）の複製 */
   mapCheckInput:async()=>structuredClone(await collectMapCheckInput()),
+  /** MEDIA ライブラリ（tests/e2e_nle/test_media_library.py 用）: 表示（グリッド/詳細）・列・並べ替え・絞り込み・件数・一覧の行（並んでいる順）・選択・
+   * グリッドに出ているカード（並び順）・カタログ（記録したフォルダの状態・走査の進み具合）・ドラッグ中に入れる難易度 */
+  lib:()=>structuredClone({...libView.dbg(), filter:libFilter.state(), active:libFilter.active(), condActive:libFilter.condActive(), condCount:libFilter.condCount(), count:libFilter.countText(),
+    layout:libLayout.dbg(),
+    panel:libFilter.isOpen(), cat:_libActiveCat?libDisp(_libActiveCat):null, playdata:libPlayState, pick:_dragPick,
+    libs:libDirs.map(l=>({name:libDisp(l), native:!!l.native, id:l.id||null, asset:!!l.asset, state:l.native?l.state:(l.pending?'pending':'ok'),
+      scanning:!!l.scanning, progress:l.progress||null, items:(l.items||[]).length, songs:(l.items||[]).filter(it=>it.entry).length,
+      extra:(l.items||[]).filter(it=>it.extra).length, covers:(l.items||[]).filter(it=>it.coverURL).length}))}),
+  /** 一覧の i 行目の列 id のセル（画面と同じ描き方の文字・ツールチップ・クラス・中のボタン） */
+  libCell:(i,id)=>libView.cellOf(i,id),
+  /** MEDIA のネットの情報・★の計算（tests/e2e_nle/test_media_library_net.py 用）: 全曲データの状態と取得を頼んだ回数・出どころの表示・
+   * 🔍 の問い合わせ中の曲と押した結果・★のまとめての計算の進み具合（同時に送った数の最大・送った順）・計算の対象の数・環境設定の MEDIA タブの表示 */
+  libOnline:()=>structuredClone(libOnline.dbg()),
+  /** 今の音源の songNode（名前・実際のパス。開き直した時の自動の読み込み用） */
+  song:()=>songNode?{name:songNode.name||'',nativePath:songNode.nativePath||'',handle:!!songNode.handle}:null,
   /** カバー画像の補正（検証用）: 書き出しに繋がったカバーノードの補正設定と、カードの表示 */
   coverFit:()=>{ const cid=connectedNodeId('cover'), n=cid&&infoGraph.nodes[cid], el=cid&&infoWorldEl.querySelector(`.iGrp[data-node="${cid}"] .nCovFit`);
     return structuredClone({cid:cid||null,fit:(n&&n.data.fit)||null,card:el&&el.style.display!=='none'?el.querySelector('span').textContent:''}); },
@@ -6354,7 +6661,9 @@ async function mapCheckJump(dn,o){
   seekEase(o.beat||0);   // カメラも着地点（再生ヘッド）へ寄る
   stat(tf('mc.jumped','{diff} の {beat} 拍目へ移動しました',{diff:dispDiff(dn),beat:Math.round((o.beat||0)*1000)/1000}));
 }
-const mapCheckPanel=installMapCheckPanel({t,escHtml,dispDiff,collect:collectMapCheckInput,jump:mapCheckJump,autoLight:openAutoLight,coverFix:openCoverFit});
+// 難易度を測るプラグインの窓口（状態・測定結果）は「難易度を測る」パネルと譜面チェック（BL評価リストの★/Tech）で共有する
+const ratingClient=createRatingClient({t,collect:collectRatingInput});
+const mapCheckPanel=installMapCheckPanel({t,escHtml,dispDiff,collect:collectMapCheckInput,jump:mapCheckJump,autoLight:openAutoLight,coverFix:openCoverFit,rating:ratingClient});
 // ---- カバー画像の補正（js/media/cover-fit.js）: 元の画像は変えず、カバーノードの data.fit={mode,bg} を書き出し・譜面チェックの時に当てる ----
 function connectedCoverFit(){ const cid=connectedNodeId('cover'), n=cid&&infoGraph.nodes[cid]; return (n&&n.data.fit)||null; }
 async function openCoverFit(after){   // after=補正した後に呼ぶ（譜面チェックの再実行）
@@ -6380,7 +6689,7 @@ async function collectRatingInput(){
   const info=buildExportInfo(diffFiles,'');
   return {files:[{name:'Info.dat',text:JSON.stringify(info)}, ...diffFiles.map(d=>({name:d.name,text:JSON.stringify(d.json)}))]};
 }
-const ratingPanel=installRatingPanel({t,escHtml,dispDiff,collect:collectRatingInput});
+const ratingPanel=installRatingPanel({t,escHtml,dispDiff,rating:ratingClient});
 // ---- 自動ライティング（js/lighting/auto-light.js）: 一番ノーツの多い難易度から作り、中身のある全難易度へ同じものを配る ----
 // 置き方は「ライトのレーンを一番上に1本足し、曲の頭から最後までの1クリップ」。既存のライトには触れない（重なりは利用者がレーン単位で選ぶ）
 function autoLightPlan(){
@@ -9781,13 +10090,15 @@ addEventListener('pointermove',e=>{ const m=paneOf(e.target); if(m) hoverPane=m;
 document.getElementById('mbSettings').onclick=()=>{
   { const el=document.getElementById('laneRatio'), lv=document.getElementById('laneRatioVal');   // 開くたび現在のレーン数へ同期
     if(el){ el.value=notesLanes; if(lv) lv.textContent=notesLanes+' : '+lightLanes; } }
-  document.getElementById('settingsBg').style.display='flex'; };
+  document.getElementById('settingsBg').style.display='flex';
+  if(document.querySelector('#settingsBox .setPanel.on[data-panel=media]')) libOnline.refreshPrefs(); };   // MEDIA タブを開いたまま閉じていた時も状態を聞き直す
 document.getElementById('settingsClose').onclick=()=>{ document.getElementById('settingsBg').style.display='none'; };
 document.querySelectorAll('#settingsBox .setTab').forEach(btn=>btn.addEventListener('click',()=>{   // タブで項目画面を切替（アプリ/音量/Preview/カメラ）
   const tab=btn.dataset.tab;
   document.querySelectorAll('#settingsBox .setTab').forEach(b=>b.classList.toggle('on',b===btn));
   document.querySelectorAll('#settingsBox .setPanel').forEach(p=>p.classList.toggle('on',p.dataset.panel===tab));
   if(tab==='keys'){ try{ renderKeyEditor(); }catch(_){} }   // ショートカット編集タブ＝表示時に描画
+  if(tab==='media') libOnline.refreshPrefs();   // MEDIA タブ＝全曲データ・プレイ記録の今の状態を聞き直す
 }));
 // ---- ショートカット編集タブ（Phase1: 表示・取込・保存。実ハンドラへの反映=Phase2で置換） ----
 let _keyCapture=null;   // {id} 取込中のアクション
@@ -10772,6 +11083,17 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.libDisp = libDisp; } catch (_) {}
   try { rt.setLibLabel = setLibLabel; } catch (_) {}
   try { rt.renderLibList = renderLibList; } catch (_) {}
+  try { rt.loadNativeLibs = loadNativeLibs; } catch (_) {}
+  try { rt.libRefreshExtra = libRefreshExtra; } catch (_) {}
+  try { rt.libSetItemExtra = libSetItemExtra; } catch (_) {}
+  try { rt.libRescan = libRescan; } catch (_) {}
+  try { rt.libOpenFolder = libOpenFolder; } catch (_) {}
+  try { rt.libSelectedRows = libSelectedRows; } catch (_) {}
+  try { rt.libOnline = libOnline; } catch (_) {}
+  try { rt.libSongNativePath = libSongNativePath; } catch (_) {}
+  try { rt.ensureItemInfo = ensureItemInfo; } catch (_) {}
+  try { rt.libView = libView; } catch (_) {}
+  try { rt.libFilter = libFilter; } catch (_) {}
   try { rt.loadSongFromItem = loadSongFromItem; } catch (_) {}
   try { rt.dropInfoNodesFromItem = dropInfoNodesFromItem; } catch (_) {}
   try { rt.prepareMediaWave = prepareMediaWave; } catch (_) {}

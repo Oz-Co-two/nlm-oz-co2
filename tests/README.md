@@ -114,6 +114,16 @@ GPUのドライバの更新・描画の方式（GPU／ソフトウェア）の�
 - `rich`: 2難易度（Hard・Expert）・赤青ノーツ（ドット含む）・ボム・壁・アーク・チェーン・ライト・BPM変化・曲情報を含む。
   `tools/fixtures/rich_map/`（Beat Saber の譜面フォルダ）をアプリの「曲データを読み込む」で読ませ、アプリ自身に保存させたもの。
   音源は basic.wav を使い回す。作り直しは `tools/fixtures/make_fixtures.py`。
+- `media_lib/`: MEDIA の「記録したライブラリ」用の小さなライブラリ（v2・v3 の譜面・v4・キーの無いフォルダ・Noodle が必要な難易度・
+  別のモード・カバー・短い WAV・譜面フォルダの外の音楽と画像）。作り直しは `tools/fixtures/make_media_lib.py`（中身の説明もそこ）。
+  記録は JS から増やせないので、テストはデータフォルダの `config/library.json` に書いて `loadNativeLibs` を呼ぶ（`_lib/e2e_helpers.py` の `media_lib_load`）。
+  `t.fresh()` は `config/library.json` も消す。**`import serve` はエディタ（`t.ed`）を用意した後に**（前に読むと、テストのサーバーが使っていない
+  古い serve＝データフォルダが手元のリポジトリの物を触ってしまう。`tools/cdp.py` は起動時に serve を読み直す）。
+  - テストのサーバーは**ネットへ出ない**（`tools/cdp.py`・`unit_py` が `NLM_NO_NET=1` を設定＝serve.py の全曲データ・BeatSaver の取得は通信の失敗になる）。
+    画面は記録したライブラリを読むと全曲データの取得を頼むので、これが無いとテストのたびに jsDelivr から約10MB を取りに行ってしまう。
+    「取得できた」「BeatSaver で見つかった」「混んでいる」「★の計算の結果」等は、ページ内で `/__lib/details`・`beatsaver`・`rate`・`playdata` の応答を
+    差し替えて作る（`_lib/e2e_helpers.py` の `media_lib_mock`。要求は `media_lib_calls` で読める。`media_lib_load(details=SAMPLE_DETAILS)` で全曲データは取得済み）。
+    起動時に取得を頼む回数のように、画面→serve.py の通り道ごと確かめたい時は `serve.SONG_DETAILS` を差し替える（`e2e_nle/test_media_library_net.py`）。
 
 ## テストの書き方
 
@@ -203,6 +213,38 @@ def test_place_undo(t):
   読み込み自体が遅い/止まった、`booted` が false ＝起動処理の非同期の続きが終わらない、`bootCover` が true で描画フレームが 0 ＝描画ループが
   止まってカバーが外れない。Log 領域に出る CSP の `frame-src` の警告は、テスト用の Edge で毎回出るもので関係ない。
   混んでいて遅いだけなら、最初の起動だけ待ち時間を延ばす（`Ctx.ed` で `wait_ready` の `timeout`）のが対処の候補。
+- **2回目（2026-10-12）**: `run_tests.py e2e_misc unit_js`（5つに分けて同時に）で `e2e_misc/test_music_egg.py::test_music_moved_adds_silence`
+  （そのプロセスで最初に Edge を起動する所＝`test_native._start`）が同じ時間切れ（31.9 秒）。このテストだけを回し直すと通った。
+  同じ PC で別の作業フォルダ（git worktree）のテストも同じ頃に流していた可能性がある。
+  - ページの状態は `ready: complete`・`dbgApp: false`・`booted: null`・`bootCover: true`・描画フレーム 15（0.5 秒間）。
+    Log 領域に **`net::ERR_NO_BUFFER_SPACE`（`js/project/export-system.js` の読み込みに失敗）**。
+  - ＝ アプリの JS（ES Modules）の1つが読み込めず、import が失敗して起動処理そのものが始まらなかった（`dbgApp` が作られていない）。
+    遅いだけではない。`ERR_NO_BUFFER_SPACE` は Windows の通信用バッファの不足（WSAENOBUFS）で、PC 全体で接続が多い時に出る。
+  - 対処の候補: 起動待ちが時間切れになった時、Log 領域に読み込みの失敗（`net::ERR_…`）があれば、ページを読み込み直して1回だけやり直す
+    （今は未対応）。1回目（2026-10-11）も同じ原因だったかは、当時は Log 領域を記録していなかったので分からない。
+  - 同じ日に別の作業（MEDIA ライブラリ）でも同じ形が何度も出ていて、続きは下の「ページの読み込み・素材の取得が通信の段階で失敗する」で追っている。
+
+### ページの読み込み・素材の取得が通信の段階で失敗する（2026-10-12・未解決）
+
+- **起きたこと**: MEDIA ライブラリのテストを足した日に、e2e_nle を同時10で回した中で3回（どれも別のテスト・1回きり）。
+  - 起動待ちの時間切れ（`test-out/history/20261012_115031/`）: ページの状態は `ready:complete`・`dbgApp:false`・`bootCover:true`＝モジュールの読み込みで止まった。
+    Log 領域に `Failed to load resource: net::ERR_NO_BUFFER_SPACE`（`js/vendor/three/addons/utils/BufferGeometryUtils.js`）。上の「起動が 30.0 秒以内に終わりませんでした」と同じ形。
+  - 素材の読み込みで `TypeError: Failed to fetch`（`20261012_115953/`・`20261012_122157/`）。呼び出し元に Kaspersky がページへ差し込んだスクリプト
+    （`me.kis.v2.scr.kaspersky-labs.com/…/main.js` の `fetchCallImpl`）が入っている＝テストの Edge にもウイルス対策ソフトの通信の中継が掛かっている。
+- **分かっていること**: どれもアプリの処理の前の、通信そのものの失敗。`ERR_NO_BUFFER_SPACE` は Windows のソケットの資源切れ（WSAENOBUFS）。
+  serve.py は HTTP/1.0 で1要求ごとに接続を閉じるので、同時10のテストでは短い時間に大量の接続（TIME_WAIT）ができる。そこに Kaspersky の中継が重なる。
+- **次に出たら見る所**: 全テストを回しながら `netstat -an | find /c "TIME_WAIT"` で接続の数を見る。多ければ、serve.py を HTTP/1.1（keep-alive）にする・
+  同時の数を減らす、が対処の候補。Kaspersky の中継をテストの Edge だけ外せるかも確かめる。
+- **同じ日にもう1回**（`test-out/history/20261012_131630/`・unit_py＋e2e_nle＋e2e_misc を同時に回した時）: e2e_nle を分けた1つの最初のテストで、起動待ちの時間切れ。
+  今度は Log 領域に `net::ERR_CONNECTION_REFUSED`（`js/lighting/lighting-editor.js` など起動時に読むモジュールが一斉に）＝接続そのものを断られている。
+  serve.py は `ThreadingHTTPServer` の受付待ちの列が既定の5本で、ブラウザは同時に6本まで接続するので、PC が混んで受付が遅れた時に列があふれた可能性がある
+  （上の「画面テスト…のエラー」の表では、静かな時の実験で拒否は0件）。やり直すと通った。次に出たら、受付待ちの列を増やす（`request_queue_size`）のが対処の候補。
+- **同じ日にさらに2回**（MEDIA の画面の調整の時。どちらも1件ずつやり直すと通った）:
+  - `test-out/history/20261012_142221/`（e2e_nle を同時10）: `test_markers.py::test_marker_add_ctrl_e` の起動待ちの時間切れ。Log 領域に
+    `net::ERR_CONNECTION_REFUSED`（`js/mapcheck/*.js` など起動時に読むモジュール）＝上と同じ形。
+  - `test-out/history/20261012_143720/`（unit_py＋e2e_nle＋e2e_misc を同時）: `test_lanes.py::test_lane_states_saved_and_restored` の素材の読み込みで
+    `TypeError: Failed to fetch`（呼び出し元に Kaspersky の `fetchCallImpl`）＝上の2つ目と同じ形。
+  - 同時に回すテストの数が多い時に続けて出ている。対処の候補（`request_queue_size`・HTTP/1.1・同時の数を減らす）は上と同じで、まだ試していない。
 
 ### 画面テスト「曲データを読み込む: BPM変化の取り込みの確認」のエラー（2026-10-04・未解決）
 

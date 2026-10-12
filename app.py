@@ -114,8 +114,8 @@ _ASSOC = [   # 種類名（エクスプローラーの「種類」欄）は表�
 
 # ネイティブのファイル選択ダイアログの種類名（表示言語に合わせる）
 _DLG_TEXT = {
-    'ja': {'audio': '音源ファイル', 'image': '画像ファイル', 'all': 'すべてのファイル'},
-    'en': {'audio': 'Audio files', 'image': 'Image files', 'all': 'All files'},
+    'ja': {'audio': '音源ファイル', 'image': '画像ファイル', 'playdata': 'Beat Saber のプレイ記録', 'all': 'すべてのファイル'},
+    'en': {'audio': 'Audio files', 'image': 'Image files', 'playdata': 'Beat Saber play data', 'all': 'All files'},
 }
 
 def _ui_lang(data_root):
@@ -244,34 +244,9 @@ _IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'}
 _READ_EXTS = _AUDIO_EXTS | _IMAGE_EXTS
 _WRITE_EXTS = {'.dat', '.egg', '.json'} | _IMAGE_EXTS   # Info.dat/各難易度.dat/song.egg/.nlm-egg.json/cover.*
 
-def _npath(p):
-    """比較用の正規化パス（ジャンクション/シンボリックリンクも実体へ解決・大文字小文字を無視）。"""
-    return os.path.normcase(os.path.realpath(os.path.abspath(str(p))))
-
-def _lpath(p):
-    """比較用の正規化パス（字面だけ＝ファイルシステムに触れない。大文字小文字を無視）。"""
-    return os.path.normcase(os.path.normpath(p))
-
-def _path_kind(p):
-    """JSから来たパスを字面だけで分類する（ファイルシステムには触れない）。
-    'local'=ドライブ名から始まる絶対パス(C:\\...) / 'unc'=ネットワーク上のパス(\\\\server\\share\\...) / None=それ以外。
-    \\\\?\\・\\\\.\\（デバイスパス）、\\??\\（NTパス）、\\から始まるパス、相対パス、C:foo は None。"""
-    if not isinstance(p, str) or not p or '\0' in p:
-        return None
-    s = p.replace('/', '\\')
-    if len(s) >= 3 and s[0].isascii() and s[0].isalpha() and s[1] == ':' and s[2] == '\\':
-        return 'local'
-    if s.startswith('\\\\') and len(s) > 2 and s[2] not in '?.\\':
-        host, _, rest = s[2:].partition('\\')
-        if host and rest.split('\\')[0]:
-            return 'unc'
-    return None
-
-def _is_under(root, p):
-    try:
-        return os.path.commonpath([root, p]) == root
-    except ValueError:   # ドライブが違う等
-        return False
+# パスの比較・分類（_npath/_lpath/_path_kind/_is_under）は MEDIAライブラリ（media_library.py）と共用するため native_paths.py へ移した。
+# UNC を字面だけで判定する考え方の説明もそちら。ここでは同じ名前のまま使う（テストも app._npath 等で呼ぶ）
+from native_paths import _npath, _lpath, _path_kind, _is_under   # noqa: E402
 
 class _NativeAccess:
     # ネットワーク上のパス(UNC)は、存在確認・実体の解決をするだけでWindowsがそのサーバーへ接続し、利用者のNTLM認証を送る。
@@ -410,9 +385,9 @@ def _auto_allow_file_rw(win, origin):
     win.events.loaded += on_loaded
 
 
-def _make_api(access, data_root, close_state, webview):
+def _make_api(access, data_root, close_state, webview, library=None):
     """JS（window.pywebview.api）へ渡す窓口を作る。main() の外に置いて、単体テストから本物の入口を呼べるようにしてある
-    （webview は main() で import したもの。テストでは偽物を渡す）。"""
+    （webview は main() で import したもの。テストでは偽物を渡す）。library は serve.LIBRARY（MEDIA ライブラリ）"""
     class Api:
         def set_dirty(self, on):
             close_state['dirty'] = bool(on)
@@ -476,6 +451,36 @@ def _make_api(access, data_root, close_state, webview):
             if paths:
                 access.approve_file(paths[0])
             return paths[0] if paths else None
+
+        # ---- MEDIA ライブラリ（2026-10-12・media_library.py）----
+        # ライブラリに足すフォルダとプレイ記録のファイルは、ここ（ネイティブのダイアログ）で選ばれた物だけが記録される
+        # （JS から場所を渡す口は無い）。ライブラリは読むだけ＝書き出し先の許可（access.approve_dir）とは別。
+        def lib_pick_folder(self):
+            if library is None:
+                return None
+            paths = webview.windows[0].create_file_dialog(webview.FileDialog.FOLDER)
+            if not paths:
+                return None
+            try:
+                return library.approve_dir(paths[0])   # → {id, name}
+            except Exception as e:
+                return {'error': getattr(e, 'code', str(e))}
+
+        def lib_pick_playdata(self):
+            if library is None:
+                return None
+            path, _ = library.playdata_path()
+            d = os.path.dirname(path) if path and library.may_touch(path) else ''
+            kw = {'directory': d} if d and os.path.isdir(d) else {}
+            tx = _DLG_TEXT[_ui_lang(data_root)]
+            paths = webview.windows[0].create_file_dialog(
+                webview.FileDialog.OPEN, file_types=(tx['playdata'] + ' (PlayerData.dat)', tx['all'] + ' (*.*)'), **kw)
+            if not paths:
+                return None
+            try:
+                return library.set_playdata(paths[0])   # → プレイ記録の状態
+            except Exception as e:
+                return {'error': getattr(e, 'code', str(e))}
 
         @staticmethod
         def _child(base, name):   # 名前は1階層分のみ許可（'..'や区切り文字で外へ出さない）
@@ -578,7 +583,7 @@ def main():
     close_state = {'dirty': False, 'force': False}
     access = _NativeAccess(os.path.join(data_root, 'config', 'native_out_dirs.json'))
 
-    api = _make_api(access, data_root, close_state, webview)
+    api = _make_api(access, data_root, close_state, webview, serve.LIBRARY)
 
     url = serve.access_url(port)   # 合言葉（#k=…）付き。serve.py の SESSION_TOKEN の説明
     win = webview.create_window(

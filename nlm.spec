@@ -15,6 +15,11 @@ datas = [
     ('serve.py', '.'),
     ('rating_plugin.py', '.'),   # 難易度を測る（BL星の近似）プラグインの取り込み・実行。serve.py が import する
     ('app_update.py', '.'),      # 本体の自動更新。serve.py・app.py が import する
+    ('media_library.py', '.'),   # MEDIA ライブラリ（記録・走査・プレイ記録）。serve.py が import する
+    ('map_hash.py', '.'),        # 譜面のハッシュ。media_library.py が import する
+    ('native_paths.py', '.'),    # パスの字面の判定。app.py・media_library.py が import する
+    ('song_details.py', '.'),    # 全曲データ（jsDelivr）。serve.py が import する
+    ('beatsaver_api.py', '.'),   # BeatSaver への1曲の問い合わせ。serve.py が import する
     ('js', 'js'),
     ('css', 'css'),
     ('fonts', 'fonts'),
@@ -26,7 +31,7 @@ datas = [
 ]
 
 # pywebview の Windows(WebView2) バックエンドと pythonnet を確実に取り込む
-hiddenimports = ['serve', 'rating_plugin', 'app_update']
+hiddenimports = ['serve', 'rating_plugin', 'app_update', 'media_library', 'map_hash', 'native_paths', 'song_details', 'beatsaver_api']
 binaries = []
 for pkg in ('webview', 'clr_loader', 'pythonnet'):
     try:

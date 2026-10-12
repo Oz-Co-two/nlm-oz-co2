@@ -16,12 +16,19 @@ export class MediaPanel {
     return [
     'applyLibFilter',
     'dropInfoNodesFromItem',
+    'ensureItemInfo',
     'extractArtwork',
     'extractArtworkBatch',
     'getSongFile',
     'libDisp',
     'libLabels',
     'libMarkColors',
+    'libOpenFolder',
+    'libRefreshExtra',
+    'libRescan',
+    'libSelectedRows',
+    'libSetItemExtra',
+    'loadNativeLibs',
     'prepareMediaFrag',
     'prepareMediaWave',
     'renderLibList',
@@ -34,12 +41,19 @@ export class MediaPanel {
 
   applyLibFilter(...args) { return this.rt.applyLibFilter(...args); }
   dropInfoNodesFromItem(...args) { return this.rt.dropInfoNodesFromItem(...args); }
+  ensureItemInfo(...args) { return this.rt.ensureItemInfo(...args); }
   extractArtwork(...args) { return this.rt.extractArtwork(...args); }
   extractArtworkBatch(...args) { return this.rt.extractArtworkBatch(...args); }
   getSongFile(...args) { return this.rt.getSongFile(...args); }
   libDisp(...args) { return this.rt.libDisp(...args); }
   libLabels(...args) { return this.rt.libLabels(...args); }
   libMarkColors(...args) { return this.rt.libMarkColors(...args); }
+  libOpenFolder(...args) { return this.rt.libOpenFolder(...args); }
+  libRefreshExtra(...args) { return this.rt.libRefreshExtra(...args); }
+  libRescan(...args) { return this.rt.libRescan(...args); }
+  libSelectedRows(...args) { return this.rt.libSelectedRows(...args); }
+  libSetItemExtra(...args) { return this.rt.libSetItemExtra(...args); }
+  loadNativeLibs(...args) { return this.rt.loadNativeLibs(...args); }
   prepareMediaFrag(...args) { return this.rt.prepareMediaFrag(...args); }
   prepareMediaWave(...args) { return this.rt.prepareMediaWave(...args); }
   renderLibList(...args) { return this.rt.renderLibList(...args); }

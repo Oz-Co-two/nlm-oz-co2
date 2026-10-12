@@ -25,7 +25,42 @@ RUN_TIMEOUT = 300            # 測定 1 回の上限秒（重い譜面・全難�
 _VER_RE = re.compile(r'\d{1,4}\.\d{1,4}\.\d{1,4}')
 _DAT_RE = re.compile(r'[A-Za-z0-9_\- ]{1,64}\.dat')
 _MODS = ('none', 'SS', 'FS', 'SFS')
-_lock = threading.Lock()     # 取り込みと測定を同時に走らせない
+
+# 取り込みと測定を同時に走らせない。測定どうしは同時に parallel 個まで（MEDIA の「NLM推定の★」をまとめて計算する時。
+# 何個まで同時に動かすかは環境設定＝利用者が決める。プラグインは1回ごとに起動する exe なので、同時に動かすほど CPU を使う）
+_cv = threading.Condition()
+_runs = {'n': 0, 'installing': False}
+
+
+def _cpu_limit():
+    return max(1, os.cpu_count() or 1)
+
+
+class _Install:
+    def __enter__(self):
+        with _cv:
+            _cv.wait_for(lambda: not _runs['installing'] and _runs['n'] == 0)
+            _runs['installing'] = True
+
+    def __exit__(self, *a):
+        with _cv:
+            _runs['installing'] = False
+            _cv.notify_all()
+
+
+class _Run:
+    def __init__(self, parallel):
+        self.limit = min(max(1, int(parallel)), _cpu_limit())
+
+    def __enter__(self):
+        with _cv:
+            _cv.wait_for(lambda: not _runs['installing'] and _runs['n'] < self.limit)
+            _runs['n'] += 1
+
+    def __exit__(self, *a):
+        with _cv:
+            _runs['n'] -= 1
+            _cv.notify_all()
 
 
 class PluginError(Exception):
@@ -138,7 +173,7 @@ class RatingPlugin:
 
     def install(self):
         """最新版を取得し、SHA-256 を照合して plugins/rating/<版>/ へ展開する。成功したらその版を使う版にする"""
-        with _lock:
+        with _Install():
             m = self._check_manifest(self._get(MANIFEST_URL, 64 * 1024))
             if m['protocol'] != PROTOCOL:
                 raise PluginError('protocol')   # 古い NLM に新しすぎるプラグインを入れない（NLM の更新が必要）
@@ -186,8 +221,9 @@ class RatingPlugin:
             shutil.rmtree(tmp, ignore_errors=True)
 
     # ---- 測定 ----
-    def measure(self, body):
-        """body = {files:[{name,text}], modifiers:[...]}。Info.dat と書き出す難易度の .dat（NLM の書き出しと同じ中身）"""
+    def measure(self, body, parallel=1):
+        """body = {files:[{name,text}], modifiers:[...]}。Info.dat と書き出す難易度の .dat（NLM の書き出しと同じ中身）。
+        parallel = 同時に動かしてよい測定の数（1〜CPU数に丸める。測定パネルは1、MEDIA のまとめての計算は環境設定の値）"""
         files = body.get('files')
         if not isinstance(files, list) or not (2 <= len(files) <= 32):
             raise PluginError('badInput')
@@ -206,7 +242,7 @@ class RatingPlugin:
             raise PluginError('notInstalled')
         exe = os.path.join(self.root, cur['version'], 'nlm-rating.exe')
         req = json.dumps({'protocol': PROTOCOL, 'files': clean, 'modifiers': mods}, ensure_ascii=False).encode('utf-8')
-        with _lock:
+        with _Run(parallel):
             try:
                 r = subprocess.run([exe], input=req, capture_output=True, timeout=RUN_TIMEOUT, cwd=os.path.dirname(exe),
                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))

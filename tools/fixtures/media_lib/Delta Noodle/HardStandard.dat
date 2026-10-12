@@ -1,0 +1,91 @@
+{
+ "_version": "2.2.0",
+ "_events": [
+  {
+   "_time": 0,
+   "_type": 1,
+   "_value": 1
+  }
+ ],
+ "_notes": [
+  {
+   "_time": 1.0,
+   "_lineIndex": 0,
+   "_lineLayer": 0,
+   "_type": 0,
+   "_cutDirection": 1
+  },
+  {
+   "_time": 2.0,
+   "_lineIndex": 1,
+   "_lineLayer": 0,
+   "_type": 1,
+   "_cutDirection": 1
+  },
+  {
+   "_time": 3.0,
+   "_lineIndex": 2,
+   "_lineLayer": 0,
+   "_type": 0,
+   "_cutDirection": 1
+  },
+  {
+   "_time": 4.0,
+   "_lineIndex": 3,
+   "_lineLayer": 0,
+   "_type": 1,
+   "_cutDirection": 1
+  },
+  {
+   "_time": 5.0,
+   "_lineIndex": 0,
+   "_lineLayer": 0,
+   "_type": 0,
+   "_cutDirection": 1
+  },
+  {
+   "_time": 6.0,
+   "_lineIndex": 1,
+   "_lineLayer": 0,
+   "_type": 1,
+   "_cutDirection": 1
+  },
+  {
+   "_time": 7.0,
+   "_lineIndex": 2,
+   "_lineLayer": 0,
+   "_type": 0,
+   "_cutDirection": 1
+  },
+  {
+   "_time": 8.0,
+   "_lineIndex": 3,
+   "_lineLayer": 0,
+   "_type": 1,
+   "_cutDirection": 1
+  },
+  {
+   "_time": 9.0,
+   "_lineIndex": 0,
+   "_lineLayer": 0,
+   "_type": 0,
+   "_cutDirection": 1
+  },
+  {
+   "_time": 10.0,
+   "_lineIndex": 1,
+   "_lineLayer": 0,
+   "_type": 1,
+   "_cutDirection": 1
+  }
+ ],
+ "_obstacles": [
+  {
+   "_time": 2,
+   "_lineIndex": 0,
+   "_type": 0,
+   "_duration": 1,
+   "_width": 1
+  }
+ ]
+}

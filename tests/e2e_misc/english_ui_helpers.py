@@ -10,6 +10,7 @@
 import json
 
 from misc_helpers import click_sel, close_prefs, open_prefs, prefs_tab, wait_until
+from e2e_helpers import media_lib_load, media_lib_sample_extra, media_lib_mock, SAMPLE_DETAILS
 
 # 英語表示でも日本語のまま出してよいもの（言語の選択肢そのもの）
 ALLOW = ("日本語", "言語 / Language")
@@ -107,6 +108,38 @@ def tour(ed):
     scan(ed, "起動直後")
     # 左上: MEDIA ⇄ PREVIEW、右上: NLE ⇄ INFO、下: NOTES ⇄ LIGHTING
     tab_over(ed, 280, 300); scan(ed, "PREVIEW"); tab_over(ed, 280, 300); scan(ed, "MEDIA")
+    # MEDIA の記録したライブラリ（2026-10-12）: グリッド・詳細表示（全部の列）・列のメニュー・絞り込みのパネル
+    media_lib_load(ed, extra=media_lib_sample_extra(), covers=1, details=SAMPLE_DETAILS); scan(ed, "MEDIA ライブラリ")   # 全曲データは取得済み（出どころの表示・🔍）
+    click_sel(ed, "#libViewSeg button[data-view=detail]", "詳細表示"); ed.wait(0.4); scan(ed, "MEDIA 詳細表示")
+    # 🔍（全曲データに無い曲）の確認・★のまとめての計算（右クリックのメニュー・計算中の帯）。応答は差し替え（ネット・プラグインへ出ない）
+    media_lib_mock(ed, rate="async b=>{ while(!window.__rateGo) await new Promise(r=>setTimeout(r,50)); return {ok:false,error:'run'}; }")
+    ed.js("(t=>{ t.scrollLeft=t.querySelector('.ltH[data-col=uploaded]').offsetLeft-120; return 1; })(document.getElementById('libTable'))"); ed.wait(0.3)
+    scan(ed, "MEDIA 詳細表示（🔍）")
+    click_sel(ed, "#libTable .ltLook", "🔍"); wait_until(ed, "!!document.getElementById('dirtyDlg')", label="🔍 の確認"); scan(ed, "MEDIA 🔍 の確認")
+    click_sel(ed, "#dirtyDlg button:not(.pri)", "やめる"); ed.wait(0.3)
+    r0 = ed.js("(()=>{ const e=[...document.querySelectorAll('#libTable .ltRow')].find(e=>e._i===0), r=e.getBoundingClientRect(), t=document.getElementById('libTable').getBoundingClientRect();"
+               " return {x:t.left+60,y:r.top+r.height/2}; })()")
+    ed.click(r0["x"], r0["y"], button="right"); ed.wait(0.4); scan(ed, "MEDIA 行の右クリック")
+    ed.js("[...document.querySelectorAll('#ctxmenu > button')].find(b=>b.textContent.includes('filtered rows')||b.textContent.includes('絞り込んだ行')).click();true")
+    wait_until(ed, "!!window._dbgApp.libOnline().rate.bar", label="★の計算中の帯"); scan(ed, "MEDIA ★の計算中")
+    click_sel(ed, "#libRateStop", "中止"); ed.wait(0.2); scan(ed, "MEDIA ★の計算を中止中")
+    ed.js("window.__rateGo=true"); wait_until(ed, "!window._dbgApp.libOnline().rate.running", label="★の計算の終わり"); scan(ed, "MEDIA ★の計算の終わり")
+    ed.js("(t=>{ t.scrollLeft=0; return 1; })(document.getElementById('libTable'))")
+    hx = ed.js("(r=>({x:r.left+r.width/2,y:r.top+r.height/2}))(document.querySelector('#libTable .ltH[data-col=name]').getBoundingClientRect())")
+    ed.click(hx["x"], hx["y"], button="right"); ed.wait(0.3); scan(ed, "MEDIA 列のメニュー")
+    ed.js("[...document.querySelectorAll('#libColMenu input')].forEach(c=>{ if(!c.checked) c.click(); }); true"); ed.wait(0.3)   # 隠れている列も出してセル・ツールチップを点検
+    scan(ed, "MEDIA 詳細表示（全部の列）")
+    ed.js("document.querySelector('#libColMenu .lcmReset').click(); true"); ed.key("Escape"); ed.wait(0.2)
+    # 詳細表示の文字の大きさ（スライダーのツールチップ）・フィルター（条件の数の丸）・検索欄の ×（2026-10-12）
+    ed.js("document.getElementById('libSize').value=16; document.getElementById('libSize').dispatchEvent(new Event('input')); true"); ed.wait(0.3)
+    scan(ed, "MEDIA 詳細表示（文字の大きさ）")
+    click_sel(ed, "#libFiltBtn", "フィルター"); ed.wait(0.4); scan(ed, "MEDIA フィルター")
+    ed.js("(i=>{ i.value='5'; i.dispatchEvent(new Event('input')); return 1; })(document.querySelector('#libFiltPanel .lfRow[data-k=stars] .lfLo'))"); ed.wait(0.3)
+    scan(ed, "MEDIA フィルター（条件の数の丸）")
+    click_sel(ed, "#libFiltPanel .lfClose", "フィルターを閉じる"); ed.wait(0.2)
+    click_sel(ed, "#libSearch", "検索欄"); ed.call("Input.insertText", text="a"); ed.wait(0.4); scan(ed, "MEDIA 検索欄（×）")
+    click_sel(ed, "#libSearchX", "検索を消す"); click_sel(ed, "#libFiltClear", "解除"); ed.wait(0.3)
+    click_sel(ed, "#libViewSeg button[data-view=grid]", "グリッド表示"); ed.wait(0.3)
     tab_over(ed, g["left"] + g["w"] * 0.6, g["lanes"] + 40); scan(ed, "INFO")
     tab_over(ed, g["left"] + g["w"] * 0.6, g["lanes"] + 40); scan(ed, "NLE")
     ed.move(960, 820); ed.wait(0.2); ed.key("Tab"); ed.wait(0.8); scan(ed, "LIGHTING")
@@ -127,7 +160,7 @@ def tour(ed):
     click_sel(ed, "#mFileBtn", "ファイル"); ed.wait(0.4); scan(ed, "ファイルメニュー"); ed.key("Escape"); ed.click(1700, 1000); ed.wait(0.3)
     # 環境設定の全タブ
     open_prefs(ed)
-    for tab in ("app", "vol", "preview", "cam", "keys"):
+    for tab in ("app", "vol", "preview", "cam", "keys", "media"):
         prefs_tab(ed, tab); scan(ed, f"環境設定 {tab}")
     close_prefs(ed)
     # NLE の右クリック: クリップ・空き・レーンの左端・Music・テンポの帯・マーカーの帯（Ctrl+E で1つ置く）

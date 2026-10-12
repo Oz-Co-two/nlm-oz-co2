@@ -6,7 +6,7 @@ This tutorial walks you step by step through loading a song, placing notes, expo
 
 > **Switching the UI to English**
 > NLM starts in Japanese. Click **環境設定** (Preferences — the second menu at the top left, next to ファイル)
-> and set **言語 / Language** to **English** on the first tab. The screenshots in this tutorial show the English UI (v1.4.1-oz).
+> and set **言語 / Language** to **English** on the first tab. The screenshots in this tutorial show the English UI (v1.5.0-oz).
 
 This tutorial covers only the basic flow. For the details of each panel, see the original
 [reference manual](https://helba.flashhub.net/nlm/manual/) (Japanese).
@@ -45,9 +45,10 @@ Faster workflows and the checks before publishing are covered in the [advanced t
 | ⑤ | Transport bar | Play / stop, and the current time and beat |
 
 The "TAB" next to the headings of ① to ③ means: **put the mouse over that area and press Tab to switch the view**
-(for example, Tab over ③ switches NOTES ⇄ LIGHTING).
+(for example, Tab over ③ switches NOTES ⇄ LIGHTING). You can also click the "TAB" and the name next to it to switch.
 
 The small floating windows listing shortcuts can be closed with the ✕ at their top right (you can show them again from Preferences).
+Press — to fold one into a single line showing only its title (Standard, NOTES, and so on); press it again to unfold it.
 They are closed in the rest of the images to keep them easy to read.
 
 ---
@@ -219,7 +220,7 @@ You can check notes and lights in a view close to Beat Saber.
 ![Switched to PREVIEW](images/tutorial-en/12-preview.png)
 
 Press **Space** (or the play button ②) to play / stop.
-The buttons at the top right of PREVIEW toggle the notes, lights and stage.
+The buttons at the top right of PREVIEW toggle the notes, lights and stage (the rightmost one brightens the stage so you can see its motion more easily).
 Choose the stage (environment) in the "Default" field at the top right of the NLE.
 
 ---
@@ -272,7 +273,7 @@ The exported files are for Beat Saber, so to continue editing later, save a **pr
 
 Save with **Ctrl + S** (or File → Save). The first time, you are asked for the location and file name.
 
-When there are unsaved changes, **UNSAVED** at the top right of the NLE lights up in red.
+When there are unsaved changes, **UNSAVED** at the top right of the NLE lights up in red (just moving the playhead or zooming the NLE does not light it).
 
 ![The UNSAVED lamp (lit)](images/tutorial-en/15-dirty-lamp.png)
 
@@ -284,6 +285,7 @@ If you close the app, or choose New or Open, with unsaved changes, you are asked
 
 To continue editing, open the `.nlmf` with **File → Open…** (Ctrl + O). You can also double-click the `.nlmf`.
 The song, the output folder and the cover image are loaded automatically from their previous locations.
+The playhead position and the zoom and scroll position of the NLE also return to where they were when you saved.
 If you moved the files, select them again with "Reconnect output folder / cover image" on the export node of INFO.
 
 ---
@@ -291,11 +293,12 @@ If you moved the files, select them again with "Reconnect output folder / cover 
 ## 10. Where to go next
 
 Once you are used to the basics, try these features too. They are explained in the [advanced tutorial](tutorial-advanced.en.md)
-(faster workflows, making the most of the NLE, building several difficulties, checks before publishing, measuring ★, and more).
+(faster workflows, making the most of the NLE, the MEDIA library, building several difficulties, checks before publishing, measuring ★, and more).
 
 - **Clip editing in the NLE**: move, copy, split (C key) and join (Ctrl + G) clips to build repeated choruses and so on efficiently
 - **Assets**: right-click a clip with a pattern you use often → "Save to assets", then drag it from MEDIA to another place or another song
 - **Copying between difficulties**: click the selected difficulty again to open a menu that sends notes or lights to another difficulty
-- **Add folders to MEDIA**: register CustomLevels or your music folder to drag existing songs into the NLE as material
+- **MEDIA library**: register CustomLevels or other folders with **Add folder to MEDIA…** in the File menu to sort, search and filter the list of songs (one row per difficulty in the detail view; ★, NPS, play records and more), and to drag songs into the NLE as material.
+  In the exe version the folders stay registered the next time you start NLM (see [MEDIA library](tutorial-advanced.en.md#media-library-record-song-folders-then-list-and-search-them) in chapter 3 of the advanced tutorial)
 - **Tempo parts**: support for songs whose BPM changes partway through ("Auto-detect all parts" in the NLE)
 - **Markers**: place a marker with Ctrl + E and jump between markers with Ctrl + [ / ]

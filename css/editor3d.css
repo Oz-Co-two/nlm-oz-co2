@@ -51,9 +51,14 @@
 
   .mkbtn:hover{color:#fff;background:rgba(255,255,255,.1);}
 
-  .keysFolded .mkbody{height:0;overflow:hidden;visibility:hidden;}
+  .mktitle{flex:1;padding:0 10px 0 6px;font-size:10px;color:#a8a8b0;white-space:nowrap;user-select:none;}
 
-   /* たたんでも幅は本文基準のまま=ヘッダーの長さが変わらない */
+   /* 題名（何の一覧か。環境設定の「ショートカット表示」の項目名）。帯の持ち手の一部＝ここをつかんでも動かせる */
+  .keysFolded .mkbody{display:none;}
+
+  .keysFolded .mkhead{border-bottom-color:transparent;margin-bottom:-5px;}
+
+   /* たたむと題名とボタンだけの幅・1行に縮む */
   .mkrow{display:flex;align-items:baseline;gap:8px;}
 
   .mkd{font-size:10px;color:#7d7d7d;min-width:92px;}

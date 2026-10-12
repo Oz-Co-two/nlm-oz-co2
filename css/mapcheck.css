@@ -91,8 +91,25 @@
   #mcPanel .blF .mcBeats{margin:2px 0 0;flex-basis:100%;}
   #mcPanel .blDiff{font-size:10px;padding:0 5px;border-radius:3px;background:#24524c;color:#dff;}
   #mcPanel .blNote{margin:4px 0 0 72px;font-size:10px;color:#86aaa4;line-height:1.45;}
+  /* R5.A の★/Tech の欄（bl-stars.js）: 自動計算のボタンと状態・難易度ごとの欄。手入力の欄は黄色の枠 */
+  #mcPanel .blStarsBox{margin:5px 0 0 72px;}
   #mcPanel .blStars{margin:5px 0 0 72px;display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;}
+  #mcPanel .blStarsBox .blStars{margin-left:0;}
+  #mcPanel .blStar{display:inline-flex;align-items:center;gap:3px;}
   #mcPanel .blStar input{width:52px;margin-left:3px;background:#0b1c1a;border:1px solid #2f5a55;border-radius:4px;color:#e5e5e5;padding:1px 4px;font:inherit;font-size:11px;}
+  #mcPanel .blStar input.man{border-color:#c9a640;}
+  #mcPanel .blStarMan{font-size:10px;color:#e8cf6a;}
+  #mcPanel .blStarNa{font-size:10px;color:#86aaa4;}
+  #mcPanel .blRtCtl{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;}
+  #mcPanel .blRtInfo{font-size:10.5px;color:#86aaa4;}
+  #mcPanel .blRtErr{margin-top:4px;font-size:11px;color:#ffb3bb;}
+  #mcPanel .blRtBox{padding:7px 9px;border-radius:6px;background:#16413c;border:1px solid #2bb3a3;color:#cdeee9;font-size:11px;line-height:1.55;}
+  #mcPanel .blRtRepo{color:#8fbdb6;margin-top:3px;user-select:text;}
+  #mcPanel .blRtBtns{display:flex;gap:6px;margin-top:6px;}
+  #mcPanel .blStarsBox button{background:#1d4540;border:1px solid #2bb3a3;border-radius:6px;color:#dff;padding:2px 9px;cursor:pointer;font:inherit;font-size:11px;white-space:nowrap;}
+  #mcPanel .blStarsBox button:hover{background:#2bb3a3;color:#04201d;}
+  #mcPanel .blStarsBox button:disabled{opacity:.6;cursor:default;background:#1d4540;color:#dff;}
+  #mcPanel .blStarsBox .blStarAuto{padding:0 6px;font-size:10px;}
   #mcPanel.blMode .mcBeat{background:#1f4a45;color:#dff;}
   #mcPanel.blMode .mcBeat:hover{background:#2bb3a3;color:#04201d;}
   #mcPanel.blMode .mcBeat.cur{background:#5a44a8;color:#fff;}

@@ -98,6 +98,8 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
    （`app.py`の`Api.pick_song_file`/`read_song_file`、JSの`openSongFileNative`/`tryAutoLoadSongNative`）。
    pywebviewの`create_file_dialog`は実際の絶対パスを返すので、それを`songNode.nativePath`（文字列）
    としてプロジェクトJSONへ保存すれば、次回はダイアログ無し・IndexedDB不要で自動読込できる。
+   **MEDIA のライブラリフォルダも同じ考え方で記録する**（2026-10-12。ダイアログの実パスを `config/library.json` へ。下の「MEDIA ライブラリ」節）。
+   `saveLibDirs()` は空のまま残してある（ブラウザ版の一時的なフォルダの経路から呼ばれるため）。
    **出力フォルダ・カバー画像も同じ方式に移行済み**（2026-09-21）。`Api.pick_folder`/`pick_image_file`/`fs_*`
    （app.py）と、JSの疑似ハンドル`mkNativeDir`/`mkNativeFile`（`getDirectoryHandle`/`getFileHandle`/`createWritable`/
    `getFile`だけを実装したFileSystemHandle互換）で包むので、`exportMap`は無改修で動く。実パスは
@@ -170,7 +172,10 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   文面に定義が無くNLMが解釈した所（チェーン密度＝squish、振り始め・スイング軌道のマス、ボムの照明の近似など）は
   コメントと画面の注記（`BL_NOTE_JA`）に書いてある。基準の改訂に追従したら `CRITERIA_DATE` を更新し `tools/blcriteria_test.py`。
   - スイングのまとまりは BS Map Check のもの（90度ちょうどで分ける）を使わず独自に作る（45度ルールが判定できなくなるため）。
-  - 視界ブロック（R5.A）は★とTechレーティングを使う公式の式。値は利用者がパネルで入れる（アプリを開いている間だけ保持）。
+  - 視界ブロック（R5.A）は★とTechレーティングを使う公式の式。値の欄は`js/mapcheck/bl-stars.js`（2026-10-12）: 「難易度を測る」プラグインが
+    あれば BL評価リストを表示した時に自動で測って入れ（BS Map Check のタブでは測らない）、無ければ取り込みの案内（説明を見てから押す2段階）。
+    手で書き換えた欄は手入力が優先で、測り直しても上書きしない（BeatLeaderの本当の値用）。値はアプリを開いている間だけ保持（保存しない）。
+    R11.H.5（★の低い順・0.5★まで許容）も同じ★で判定する。近似値なので違反ではなく要確認止まり。★が足りない時は所見を`BL.MANUAL`にして手動確認にする。
   - R1.B.2（Shuffle/Shuffle Periodは未使用か0）に合わせ、`buildExportInfo`はShuffleが0なら周期も0で書く（他のエディタや公式譜面は0.5を書くため、
     読み込んだ値をそのまま出すと常に違反になっていた。ゲームはこの2項目を使っていないので遊び心地は変わらない）。
 
@@ -195,13 +200,55 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   開き直した時に`nativePath`の元画像へ自動で繋ぎ直されて補正が消えるため。`infoGraph`の中なので保存・Undo・未保存ランプは自動で付く。
 - 画像を選び直したら`fit`を消す（前の画像向けの設定のため）。同じ画像の「再接続」では残す。補正が効く時だけカードに「書き出し時に…へ補正」と「補正をやめる」。
 
+## MEDIA ライブラリ（記録・詳細表示・絞り込み・2026-10-12）
+
+- 構成: Python は `media_library.py`（フォルダの記録 `config/library.json`・走査・キャッシュ `config/library_cache.json`・ファイル読み出し・
+  フォルダを開く・プレイ記録 PlayerData.dat・NLM推定の★の記録 `RatingCache`）、`map_hash.py`（譜面のハッシュ）、`song_details.py`（全曲データ）、
+  `beatsaver_api.py`（BeatSaver へ1曲）、`native_paths.py`（パスの字面の判定。app.py と共有）、serve.py の `/__lib/*`、app.py の `lib_pick_folder`/`lib_pick_playdata`。
+  JS は `js/media/lib-native.js`（`/__lib/*`・疑似ハンドル）・`lib-table.js`（詳細表示・1行＝1難易度・仮想スクロール・並べ替え・列）・
+  `lib-filter.js`（検索・絞り込み・件数）・`lib-online.js`（全曲データ・🔍・★のまとめ計算・環境設定の MEDIA タブ）。editor-app.js は配線だけ。
+- **ライブラリのフォルダとプレイ記録の場所は、exe 版のダイアログで選んだ物だけが記録される**（JS から増やす口を作らないこと）。JS から受け取るのは
+  記録の id・その中の相対パス・ファイル名だけ。ライブラリは読むだけ（書き出し先の許可 `_NativeAccess` とは別）。
+- **BeatSaver への問い合わせは、全曲データに無い曲で利用者が🔍を押して確認した1曲だけ**（利用者の決定: サーバーの負荷を最小に。まとめて調べる・
+  自動の問い合わせ・「今後は確認しない」は作らない）。全曲データ（kinsi55/BeatSaberScrappedData の songDetails2_v3.gz）は **jsDelivr からだけ**・
+  1日1回まで・ETag。取得は環境設定 ON の時だけ JS が頼む（Python から勝手に取りに行かない）。形式（protobuf・formatVersion 3）は
+  SongDetails（MIT）の Structs が出典。formatVersion が上がったら `song_details.py` を追従する。
+- ハッシュは SongCore と同じ（v2/v3＝Info.dat＋各難易度の .dat、v4＝Info.dat＋audioDataFilename＋難易度ごとに譜面・ライトの組。重複もそのつど足す）。
+  BeatSaver・BeatLeader・PlayerData の levelId（custom_level_<大文字>）と一致する。規則を変えるとキャッシュは自動で作り直される。
+- NPS は BeatSaver と同じ: 色ノーツ数 ÷（最初〜最後の色ノーツの拍を基本の BPM で秒に）。ダウンロード日は曲フォルダの metadata.json の addedDate を優先
+  （Mod が書く。無ければフォルダの作成日と Info.dat の更新日の早い方。フォルダごとコピーすると作成日はコピーした日になるため）。
+- v4 の譜面ファイルは NLM の読み込み（`parseDiffFragment`）が未対応なので、NLE へのドラッグ・曲データを読み込むは断る（一覧・絞り込みはできる）。
+- 画面の配置（2026-10-12・利用者と決めた調整）: 操作部品は見出しの行 `#libHead`（MEDIA [TAB] PREVIEW の帯の右・入りきらない分だけ折り返す）。
+  帯は PREVIEW と共用の `position:absolute` なので、行の先頭の空き `#libHeadGap` の幅を `lib-layout.js` が帯の幅から測って入れる（言語で帯の幅が変わる）。
+  部品を足したら、既定の MEDIA の幅（約480px）で2段に収まるかを `tests/e2e_nle/test_media_library_ui.py` で確かめる。左のカタログの幅は `bsnm_libSideW`。
+  フィルター・件数・解除・表示の切り替え・大きさのスライダーは1つの組 `#libFiltGrp`（一緒に折り返す。表示の切り替えとスライダーは組の右端＝行の右端。
+  折り返しの基準の幅は中身の最小＝ボタン・切り替え・スライダーの幅 `--lib-fb`＋件数の一番短い形 `--lib-cmin`。組の外に置くとスライダーだけが次の段へ1つで折り返す）。
+  検索欄を次の段へ送るか（`fitSearch`）は段の数で決める。段は部品の縦の中心で数える（上端で数えると高さの違う部品が別の段に数えられる）。
+  **UI文字サイズ（`bsnm_uiscale`）は `#tabFolder` と帯に CSS の zoom で掛かる**: `getBoundingClientRect`・マウスの座標は画面の px、style の幅・`offsetWidth` は
+  zoom の前の px なので、画面の px を幅へ入れる時は `cssZoom()`（lib-layout.js）で割る（割らないと 80% で帯と重なり、150% で段が増えた）。
+  ResizeObserver の中では、見ている要素より浅い要素の大きさが変わる変更をしない（「ResizeObserver loop」のエラーになる＝次の描画の前へ回す）。
+- 詳細表示の列の幅は一覧の全部の行の中身と見出しから測る（`lib-table.js` の `measureWidths`・列の定義の `mw`）。**セルの描き方（`cell`）を変えたら `mw` も合わせる**
+  （合わないと文字が…で切れる）。長い名前の列（アーティスト・マッパー・環境・Mod・フォルダ名・タグ）は列の定義の `max` で止める（…で省略・全文はツールチップ）。
+  4000行・全部の列でも 50ms 以内が目安（行ごとに `toLocaleString` や DOM を作ると超える。MEDIA が隠れている間は測らない）。見出しの2段は訳の `lib.h.*` の改行。文字の大きさは `bsnm_libFont`（大きさのスライダーを詳細表示の時だけ兼用・Ctrl＋ホイール）、
+  行の高さは `rowHeightOf`（CSS の `--lt-rh` と仮想スクロールの両方）。
+- NLM推定の★: 曲ごとに nlm-rating を実行（`rating_plugin.measure(body, parallel)`。測定どうしは同時に parallel 個まで・取り込み中は待つ）。
+  同時の数は環境設定 `bsnm_rateParallel`（上限は CPU 数と5の小さい方＝ブラウザの同じサーバーへの同時接続は6本まで）。結果はハッシュ＋プラグインの版で記録。
+  表示は★の列に `NLM推定 7.12` と言葉と色を付ける（公式の★と見間違えないように。利用者の要望）。
+- **新しい .py を足したら `nlm.spec` の datas と hiddenimports に足す**（serve.py が実行時に import するため。足さないと exe だけ起動に失敗する）。
+- テスト: サーバーは `NLM_NO_NET=1`（全曲データ・BeatSaver でネットへ出ない）・`NLM_PLAYDATA`（プレイ記録の既定の場所の差し替え。利用者の本物を読まない）。
+  記録したライブラリは、テストのデータフォルダの `config/library.json` を書けば次の `/__lib/list` で読み直される。素材は `tools/fixtures/media_lib/`。
+  テストの中でエディタを用意する前に `import serve` すると手元の `config/` を触るので注意（`tests/README.md`）。
+
 ## 難易度を測る（BeatLeaderの星の近似・2026-10-02）
 
 - 計算は**本体に同梱しない別配布のプラグイン** nlm-rating（https://github.com/Oz-Co-two/nlm-rating ・MIT・.NETの自己完結exe・zip約19MB）。
   BeatLeaderの公開コード（RatingAPI＋beatleader-analyzer server-dev）を使う。本家と同じ星は保証できない（Accが本家より2〜9%低い譜面がある）
   ので、画面には「近似値・公式ツールではない」と必ず出す。比較テスト・上流の追従手順はプラグイン側のREADME。
-- NLM側: `rating_plugin.py`（取り込み・更新・実行）＋`serve.py`の`/__rating/*`（POST）＋`js/rating/rating-panel.js`。
-  入力は譜面チェックと同じ`collectExportDiffs()`/`buildExportInfo()`（`collectRatingInput`）。
+- NLM側: `rating_plugin.py`（取り込み・更新・実行）＋`serve.py`の`/__rating/*`（POST）＋`js/rating/rating-client.js`（状態・通信・測定結果）
+  ＋`js/rating/rating-panel.js`（表示）。入力は譜面チェックと同じ`collectExportDiffs()`/`buildExportInfo()`（`collectRatingInput`）。
+- `rating-client.js`は「難易度を測る」パネルと譜面チェックのBL評価リスト（R5.A・R11.H.5の★/Tech）で**1つを共有**する（どちらで測っても両方に出る）。
+  `measure({ifChanged:true})`は測る中身（送る .dat の文字列）が前回うまく測れた時と同じなら測り直さない＝開くたびに測っても無駄に exe を起動しない。
+  測定中に頼まれた分は、終わってからもう1回だけ測る。
 - 置き場所は exe隣の`plugins/rating/<版>/`（`current.json`で使う版を選ぶ・旧版は残す）。取得先URLは`rating_plugin.py`に固定し、
   zipは`manifest.json`のSHA-256・サイズと照合してから展開する。JSからURL・パスを渡せるようにしないこと（署名なしexeを実行するため）。
 - 通信仕様の版`PROTOCOL`（rating_plugin.py）はプラグイン側`Program.Protocol`と同じ値。入出力の形を変えたら両方を上げる
@@ -333,6 +380,11 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   **ショートカットを足したら早見表にも足す**（以前は固定の文字で、W・Esc 等が載っておらず、割り当てを変えても古いキーのままだった）。
   訳のキーは`{…}`を含んだままの文字列（例`skk:2個以上 {noteArc} ／ …`）。キー名は設定ファイル（`bsnm_keymap`）由来なので`escHtml`を通す。
 - 右下の共通の早見表は3Dビューの高さぎりぎり。行を足すと画面テスト（1600×980）で最後の行が下にはみ出して`崩れ`になる（Escの行を足した時は区切り線を2本減らして収めた）。
+- 早見表の上の帯（持ち手）には題名（環境設定「ショートカット表示」の項目名`set.k.*`）を`renderModeKeys`が書く（2026-10-12）。「—」でたたむと本文を消して
+  題名とボタンだけの幅の1行に縮む（以前は幅を保ったまま空の帯が残り、何の一覧か分からなかった）。動かした早見表をひらく時は、左端で幅を測ってからペインの中へ押し戻す。
+- 各ペインの左上のモード表示（`setModeLabel`）の「［TAB］ 次の画面名」（`.mlNext`）は、クリックでも Tab キーと同じ切り替えをする（2026-10-12）。
+  ラベルの他の部分は`pointer-events:none`のまま＝クリックを下の3D/NLEへ通す。`.mlNext`の押下は伝播を止める（下で配置・範囲選択を始めない）。
+  NLE/INFO の表示（`updateNodeColLabel`）も言語の読込のたびに作り直す（ツールチップの訳のため）。
 - LIGHTINGで3Dの上にマウスがある時の数字キー: 1/2/3＝色を選ぶ（`lightCol1〜3`・①/②/白、クロマ時は左/右/白＝Cパイの先頭3つ）。ここでは数字で難易度を変えない
   （4/5も何もしない・利用者と決めた仕様）。NLE・INFO等の上では今までどおり数字＝難易度切替。
 

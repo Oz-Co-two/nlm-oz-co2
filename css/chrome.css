@@ -205,3 +205,20 @@
 
   #settingsBox h2{font-size:14px;margin:0 0 16px;}
 
+  /* 環境設定の MEDIA タブ（2026-10-12・js/media/lib-online.js）: 説明・状態の行・プレイ記録の場所とボタン */
+  #settingsBox .setChk{display:flex;align-items:center;gap:8px;cursor:pointer;}
+
+  #settingsBox .setChk input{width:auto;}
+
+  #settingsBox .setPanel .setNote{color:#8a8a92;font-size:11px;margin-top:4px;}
+
+  #settingsBox .setPanel .setState{font-size:12px;margin-top:4px;color:#c8c8ce;}
+
+  #settingsBox .setPath{color:#8a8a92;font-size:11px;word-break:break-all;}
+
+  #settingsBox .setBtns{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;}
+
+  #settingsBox .setBtns button{padding:4px 12px;font-size:12px;}
+
+  #settingsBox .setBtns button:disabled{opacity:.4;cursor:default;}
+

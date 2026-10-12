@@ -302,6 +302,11 @@ class Editor:
         # 設定の書き込み先を一時フォルダへ（手元の config/settings.json を汚さない）。serve は import 時に環境変数を読む
         self.data_dir = tempfile.mkdtemp(prefix="nlm_cdp_data_")
         os.environ["NLM_DATA_DIR"] = self.data_dir
+        # MEDIA ライブラリのプレイ記録の既定の場所も一時フォルダへ（利用者の本物の PlayerData.dat を読まない。テストはここに置いて使う）
+        os.environ["NLM_PLAYDATA"] = os.path.join(self.data_dir, "PlayerData.dat")
+        # ネットへ出ない（記録したライブラリを読むと画面が全曲データの取得を頼む＝毎回 jsDelivr から約10MB を取りに行かないように）。
+        # 実際に取得して確かめる時だけ、先に NLM_NO_NET=0 を設定しておく
+        os.environ.setdefault("NLM_NO_NET", "1")
         sys.path.insert(0, str(ROOT))
         if "serve" in sys.modules:
             del sys.modules["serve"]

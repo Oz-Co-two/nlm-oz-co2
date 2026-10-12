@@ -3,6 +3,7 @@
 import { runMapCheck, STATUS, CHECK_NAMES } from './mapcheck.js';
 import { runBlCriteria, BL } from './blcriteria.js';
 import { blView } from './blcriteria-view.js';
+import { blStars } from './bl-stars.js';
 
 // 項目の日本語名（{}はチェックが返す数値）。英語版は lang/en.json の mc.k.* で上書きされる
 const JA = {
@@ -64,7 +65,8 @@ const COVER_FIX_BL = new Set(['coverRatio', 'coverSize', 'coverFormat']);
 
 export function installMapCheckPanel(api) {
   // autoLight / coverFix (終わったら呼ぶ関数)＝自動ライティング / カバー画像の補正の確認を開く（無ければボタンを出さない）
-  const { t, escHtml, collect, jump, dispDiff, autoLight, coverFix } = api;
+  // rating＝難易度を測るプラグインの窓口（rating-client.js）。BL評価リストの★/Techを自動で入れる（無ければ手入力だけ）
+  const { t, escHtml, collect, jump, dispDiff, autoLight, coverFix, rating } = api;
   const FIX = { autolight: [autoLight, 'mc.fixAutoLight', '💡 自動ライティング…'], cover: [coverFix, 'mc.fixCover', '🖼 カバー画像を補正…'] };
   const fixBtn = (kind = 'autolight') => FIX[kind][0] ? `<button class="mcFix" data-fix="${kind}">${escHtml(t(FIX[kind][1], FIX[kind][2]))}</button>` : '';
   const fixKindMc = key => LIGHT_FIX_MC.has(key) ? 'autolight' : COVER_FIX_MC.has(key) ? 'cover' : null;
@@ -83,14 +85,31 @@ export function installMapCheckPanel(api) {
   const expanded = new Set();   // 「他N件」を開いた項目（再描画しても開いたまま）
   // タブ: 'mc'＝BS Map Check と同じ判定 / 'bl'＝NLM版 BeatLeader評価リスト（開いているタブだけは覚えておく）
   let tab = 'mc'; try { if (localStorage.getItem('bsnm_mcTab') === 'bl') tab = 'bl'; } catch (_) {}
-  const blSt = { onlyIssues: false, stars: {}, expanded };   // ★/Techはアプリを開いている間だけ保持
+  const blSt = { onlyIssues: false, expanded };
+  const stars = blStars({ t, escHtml, dispDiff, rating });   // ★/Tech の欄（自動計算・手入力。アプリを開いている間だけ保持）
   const blv = blView({ t, escHtml, dispDiff, mcLabel: key => t('mc.k.' + key, JA[key] || key),
-    fixHTML: f => fixKindBl(f.key) && (f.status === BL.FAIL || f.status === BL.CHECK) ? fixBtn(fixKindBl(f.key)) : '' });
+    fixHTML: f => fixKindBl(f.key) && (f.status === BL.FAIL || f.status === BL.CHECK) ? fixBtn(fixKindBl(f.key)) : '',
+    starsHTML: diffs => stars.html(diffs) });
   const runBl = () => {
     blRes = null;
     if (!input || !last || last.error) return;
-    try { blRes = runBlCriteria({ ...input, stars: blSt.stars }, last); } catch (e) { blRes = { error: String(e && e.message || e) }; }
+    try { blRes = runBlCriteria({ ...input, stars: stars.values(input.diffs.map(d => d.difficulty)) }, last); } catch (e) { blRes = { error: String(e && e.message || e) }; }
   };
+  // BL評価リストを見ている時だけ、★/Tech を自動で測る（プラグインがあれば。譜面が前回測った時のままなら測り直さない）
+  const autoRate = async () => {
+    if (!rating || tab !== 'bl' || !isOpen() || !last || last.error) return;
+    await rating.ensureStatus();   // PCの中の確認だけ（GitHubへは通信しない）
+    if (rating.installed() && tab === 'bl' && isOpen()) rating.measure({ ifChanged: true });
+  };
+  // 測り終わった・取り込んだ等 → 判定をやり直して描き直す。★/Techの欄に入力中なら、欄を離れるまで描き直さない（打っている途中の値が消えるため）
+  let renderLater = false;
+  const typingStars = () => { const a = document.activeElement; return !!(a && a.tagName === 'INPUT' && a.closest('#mcPanel .blStars')); };
+  if (rating) rating.subscribe(() => {
+    if (!isOpen()) return;
+    runBl();
+    if (tab !== 'bl') return;
+    if (typingStars()) renderLater = true; else render();
+  });
 
   function build() {
     el = document.createElement('div'); el.id = 'mcPanel';
@@ -103,10 +122,11 @@ export function installMapCheckPanel(api) {
     el.querySelector('.mcRerun').addEventListener('click', () => run());
     el.querySelectorAll('.mcTab').forEach(b => b.addEventListener('click', () => {
       tab = b.dataset.tab; try { localStorage.setItem('bsnm_mcTab', tab); } catch (_) {}
-      el.querySelector('.mcBody').scrollTop = 0; render();
+      el.querySelector('.mcBody').scrollTop = 0; render(); autoRate();
     }));
     const body = el.querySelector('.mcBody');
     body.addEventListener('click', ev => {   // 拍チップと「他N件」は描画し直すので委譲で受ける（パネル本体は固定要素）
+      if (stars.onClick(ev)) { runBl(); render(); return; }   // ★/Tech の欄のボタン（自動計算・取り込み・自動に戻す）
       const fx = ev.target.closest('.mcFix');
       if (fx) { const fn = FIX[fx.dataset.fix] && FIX[fx.dataset.fix][0]; if (fn) fn(() => run()); return; }   // 直したらチェックし直す
       const more = ev.target.closest('.mcMore');
@@ -128,10 +148,11 @@ export function installMapCheckPanel(api) {
     body.addEventListener('change', ev => {   // BL評価リストの「違反・要確認だけ」と★/Tech（入力を確定した時だけ描き直す）
       const x = ev.target;
       if (x.classList.contains('blOnlyChk')) { blSt.onlyIssues = x.checked; render(); return; }
-      const dn = x.dataset.star || x.dataset.tech; if (!dn) return;
-      const v = x.value === '' ? undefined : Math.max(0, +x.value);
-      blSt.stars[dn] = { ...(blSt.stars[dn] || {}), [x.dataset.star ? 'star' : 'tech']: v };
-      runBl(); render();
+      // 描き直しは、クリックした次の欄にフォーカスが移ってから（同期で描き直すと、移る先の欄が消えてフォーカスが外れる）
+      if (stars.onChange(x)) { runBl(); setTimeout(render, 0); }
+    });
+    body.addEventListener('focusout', () => {   // 入力中に測り終わっていたら、欄を離れた時に描き直す
+      if (renderLater) setTimeout(() => { if (renderLater && !typingStars()) render(); }, 0);
     });
     // 見出しをつかんで移動（画面外へは出さない）
     const head = el.querySelector('.mcHead');
@@ -210,6 +231,7 @@ export function installMapCheckPanel(api) {
   }
 
   function renderBl() {
+    renderLater = false;
     el.querySelector('.mcTitle').textContent = t('mc.title', '譜面チェック（BeatLeader基準）');
     el.querySelector('.mcRerun').textContent = busy ? t('mc.running', 'チェック中…') : t('mc.rerun', '↻ 再チェック');
     el.querySelector('.mcRerun').disabled = busy;
@@ -221,9 +243,11 @@ export function installMapCheckPanel(api) {
     const err = last.error || (blRes && blRes.error);
     if (err || !blRes) { body.innerHTML = err ? `<div class="mcErr">${escHtml(err)}</div>` : ''; return; }
     const opened = new Map([...body.querySelectorAll('details.blSec')].map(x => [x.dataset.sec, x.open])), sc = body.scrollTop;
+    const a = typingStars() ? document.activeElement : null, fk = a && (a.dataset.star != null ? ['star', a.dataset.star] : ['tech', a.dataset.tech]);
     body.innerHTML = blv.render(blRes, blSt, CHIP_MAX);
     body.querySelectorAll('details.blSec').forEach(x => { if (opened.has(x.dataset.sec)) x.open = opened.get(x.dataset.sec); });
     body.scrollTop = sc;
+    if (fk) { const n = body.querySelector(`.blStars input[data-${fk[0]}="${CSS.escape(fk[1])}"]`); if (n) n.focus(); }   // 入力中の★/Techの欄はフォーカスを戻す
   }
 
   async function run() {
@@ -235,8 +259,10 @@ export function installMapCheckPanel(api) {
     } catch (e) { last = { error: String(e && e.message || e) }; input = null; }
     runBl();
     busy = false; render();
+    autoRate();
   }
   function open() { if (!el) build(); el.style.display = 'flex'; render(); run(); }
   function close() { if (el) el.style.display = 'none'; }
-  return { open, close, run, isOpen: () => !!el && el.style.display !== 'none' };
+  function isOpen() { return !!el && el.style.display !== 'none'; }
+  return { open, close, run, isOpen };
 }

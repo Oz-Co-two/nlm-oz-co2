@@ -43,7 +43,7 @@ SONG_PATH = "C:\\NLMTest\\Music\\clicks.wav"
 COVER_PATH = "C:\\NLMTest\\Art\\cover_src.png"
 
 _FAKE_JS = r"""(()=>{
-  const F=window.__nat={calls:[],files:{},dirs:{},approved:{},picked:{},queue:{folder:[],image:[],song:[]},dirty:[],quit:0};
+  const F=window.__nat={calls:[],files:{},dirs:{},approved:{},picked:{},queue:{folder:[],image:[],song:[],lib:[],playdata:[]},dirty:[],quit:0};
   const norm=p=>String(p||'').replace(/\//g,'\\').replace(/\\+$/,'').toLowerCase();
   const rec=(fn,...args)=>{ F.calls.push({fn,args}); };
   const baseName=p=>String(p).split(/[\\/]/).filter(Boolean).pop()||'';
@@ -67,6 +67,12 @@ _FAKE_JS = r"""(()=>{
     async pick_song_file(){ rec('pick_song_file'); const p=F.queue.song.shift()||null; if(p) F.picked[norm(p)]=1; return p; },
     async pick_image_file(start){ rec('pick_image_file',start); const p=F.queue.image.shift()||null; if(p) F.picked[norm(p)]=1; return p; },
     async pick_folder(start){ rec('pick_folder',start); const p=F.queue.folder.shift()||null; if(p) F.addDir(p,true); return p; },   // 選ばれた＝許可（app.py の approve_dir）
+    // MEDIA の「フォルダを追加」（app.py の Api.lib_pick_folder）。本物は選んだフォルダを Python 側で記録して {id,name} を返す。
+    // 偽物は queue.lib に積んだ物を返すだけ＝テストは先に serve.LIBRARY.approve_dir で記録しておき、その戻り値を積む（lib_queue_pick）
+    async lib_pick_folder(){ rec('lib_pick_folder'); return F.queue.lib.shift()||null; },
+    // ゲームのプレイ記録の選択（app.py の Api.lib_pick_playdata）。本物は選んだファイルを Python 側で記録してプレイ記録の状態を返す。
+    // 偽物は queue.playdata に積んだ物を返すだけ＝テストは先に serve.LIBRARY.set_playdata で記録しておき、その戻り値を積む
+    async lib_pick_playdata(){ rec('lib_pick_playdata'); return F.queue.playdata.shift()||null; },
     async read_song_file(path){ rec('read_song_file',path); const f=F.files[norm(path)];
       if(!f) return {ok:false,error:'not-found'};
       if(!canRead(path)) return {ok:false,error:'not-allowed'};
@@ -227,7 +233,7 @@ def close_prefs(ed):
 
 
 def prefs_tab(ed, tab):
-    """タブ（app/vol/preview/cam/keys）を押して切り替え、その画面が出るまで待つ"""
+    """タブ（app/vol/preview/cam/keys/media）を押して切り替え、その画面が出るまで待つ"""
     click_sel(ed, f"#settingsBox .setTab[data-tab={tab}]", f"タブ {tab}")
     wait_until(ed, f"document.querySelector('#settingsBox .setPanel.on')&&document.querySelector('#settingsBox .setPanel.on').dataset.panel==={json.dumps(tab)}",
                label=f"{tab} の画面")

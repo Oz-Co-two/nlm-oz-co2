@@ -148,6 +148,8 @@ Pythonから使う場合（検証スクリプトの書き方）はファイル�
 - `rich.nlmf`: 主要な要素を一通り含む素材（2難易度・ボム・壁・アーク・チェーン・ライト・BPM変化）。元は `rich_map/`
   （Beat Saber の譜面フォルダ）で、アプリの「曲データを読み込む」で読ませて保存させたもの。音源は basic.wav を使い回す
 - `make_fixtures.py`: 上の素材を作り直す。nlmf はアプリ自身に保存させている＝保存形式が変わったらこれを実行すれば追従する。
+- `media_lib/`・`make_media_lib.py`: MEDIA の「記録したライブラリ」のテスト用の小さなライブラリ（4曲・音楽1・画像1）と、その作り直し。
+  画面で試す時は、データフォルダの `config/library.json` に `{"libs":[{"path":"<media_lib の絶対パス>"}]}` を書いて開く（JS から記録を増やす口は無い）
 
 決まった確認はテスト（`tests/`・`tools/run_tests.py`）にする。使い方は `tests/README.md`。
 
@@ -218,6 +220,12 @@ basic.wav に赤青のノーツを置き、マーカー・テンポパート・�
 - 「難易度を測る」は nlm-rating プラグインが要る。取り込み済みの `plugins/rating`（`current.json` と版のフォルダ）を
   環境変数 `NLM_RATING_DIR` で指定する（省略時は配布フォルダ `NLM-app/plugins/rating`）。撮影用の一時データフォルダへ
   コピーして使う。見つからなければ「プラグイン未導入」の画面を撮る。
+- MEDIA ライブラリ（3章の 03-3〜03-8・9章の 09-2）は MEDIA の幅を変えるので最後に撮る。素材は自動テストと同じ `tools/fixtures/media_lib`
+  （架空の曲）を一時フォルダの `CustomLevels` へ写し、撮影用のデータフォルダの `config/library.json` に記録して読み直させる
+  （`tests/_lib/e2e_helpers.py` の `media_lib_load` 等を読み込んで使う。tests/ 側は変えない）。ネットへは出ない（`NLM_NO_NET=1`）ので、
+  全曲データ・NLM推定の★は見本の値（`SAMPLE_DETAILS`・`media_lib_sample_extra`）、プレイ記録は見本の `PlayerData.dat` を書いて使う。
+  環境設定のプレイ記録の場所は一時フォルダ（PC のユーザー名を含む）になるので、撮る前に例の文字（`C:\Users\YourName\...`）に置き換える。
+  ［ファイルを選ぶ…］のある exe 版の表示にするため、撮る間だけ `window.pywebview` にプレイ記録の選択だけを置く。
 - 撮った後は、画像を目で見て番号の重なり・はみ出しが無いか確かめる（画面の配置が変わると番号の位置がずれることがある）。
 
 ## ビルドして配布フォルダへ反映する

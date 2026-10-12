@@ -8,6 +8,45 @@ For basic usage, see the [tutorial](docs/tutorial.en.md), the [advanced tutorial
 <!-- Format: one "## v1.2.3-oz" heading per version. Top-level bold items ("- **...**") are the headlines shown in the in-app
 update notice (tools/make_release.py puts them into update.json). Keep the same versions and the same number of headlines as CHANGELOG.md. -->
 
+## v1.5.0-oz
+
+- **MEDIA now remembers the song folders you added (exe version)**
+  Folders you pick with "Add folder" (such as Beat Saber's CustomLevels) are recorded and loaded automatically the next time you start NLM
+  (before, you had to add them again after every restart). Even folders with many songs open quickly from the second time, because NLM reuses what it read last time.
+  - A folder that cannot be found is shown dimmed and stays recorded. Right-click the folder → "Reload" to read it again. "−" removes it from the record.
+  - Songs with a v4 Info.dat now show their title, artist and so on (loading a v4 map into the NLE is not supported yet).
+  - Audio you placed from a recorded folder is loaded automatically when you open the project again.
+  - NLM only reads the song folders; it never writes to them.
+- **MEDIA now has a detail view, sorting, search and filters**
+  You can switch between the grid view and the detail view (one row per difficulty). The detail view lists the title, artist, mapper, difficulty, ★, NJS,
+  NPS, length, BPM, upload date, download date, play count and more. Click a column heading to sort, and right-click a heading to show or hide columns.
+  - Narrow the list with the search box (title, artist, mapper) and "Filter" (ranges of ★, length, NJS, NPS, BPM and upload date; difficulty, mode and
+    ranked status; excluding maps that require Noodle/Chroma; favorites only; unplayed only). The number of matching songs and maps is shown.
+  - Dragging a row of the detail view to the NLE puts the map of that row's difficulty into the difficulty you have open (you can borrow a map from another difficulty).
+  - In the detail view, the size slider changes the text size of the list (Ctrl + wheel over the list also works). Drag the edge of the catalog on the left to change its width.
+  - The controls are now on the heading row of MEDIA. The view, columns, sort order and filters are kept for the next time.
+  - Fixed: when you dragged items quickly one after another, the next drop was sometimes ignored.
+- **MEDIA now shows each song's upload date, rating and ★, and your own play records (exe version)**
+  - NLM downloads the song data used by some Beat Saber mods (BeatSaberScrappedData, built from public information of BeatSaver, BeatLeader and ScoreSaber)
+    from jsDelivr at most once a day, and shows the upload date, upvote ratio, ranked status, ★ and more. NLM sends nothing. You can turn this off on the new "MEDIA" tab of Preferences.
+  - Songs that are not in the song data show "Unmatched 🔍". When you press 🔍 and confirm, NLM sends only that one song's identifier (hash) to BeatSaver to look it up
+    (NLM never asks BeatSaver on its own).
+  - NLM reads Beat Saber's play records on your PC (PlayerData.dat) and shows the play count, personal best, full combo and favorites for each difficulty (read only).
+    You can change the file location on the "MEDIA" tab of Preferences.
+  - For songs without ★, right-click rows of the detail view → "Calculate ★ (NLM est.)" to get an approximate ★ with the "Estimate difficulty" plugin.
+    It is shown as "NLM est." in a different color (it is not BeatLeader's official ★). The number of songs calculated at the same time can be changed on the "MEDIA" tab of Preferences.
+- **The NLM BL criteria list of the map check now fills in ★ and Tech automatically**
+  The ★ and Tech fields of R5.A (whether notes are visible long enough to react) are filled in with values calculated by the "Estimate difficulty" plugin
+  (before, you typed them in). If the plugin is not installed, you can install it from "📥 Install the plugin and auto-calculate…".
+  - Fields you overwrite get a yellow border and are kept when measuring again ("Back to auto" returns to the calculated value).
+  - R11.H.5 (whether the difficulties are in ascending order of ★) is now judged with the same ★. Because the values are approximations, an inverted order is shown as "Check", not as a "Violation".
+  - Results are shared with the "Estimate difficulty" panel. If the map has not changed since the last measurement, that result is shown without measuring again.
+- **The floating shortcut lists now show a title, and fold into a single line with just the title**
+  The bar at the top of each list shows which list it is (Standard, NOTES, LIGHTING, NLE, INFO). Press "—" to fold it into a short line with only the title and the buttons
+  (before, a folded list left an empty bar of the same width, and you could not tell which list it was).
+- **You can now click "[TAB] next view" at the top left of each area to switch views**
+  It switches MEDIA ⇄ PREVIEW, NLE ⇄ INFO and NOTES ⇄ LIGHTING, just like the Tab key.
+
 ## v1.4.3-oz
 
 - **The on-screen shortcut list now includes missing actions and shows your own keys**

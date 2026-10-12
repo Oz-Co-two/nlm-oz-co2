@@ -114,6 +114,12 @@ class Ctx:
             (Path(ed.data_dir) / "config" / "settings.json").unlink(missing_ok=True)
         except Exception:
             pass
+        # MEDIA の記録したライブラリ（config/library.json）も消す＝前のテストで記録したフォルダが一覧に出ない
+        # （serve.py は次の /__lib/list で記録の変化に気づいて読み直す。走査のキャッシュ library_cache.json は残してよい）
+        try:
+            (Path(ed.data_dir) / "config" / "library.json").unlink(missing_ok=True)
+        except Exception:
+            pass
         try:
             ed.reload()
         except Exception:

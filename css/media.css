@@ -1,8 +1,8 @@
 /* Non-Linear Mapper — media.css */
 
-  /* MEDIA ペイン（#tabFolder）— モードラベル下からコンテンツ開始 */
+  /* MEDIA ペイン（#tabFolder）— 操作部品の行（#libHead）はモードラベル（MEDIA [TAB] PREVIEW の帯）と同じ高さから始める */
   #tabFolder{
-    padding:46px 12px 12px;
+    padding:8px 12px 12px;
     font-size:12px;
     color:var(--textdim);
     overflow:hidden;
@@ -15,14 +15,24 @@
   #tabFolder.on{display:flex;}
 
   /* ---- MEDIA=Blenderアセットブラウザ風: 左カタログ列＋右カードグリッド ---- */
-  #libTop{display:flex;align-items:center;gap:8px;flex:0 0 auto;margin:0 0 2px;}
+  /* 見出しの行（2026-10-12）: 帯の右にフォルダを追加・検索・フィルター・件数・解除・表示の切り替え・大きさ。入りきらない分は2行目へ折り返す。
+     1行目の高さは帯（アイコン 33px）に合わせ、部品の中心を帯の文字の中心にそろえる。#libHeadGap の幅は lib-layout.js が帯の幅から入れる */
+  #libHead{display:flex;flex-wrap:wrap;align-items:center;column-gap:6px;row-gap:5px;flex:0 0 auto;margin:0 0 6px;min-width:0;}
 
-   /* padding無し=MEDIAラベル左端(12px)に揃える */
-  #libTop #libAddBtn{margin:0;}
+  #libHeadGap{flex:0 0 auto;width:236px;height:31px;}
+
+  #libHead #libAddBtn{margin:0;flex:0 0 auto;white-space:nowrap;}
 
   #libBody{display:flex;flex:1 1 0%;min-height:0;overflow:hidden;}
 
-  #libSide{flex:0 0 176px;display:flex;flex-direction:column;min-height:0;border-right:1px solid #2a2a2e;overflow-y:auto;padding:6px 0;}
+  /* 左のカタログ。幅は境目（#libSideSplit）のドラッグで変える（lib-layout.js・bsnm_libSideW。無ければ 176px） */
+  #libSide{flex:0 0 auto;width:176px;display:flex;flex-direction:column;min-height:0;border-right:1px solid #2a2a2e;overflow-y:auto;padding:6px 0;box-sizing:border-box;}
+
+  /* カタログと一覧の境目（つかむ所は境目の線＝#libSide の右の枠 1px と、その右 5px。場所は取らない）。
+     カタログの側へははみ出さない（カタログに縦のスクロールバーが出た時に、スクロールバーをつかんだつもりで幅が変わらないように） */
+  #libSideSplit{flex:0 0 6px;margin:0 -5px 0 -1px;position:relative;z-index:3;cursor:col-resize;touch-action:none;}
+
+  #libSideSplit:hover,#libSideSplit.drag{background:linear-gradient(90deg,var(--accent) 2px,transparent 2px);}
 
   .libCat{display:flex;align-items:center;gap:7px;padding:4px 8px;font-size:12px;color:#c5c5c5;cursor:pointer;border-radius:4px;margin:1px 6px 1px 0;}
 
@@ -96,3 +106,269 @@
 
   #pvVis .tbi:not(.on) svg [stroke="#56ffc1"]{stroke:var(--accent);}
 
+
+  /* ---- MEDIA ライブラリ: 表示の切り替え・検索・絞り込み・件数・詳細表示（2026-10-12）---- */
+  /* 表示の切り替え（グリッド／詳細）は大きさのスライダーのすぐ左（下の #libFiltGrp の組の中） */
+  #libViewSeg{display:flex;flex:0 0 auto;border:1px solid #3a3a40;border-radius:6px;overflow:hidden;}
+
+  #libViewSeg button{background:#1d1d20;border:0;border-radius:0;color:#8a8a92;padding:4px 8px;display:flex;align-items:center;}
+
+  #libViewSeg button+button{border-left:1px solid #3a3a40;}
+
+  #libViewSeg button.on{background:var(--accent);color:#fff;}
+
+  /* 検索欄: 中に 🔍 の印と消すボタン（×・文字がある時だけ）。打つとすぐ絞り込む（lib-filter.js）。
+     段に余った幅は検索欄が先に取る（最大 200px＝案内の「曲名・アーティスト・マッパー」が全部見える幅。その先は件数へ）。
+     折り返しは基準の幅 80px で判定（狭い時・UI文字サイズが大きい時に、フォルダを追加と同じ段に入るように）。
+     ただし 80〜140px に細く押し込まれる時は、次の段へ送っても段が増えなければ送る（lib-layout.js の fitSearch。MEDIA が 520px 付近など） */
+  #libSearchBox{flex:100 1 80px;min-width:80px;max-width:200px;position:relative;display:flex;align-items:center;}
+
+  #libSearchBox .lsIco{position:absolute;left:7px;top:50%;margin-top:-6.5px;color:#7c7c86;pointer-events:none;}
+
+  #libSearch{flex:1 1 auto;width:100%;min-width:0;box-sizing:border-box;background:#1d1d20;border:1px solid #3a3a40;border-radius:5px;color:#ddd;
+    font:inherit;font-size:11.5px;padding:3px 22px 3px 25px;outline:none;height:24px;text-overflow:ellipsis;}
+
+  #libSearchBox:not(.has) #libSearch{padding-right:6px;}   /* × は文字がある時だけ＝案内の文字の間は右の余白を詰める */
+
+  #libSearch::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;display:none;}   /* 消すボタンは自前の × */
+
+  #libSearch:focus{border-color:var(--accent);}
+
+  #libSearchBox:focus-within .lsIco{color:#c9b8ff;}
+
+  #libSearchX{position:absolute;right:3px;top:50%;margin-top:-9px;width:18px;height:18px;padding:0;border:0;border-radius:9px;background:transparent;
+    color:#9a9aa2;font-size:13px;line-height:18px;display:none;}
+
+  #libSearchX:hover{background:#3a3a40;color:#fff;}
+
+  #libSearchBox.has #libSearchX{display:block;}
+
+  /* 検索欄とフィルターの間の区切り線（フィルターが検索の実行ボタンに見えないように離す） */
+  .libSep{flex:0 0 1px;align-self:stretch;margin:3px 1px;background:#3a3a40;}
+
+  #libFiltBtn,#libFiltClear{flex:0 0 auto;padding:3px 8px;font-size:11.5px;border-radius:5px;white-space:nowrap;}
+
+  /* フィルター: 漏斗の印＋「フィルター ▾」＋効いている条件の数（丸） */
+  #libFiltBtn{display:flex;align-items:center;gap:4px;height:24px;box-sizing:border-box;}
+
+  #libFiltBtn .lfIco{flex:0 0 auto;color:#9a9aa2;}
+
+  #libFiltBtn .lfCaret{font-size:10px;line-height:1;color:#8a8a92;margin-left:1px;}
+
+  #libFiltBtn.on{border-color:#2bb3a3;color:#9ff0e4;background:#16332f;}
+
+  #libFiltBtn.on .lfIco,#libFiltBtn.on .lfCaret{color:#9ff0e4;}
+
+  #libFiltN{display:none;min-width:16px;height:16px;box-sizing:border-box;padding:0 4px;border-radius:8px;background:#2bb3a3;color:#08201d;
+    font-size:10px;font-weight:700;line-height:16px;text-align:center;font-variant-numeric:tabular-nums;}
+
+  #libFiltN.on{display:inline-block;}
+
+  #libFiltClear{height:24px;box-sizing:border-box;}
+
+  #libFiltClear:disabled{opacity:.35;cursor:default;}
+
+  #libFiltClear.on{border-color:#2bb3a3;}
+
+  /* フィルター・件数・［解除］・表示の切り替え・大きさの組（中では折り返さない＝折り返す時は一緒に次の段へ）: 検索欄の後の残りの幅を使い、件数の文字のすぐ右に［解除］。
+     表示の切り替え（#libViewSeg）と大きさ（#libSizeGrp）は組の右端＝いつも行の右端（大きさは前は組の外にあって、MEDIA が 740〜800px の時にスライダーだけが
+     2段目の左端へ1つで折り返した。表示の切り替えは前はフォルダを追加の右）。
+     折り返しは基準の幅＝組の中身の最小（フィルター・［解除］・表示の切り替え・大きさの幅と間 --lib-fb（lib-layout.js が測る）＋件数の一番短い形 --lib-cmin（lib-filter.js））で判定。
+     件数が入りきらない時は短い形（lib-filter.js）、それでも入らなければ…で省略（全文はツールチップ） */
+  #libFiltGrp{flex:1 1 calc(var(--lib-fb, 150px) + var(--lib-cmin, 44px));min-width:0;display:flex;align-items:center;gap:6px;}
+
+  #libCount{flex:0 1 auto;min-width:0;font-size:11px;color:#8a8a92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  #libCount.on{color:#9ff0e4;}
+
+  /* 大きさ: グリッドの時はサムネイルの大きさ、詳細の時は一覧の文字の大きさ（lib-table.js）。左の印で今どちらかを見せる（グリッド＝画像・詳細＝Aa） */
+  #libSizeGrp{flex:0 0 auto;display:flex;align-items:center;gap:3px;}
+
+  #libFiltGrp #libViewSeg{margin-left:auto;}   /* 表示の切り替えと大きさを組の右端へ（［解除］との間は最小でも組の中の間 6px＝前の行の間と同じ） */
+
+  #libSizeIco{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:14px;color:#8a8a92;}
+
+  #libSizeIco .lszAa{font-size:11px;font-weight:700;line-height:1;letter-spacing:-.5px;}
+
+  #libSizeGrp.det .lszImg,#libSizeGrp:not(.det) .lszAa{display:none;}
+
+  #libSize{flex:0 0 auto;width:56px;margin:0;accent-color:#56ffc1;}
+
+  /* 左のカタログ: 記録したフォルダの走査の進み具合・見つからないフォルダ */
+  .libCat .libCatProg{flex:0 0 auto;font-size:10px;color:#8a8a92;font-variant-numeric:tabular-nums;}
+
+  .libCat.missing .libCatName{opacity:.45;}
+
+  /* 詳細表示（1行＝1難易度）。表は画面に見えている行だけを描く（lib-table.js）。
+     文字の大きさ（--lt-fs）・行の高さ（--lt-rh。lib-table.js の RH と同じ）・見出しの1段の高さ（--lt-hl）は lib-table.js が入れる（大きさのスライダー・Ctrl＋ホイール）。
+     列の幅（--lt-cols）は中身と見出しが切れずに入る幅を lib-table.js が測って入れる */
+  #libTable{--lt-fs:13px;--lt-rh:26px;--lt-hl:16px;flex:1;min-height:0;overflow:auto;position:relative;font-size:var(--lt-fs);color:#c8c8ce;}
+
+  #libTable .ltHead{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:var(--lt-cols);width:var(--lt-w);min-width:100%;
+    background:#232327;border-bottom:1px solid #34343a;min-height:var(--lt-rh);}
+
+  #libTable .ltH{display:flex;align-items:center;gap:3px;padding:3px 6px;color:#9a9aa2;font-size:calc(var(--lt-fs) - .5px);cursor:pointer;white-space:nowrap;overflow:hidden;
+    border-right:1px solid #2c2c31;user-select:none;}
+
+  #libTable .ltH:hover{background:#2c2c32;color:#ddd;}
+
+  #libTable .ltH.nosort{cursor:default;}
+
+  /* 見出しの文字は決めた位置で2段に折る（訳の lib.h.* の改行。1段の見出しは上下の中央） */
+  #libTable .ltH .ltHL{display:flex;flex-direction:column;min-width:0;line-height:var(--lt-hl);}
+
+  #libTable .ltH .ltHL span{overflow:hidden;text-overflow:ellipsis;}
+
+  #libTable .ltH.lt_r .ltHL{align-items:flex-end;text-align:right;}
+
+  #libTable .ltH.lt_c .ltHL{align-items:center;text-align:center;}
+
+  #libTable .ltH .ltArrow{font-size:9px;color:var(--green);flex:0 0 auto;}
+
+  #libTable .ltH.lt_r{justify-content:flex-end;}
+
+  #libTable .ltH.lt_c{justify-content:center;}
+
+  #libTable .ltRows{position:relative;width:var(--lt-w);min-width:100%;}
+
+  #libTable .ltRow{position:absolute;left:0;right:0;top:0;height:var(--lt-rh);display:grid;grid-template-columns:var(--lt-cols);align-items:center;
+    cursor:grab;user-select:none;border-bottom:1px solid #1f1f23;box-sizing:border-box;}
+
+  #libTable .ltRow.odd{background:#1b1b1e;}
+
+  #libTable .ltRow:hover{background:#2b2b31;}
+
+  #libTable .ltRow.sel{background:#3a2f52;}
+
+  #libTable .ltRow:active{cursor:grabbing;}
+
+  #libTable .ltC{padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+
+  #libTable .ltC.lt_r{text-align:right;font-variant-numeric:tabular-nums;}
+
+  #libTable .ltC.lt_c{text-align:center;}
+
+  #libTable .ltC.ltCov{padding:0 2px;height:calc(var(--lt-rh) - 2px);display:flex;align-items:center;justify-content:center;}
+
+  #libTable .ltC.ltCov img{width:calc(var(--lt-rh) - 4px);height:calc(var(--lt-rh) - 4px);object-fit:cover;border-radius:3px;display:block;pointer-events:none;}
+
+  #libTable .ltName{color:#e6e6ea;}
+
+  #libTable .ltSub{color:#7c7c86;margin-left:6px;font-size:calc(var(--lt-fs) - 1px);}
+
+  #libTable .ltKind{color:#7c7c86;margin-left:6px;font-size:calc(var(--lt-fs) - 1.5px);border:1px solid #3a3a40;border-radius:3px;padding:0 3px;}
+
+  /* 難易度の印（幅は lib-table.js の列の幅の測り方と同じ: 文字＋左右 3px・最小は文字の大きさの約2倍） */
+  #libTable .ltDiff{display:inline-block;box-sizing:border-box;min-width:calc(var(--lt-fs) * 1.9);text-align:center;font-weight:700;font-size:calc(var(--lt-fs) - 1px);border-radius:3px;padding:0 3px;
+    line-height:calc(var(--lt-fs) * 1.4);color:#101014;}
+
+  #libTable .ltDiff_Easy{background:#3fbf7f;}
+
+  #libTable .ltDiff_Normal{background:#4aa3f0;}
+
+  #libTable .ltDiff_Hard{background:#f2a33a;}
+
+  #libTable .ltDiff_Expert{background:#ec5468;}
+
+  #libTable .ltDiff_ExpertPlus{background:#a678ff;}
+
+  #libTable .ltDiff_X{background:#777;}
+
+  #libTable .ltMode{margin-left:4px;color:#b7b7c0;font-size:calc(var(--lt-fs) - 1px);}
+
+  /* NLM推定の★: 公式の★と見間違えないよう、譜面チェックの BL 評価リスト（#mcPanel.blMode）と同じ青緑で言葉を付ける */
+  #libTable .ltC.ltEst{color:#5fe0cf;}
+
+  /* 列の表示・非表示（見出しの右クリック） */
+  #libColMenu{position:fixed;z-index:60;background:#202020;border:1px solid var(--outline);border-radius:6px;padding:6px;
+    box-shadow:0 8px 24px rgba(0,0,0,.6);max-height:80vh;overflow:auto;font-size:12px;color:#ddd;min-width:170px;}
+
+  #libColMenu .lcmItem{display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:4px;cursor:pointer;white-space:nowrap;}
+
+  #libColMenu .lcmItem:hover{background:#2e2e33;}
+
+  #libColMenu .lcmReset{display:block;width:100%;margin-top:6px;padding:4px 8px;font-size:11.5px;}
+
+  /* 絞り込みのパネル */
+  #libFiltPanel{position:fixed;z-index:60;display:none;width:350px;background:#1f1f22;border:1px solid #2bb3a3;border-radius:8px;
+    box-shadow:0 8px 28px rgba(0,0,0,.6);padding:8px 10px 10px;font-size:12px;color:#d5d5da;}
+
+  #libFiltPanel .lfHead{display:flex;align-items:center;justify-content:space-between;font-weight:700;color:#9ff0e4;margin-bottom:6px;}
+
+  #libFiltPanel .lfClose{padding:1px 7px;font-size:11px;}
+
+  #libFiltPanel .lfRow{display:flex;align-items:center;gap:5px;margin:5px 0;min-width:0;}
+
+  #libFiltPanel .lfLab{flex:0 0 88px;color:#9a9aa2;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  #libFiltPanel .lfLo,#libFiltPanel .lfHi{flex:1 1 0;min-width:0;width:60px;font-variant-numeric:tabular-nums;background:#151517;border:1px solid #3a3a40;border-radius:4px;
+    color:#eee;font:inherit;font-size:11.5px;padding:2px 5px;outline:none;color-scheme:dark;}
+
+  #libFiltPanel .lfLo:focus,#libFiltPanel .lfHi:focus{border-color:#2bb3a3;}
+
+  #libFiltPanel .lfLo.bad,#libFiltPanel .lfHi.bad{border-color:#e2605b;}
+
+  #libFiltPanel .lfTil{flex:0 0 auto;color:#7c7c86;}
+
+  #libFiltPanel .lfUnit{flex:0 0 auto;font-size:10.5px;color:#7c7c86;white-space:nowrap;}
+
+  #libFiltPanel .lfDiffs{display:flex;gap:4px;}
+
+  #libFiltPanel .lfDf{padding:2px 7px;font-size:11px;font-weight:700;border-radius:4px;opacity:.55;}
+
+  #libFiltPanel .lfDf.on{opacity:1;color:#101014;}
+
+  #libFiltPanel .lfDf_Easy.on{background:#3fbf7f;}
+
+  #libFiltPanel .lfDf_Normal.on{background:#4aa3f0;}
+
+  #libFiltPanel .lfDf_Hard.on{background:#f2a33a;}
+
+  #libFiltPanel .lfDf_Expert.on{background:#ec5468;}
+
+  #libFiltPanel .lfDf_ExpertPlus.on{background:#a678ff;}
+
+  #libFiltPanel .lfModeRow{align-items:flex-start;}
+
+  #libFiltPanel .lfModes{display:flex;flex-wrap:wrap;gap:2px 10px;min-width:0;}
+
+  #libFiltPanel .lfMode{display:flex;align-items:center;gap:3px;font-size:11.5px;white-space:nowrap;cursor:pointer;}
+
+  #libFiltPanel .lfRanked{width:auto;flex:1 1 auto;padding:2px 6px;font-size:11.5px;}
+
+  #libFiltPanel .lfChk{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:11.5px;cursor:pointer;}
+
+  #libFiltPanel .lfFoot{display:flex;justify-content:flex-end;margin-top:8px;}
+
+  #libFiltPanel .lfReset{padding:3px 12px;font-size:11.5px;}
+
+  /* ネットの情報・★の計算（2026-10-12・js/media/lib-online.js） */
+  /* 全曲データの出どころと時点（左のカタログの下。全曲データの値を出している時だけ） */
+  #libSrc{margin-top:auto;padding:10px 6px 2px 4px;font-size:10px;line-height:1.5;color:#7c7c86;cursor:default;}
+
+  #libSrc span{display:block;}
+
+  #libSrc .lsName{color:#9a9aa2;}
+
+  /* ★のまとめての計算の帯（「★を計算中 12/85」と［中止］）。NLM推定の★と同じ青緑 */
+  #libRateBar{display:flex;align-items:center;gap:8px;flex:0 0 auto;margin:0 0 4px;padding:3px 8px;border:1px solid #2bb3a3;border-radius:5px;
+    background:#16332f;color:#9ff0e4;font-size:11.5px;min-width:0;}
+
+  #libRateBar .lrTxt{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  #libRateBar button{flex:0 0 auto;padding:2px 10px;font-size:11px;}
+
+  #libRateBar button:disabled{opacity:.45;cursor:default;}
+
+  /* 全曲データに無い曲の「未照合 🔍」（セルの中のボタンは .ltBtn。押しても行の選択・ドラッグにならない） */
+  #libTable .ltC.ltMiss{display:flex;align-items:center;gap:4px;color:#7c7c86;}
+
+  #libTable .ltMissT{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;}   /* 列が狭い時は文字を省略して🔍を残す */
+
+  #libTable .ltBtn{flex:0 0 auto;padding:0 3px;font-size:calc(var(--lt-fs) - 1px);line-height:calc(var(--lt-fs) * 1.4);border-radius:3px;background:#26262b;border:1px solid #3a3a40;cursor:pointer;}
+
+  #libTable .ltBtn:hover{border-color:#2bb3a3;background:#16332f;}
+
+  #libTable .ltBtn:disabled{opacity:.6;cursor:default;}
+
+  #libTable .ltC.ltBusy{color:#8a8a92;font-style:italic;}

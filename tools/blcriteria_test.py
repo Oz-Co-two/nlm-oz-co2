@@ -78,6 +78,13 @@ C('cover', j => {}, ['R1.A.4'], { cover: { w: 200, h: 180, name: 'c.webp' } });
 C('noAudio', j => {}, ['R1.A.3', 'R1.B.6', 'R1.D.2'], { audioDuration: null });
 C('vision', j => { rm(j, 80); j.colorNotes.push({ b: 80, x: 1, y: 1, c: 0, d: 1 }, { b: 80, x: 2, y: 0, c: 1, d: 1 }, { b: 80.5, x: 0, y: 1, c: 0, d: 1 }); }, ['R5.A'], { stars: { Expert: { star: 5, tech: 3 } } });
 C('visionNoStar', j => {}, ['R5.A']);
+// R11.H.5（★の並び・0.5★まで許容）: 難易度は書き出しの順（易しい順）。隣どうしでなく、それまでの一番高い★と比べる
+const D = dn => ({ difficulty: dn, json: base(), njs: 16, njsOffset: 0 });
+const ND = () => [D('Normal'), D('Hard'), D('Expert')];
+C('starOrder', j => {}, ['R11.H.5'], { diffs: ND(), stars: { Normal: { star: 3, tech: 2 }, Hard: { star: 5, tech: 3 }, Expert: { star: 4.4, tech: 3 } } });
+C('starOrderOk', j => {}, ['R11.H.5'], { diffs: ND(), stars: { Normal: { star: 3, tech: 2 }, Hard: { star: 5, tech: 3 }, Expert: { star: 4.6, tech: 3 } } });
+C('starOrderPart', j => {}, ['R11.H.5'], { diffs: ND(), stars: { Normal: { star: 3, tech: 2 }, Hard: { star: 5, tech: 3 } } });
+C('starOrderNone', j => {}, ['R11.H.5'], { diffs: ND() });
 return out;
 })()
 """
@@ -87,7 +94,9 @@ EXPECT = {'lead': 'fail', 'tail': 'fail', 'length': 'fail', 'wallZero': 'fail', 
           'linkOut': 'fail', 'sparse': 'fail', 'gap': 'fail', 'noHead': 'fail', 'sc1': 'fail', 'arcBomb': 'fail', 'shortWall': 'fail',
           'shortWallOk': 'pass', 'outer': 'fail', 'outer2': 'fail', 'crouch': 'check', 'dodge': 'check', 'light': 'fail', 'bombDark': 'check',
           'bombPath': 'check', 'swing45': 'fail', 'swingS': 'pass', 'slider': 'check', 'shuffle': 'fail', 'meta': 'check', 'cover': 'fail',
-          'noAudio': 'check', 'vision': 'check', 'visionNoStar': 'check'}
+          'noAudio': 'check', 'vision': 'check', 'visionNoStar': 'check',
+          'starOrder': 'check starOrder', 'starOrderOk': 'pass starOrderOk', 'starOrderPart': 'manual starOrderOk|orderNeedStars',
+          'starOrderNone': 'manual orderNoStars'}
 with Editor() as ed:
     r = ed.js(JS)
     if '-v' in sys.argv:

@@ -15,7 +15,7 @@ helba kindly gave permission (in the comments on note) to publish, modify and re
 - **Reference manual**: https://helba.flashhub.net/nlm/manual/ (Japanese)
 - **Original changelog**: https://helba.flashhub.net/nlm/changelog.html (Japanese)
 - **Tutorials for this fork** (with screenshots): [basic](docs/tutorial.en.md) — from loading a song to placing notes, exporting and saving /
-  [advanced](docs/tutorial-advanced.en.md) — faster workflows, tempo, lights, the INFO screen and the checks before publishing
+  [advanced](docs/tutorial-advanced.en.md) — faster workflows, the MEDIA library, tempo, lights, the INFO screen and the checks before publishing
 
 The English tutorials show the English UI; the Japanese tutorials ([basic](docs/tutorial.md) / [advanced](docs/tutorial-advanced.md)) show the Japanese UI.
 
@@ -31,6 +31,9 @@ The English tutorials show the English UI; the Japanese tutorials ([basic](docs/
   It is only a guide, not an official judgement.
 - **Estimate difficulty (approx. BeatLeader stars)**: shows ★ and Pass / Tech / Acc with the optional plugin [nlm-rating](https://github.com/Oz-Co-two/nlm-rating).
   The values are approximations and this is **not an official BeatLeader tool**.
+- **MEDIA library**: remembers your song folders (e.g. CustomLevels) and lists them as a grid or as a table with one row per difficulty
+  (★, NJS, NPS, length, upload date, download date, play count, ...). Sort by any column and filter by ★, length, NJS, NPS, difficulty, mode and more.
+  ★ for unranked maps can be estimated with nlm-rating (shown as "NLM est.", not official).
 - **Auto lighting**: generates basic vanilla lights from your notes on a new lane, so your own lights are kept
 - **Cover image fix**: makes the cover square / at least 256×256 / png when exporting, without changing the original file
 - **song.egg export**: converts non-OGG audio with ffmpeg and writes the lead-in silence and the Music clip placement into the audio
@@ -119,6 +122,13 @@ The map check (BeatLeader criteria) is a port of [BS Map Check](https://github.c
 The add-on plugin [nlm-rating](https://github.com/Oz-Co-two/nlm-rating) used by "Estimate difficulty" is a separate program (MIT) that is not included in NLM.
 It uses BeatLeader's [RatingAPI](https://github.com/BeatLeader/RatingAPI) and [beatleader-analyzer](https://github.com/BeatLeader/beatleader-analyzer) (MIT).
 
+The upload date, rating, ranked status and ★ in the MEDIA library come from the song data published by Kinsi's
+[BeatSaberScrappedData](https://github.com/kinsi55/BeatSaberScrappedData) (originally from BeatSaver, BeatLeader and ScoreSaber; the same data some Beat Saber mods use).
+Your PC downloads it from jsDelivr at most once a day; nothing about you or your songs is sent (you can turn this off in Preferences → MEDIA).
+Only for a song that is not in that data, and only when you press 🔍 and confirm, that one song's identifier (hash) is sent to the public [BeatSaver](https://beatsaver.com/) API.
+The play counts and personal bests are read from Beat Saber's own play data file on your PC (read-only).
+NLM only reads your song folders and never writes to them.
+
 - Original author: [helba](https://helba.flashhub.net/nlm/)
 - Improvements in this fork: Oz-Co2
 
@@ -179,6 +189,8 @@ the server starts, so a bookmarked URL will not work after a restart. Press `Ctr
 - **Limitations**: automatic reconnection of the output folder and cover image is desktop-only. In the browser you need to select them
   again each time you open a project.
 - **"Estimate difficulty" is not available**, because the add-on plugin (nlm-rating) is a Windows exe only.
+- **MEDIA library**: folders added in the browser are not remembered, and the table only shows what is in each `Info.dat`
+  (NPS, length, upload date, play data, etc. are desktop-only).
 - **Keep the terminal open.** Closing it stops the server. Opening `editor.html` directly with `file://` does not work either.
 - **Where things are saved**: preferences and clips saved with "Save to assets" go to `config/` and `asset/` in the cloned folder.
 - Only access via `127.0.0.1` / `localhost` is accepted, and everything except the editor's own files (saving, preferences,

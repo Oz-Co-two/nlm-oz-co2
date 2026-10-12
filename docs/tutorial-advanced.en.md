@@ -5,7 +5,7 @@
 For those who have finished the [basic tutorial](tutorial.en.md). This tutorial explains faster ways to work,
 the checks before publishing a map, and how to measure the difficulty (★).
 
-> The screenshots show the English UI (v1.4.1-oz). The numbers (①, ②, …) in the screenshots match the tables in the text.
+> The screenshots show the English UI (v1.5.0-oz). The numbers (①, ②, …) in the screenshots match the tables in the text.
 
 ## Contents
 
@@ -326,10 +326,181 @@ Right-click a clip → "**📦 Save to assets**" to save its content as a reusab
 
 Saving rhythm patterns and light effects you use often as assets is handy when you start a new song.
 
-### Adding folders to MEDIA
+### MEDIA library (record song folders, then list and search them)
 
-Use **Add folder to MEDIA…** in the File menu to register Beat Saber's CustomLevels or your music folder in MEDIA.
-You can drag songs and maps from the registered folders into the NLE as material.
+When you register Beat Saber's CustomLevels (the folder that holds your downloaded songs) or a music folder in MEDIA,
+you can list and search the songs in it, and drag their maps and audio into the NLE as material.
+For example, you can borrow patterns from your earlier maps, or find maps of similar difficulty and compare their NJS and NPS.
+
+![The MEDIA library (grid view). ① Add folder ② Catalog ③ View switch ④ Size](images/tutorial-advanced-en/03-3-media-grid.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Add folder | Choose a folder to add to the library |
+| ② | Catalog | The list of registered folders. Only the songs in the chosen folder are listed (**All** shows everything; **Assets** are the [assets](#assets-saving-patterns-to-reuse) above) |
+| ③ | View switch | Switch between the grid (cover images) and the detail view (a table with one row per difficulty) |
+| ④ | Size | The size of the cover images in the grid, or the text size in the detail view (**Ctrl + wheel** over the list also works) |
+
+#### Adding folders
+
+Use ① **Add folder** (or **Add folder to MEDIA…** in the File menu) and choose a folder.
+If you choose a folder that holds many song folders, such as CustomLevels, all the songs in it are loaded.
+
+- In the desktop version (exe), the chosen folder is **recorded** and loaded automatically the next time you start the app
+- The first load takes a while, depending on the number of songs (the progress appears as "Loading 12/85" where the count is shown, and as "12/85" in the catalog).
+  From the second time on, only the songs that changed are read again, so it is faster
+- When you add or delete songs, right-click the folder in the catalog → "**🔄 Reload**"
+- Double-click a folder name in the catalog to change the name shown there (the folder itself is not renamed)
+- **−** at the right of a folder removes it from the library (and from the record; the files in the folder are not deleted)
+- If a folder cannot be found (for example, an external drive is unplugged), it is shown dimmed. The record is kept; click it to look again
+- NLM only reads the library folders and never writes to them
+- Drag the border between MEDIA and the NLE, or between the catalog and the list, to change their widths (double-click the catalog border to reset its width)
+
+> In the **browser version** (started with `serve.py`), added folders are not recorded and disappear when you reload.
+> The detail view also shows only what is written in Info.dat; NPS, length, upload date, play records and so on are available only in the desktop version.
+
+#### Detail view (one row per difficulty)
+
+Switch to the detail view with ③ to see a table with one row per difficulty. The screenshot shows a widened MEDIA, sorted by ★ from high to low.
+
+![The detail view. ① ★ ② Upload date ③ Play count ④ Data source](images/tutorial-advanced-en/03-4-media-detail.png)
+
+| No. | Column / place | Description |
+|---|---|---|
+| ① | ★ | The BeatLeader ★. For difficulties without one, an approximation calculated by NLM appears in a different color, such as "**NLM est. 4.56**" ([below](#calculating--nlm-estimate)). The ▼ in the heading means the list is sorted by this column |
+| ② | Upload date | The day the song was uploaded to BeatSaver (from the [song data](#data-from-the-internet-song-data-and-beatsaver)). Songs that are not in the song data show "**Unmatched 🔍**" |
+| ③ | Play count | How many times you played that difficulty in Beat Saber (from the [play records](#game-play-records)) |
+| ④ | Data source | While the song data is in use, its name and date appear here (hover for details) |
+
+The columns shown at first are: cover, song (with subtitle), artist, mapper, difficulty (with the mode name if not Standard), ★, NJS, NPS, length, BPM, upload date, download date and play count.
+
+- **NPS** is calculated the same way as on BeatSaver (the number of color notes ÷ the seconds from the first to the last color note)
+- **Length** is the length of the audio
+- **Download date** is the date that mods record in the song folder (if there is none, it is estimated from the folder dates)
+- Click a row to select it, **Ctrl + click** to add rows, and **Shift + click** to select a range
+- Items that are not songs (music files, images, asset clips) show only their name and kind
+- The view, columns, sort order and filter conditions are kept for the next start
+
+#### Sorting and columns
+
+- Click a heading to sort by that column. Click it again to reverse the order (▲ smallest first, ▼ largest first)
+- Rows without a value always go to the bottom, in either order
+- The sort order is also used for the order of the cards in the grid
+- Right-click a heading to open a menu where you show or hide columns. **Reset columns** returns to the initial columns
+
+![The column menu (right-click a heading)](images/tutorial-advanced-en/03-5-media-columns.png)
+
+The columns hidden at first are: key (BeatSaver), rating, ranked status, notes, bombs, walls, environment, required mods, best score, full combo,
+favorite, folder, SS★ (ScoreSaber ★), tags, reaction time (RT) and jump distance (JD)
+(RT and JD are calculated from NJS, offset and BPM with the same formula as in [chapter 2](#jd--rt-display)).
+
+#### Search and filter
+
+![The filter panel (filtered to ★ 5 or higher). ① Search box ② Filter ③ Count ④ Clear](images/tutorial-advanced-en/03-6-media-filter.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Search box | Search by song, artist or mapper. The list is filtered as you type (Esc or × clears it) |
+| ② | Filter ▾ | Opens the panel of conditions. The number in the circle is the number of active conditions |
+| ③ | Count | The number of songs and difficulties that match. "of 4" is the number of songs in the range chosen in the catalog |
+| ④ | Clear | Clears the search and all conditions |
+
+| Condition | Content |
+|---|---|
+| ★, Length, NJS, NPS, BPM, Uploaded | Lower and upper limits (empty means no limit). Length is in minutes ("2:30" means 2 minutes 30 seconds). ★ uses the BeatLeader ★, or the NLM-estimated ★ when there is none |
+| Difficulty | Choose from E, N, H, Ex and E+ (all when none is chosen) |
+| Mode | Standard, One Saber, No Arrows, 360°, 90° and so on (only Standard at first) |
+| Ranked | All / BL ranked (difficulties ranked on BeatLeader) / Unranked |
+| Exclude maps that require Noodle/Chroma | Excludes maps that cannot be played without Noodle or Chroma (mods). Maps that only suggest them are not excluded |
+| Favorites only | Only songs you marked as favorites in Beat Saber (from the [play records](#game-play-records)) |
+| Unplayed only | Only rows whose difficulty you have never played (from the play records) |
+
+- The conditions are checked for each difficulty (row). The grid shows the songs that have at least one matching difficulty
+- With a range condition, rows without that value (such as maps without ★) are left out
+- The initial mode setting (only Standard) is not counted in the number in the circle
+
+#### Putting maps into the NLE
+
+A song (a card in the grid or a row in the detail view) is used as follows, depending on where you drag it. It goes into the difficulty you have open.
+
+| Drop on | What goes in |
+|---|---|
+| A Notes lane of the NLE | The notes of that difficulty (including bombs, walls, arcs and chains), as one clip at the beat where you drop it |
+| A Light lane of the NLE | The lights of that difficulty, as a clip |
+| The Music row of the NLE | The audio of the song, at the beat where you drop it |
+| The INFO screen | Song info and cover image nodes (plus a song preview node if the song has a preview range) |
+
+- Dragging a row of the detail view puts in **the difficulty of that row** (for example, you can put an Expert map into Hard).
+  Even when several rows are selected, only the row you grabbed goes in
+- A card in the grid puts in the map with the same name as the difficulty you have open. While you filter, it is chosen from the matching difficulties
+  (if there is no difficulty with the same name, the hardest matching one. The message at the bottom of the screen tells you which one went in)
+- When you drop on a Notes lane, the NJS and offset of the current difficulty also become those of the map you put in
+- Right-click a song → "**📥 Load song data**" loads the audio, BPM, song info, cover image and the maps of all Standard difficulties at once
+  (if a song is already loaded, the audio and BPM stay as they are)
+- Right-click a song → "**📁 Open folder location**" opens the song folder in Explorer (only for folders added in the desktop version)
+
+> Songs with **v4 maps** (Info.dat in the newer format) can be listed, sorted, filtered and have their audio placed,
+> but their maps cannot be put into the NLE yet (dragging or Load song data).
+
+#### Data from the internet (song data and BeatSaver)
+
+The upload date, rating, ranked status, ★ (BeatLeader and ScoreSaber) and tags come from the internet.
+
+- **Song data**: [BeatSaberScrappedData](https://github.com/kinsi55/BeatSaberScrappedData) published by Kinsi
+  (public BeatSaver, BeatLeader and ScoreSaber data compiled into one file, also used by some Beat Saber mods) is downloaded from jsDelivr **at most once a day**.
+  Nothing is sent from your PC when it is downloaded
+- Songs are matched by an identifier (hash) made from the map files. If your copy differs from the current version on BeatSaver (an older version before an update, for example),
+  the ★ and ranked status are not shown (they belong to another version)
+- While the song data is in use, its name and date appear below the catalog (④ in the detail view screenshot)
+- Turn off "Download the song data" in the **MEDIA** tab of Preferences to stop downloading it and hide it from the list ([chapter 9](#media))
+
+Songs that are not in the song data (songs uploaded very recently, for example) show "**Unmatched 🔍**" in the upload date column.
+Press 🔍 to see a confirmation; only when you press **Send** is the identifier (hash) of that one song sent to BeatSaver (api.beatsaver.com) to look it up.
+
+![The confirmation when you press 🔍](images/tutorial-advanced-en/03-7-media-lookup.png)
+
+- If the song is found, its values are filled in and 🔍 disappears (hover over values taken directly from BeatSaver to see "From BeatSaver")
+- Songs that are not on BeatSaver either (your own maps that you have not uploaded, for example) show "Not found on BeatSaver either", and 🔍 stays
+- To keep the load on BeatSaver's servers low, there is no way to look up many songs at once. Songs are looked up one at a time, when you press 🔍.
+  When BeatSaver is busy, you are asked to wait a number of seconds
+- 🔍 appears only while the song data is in use
+
+#### Game play records
+
+In the desktop version, NLM reads the play records (`PlayerData.dat`) that Beat Saber keeps on your PC,
+and shows the play count, best score, full combo and favorites in the list (best score, full combo and favorite are hidden columns at first).
+
+- NLM only reads the play records; it never changes them and never sends them to the internet
+- They are usually found automatically. If not, choose the file with **Choose file…** in the **MEDIA** tab of Preferences ([chapter 9](#media))
+- They are read again when the library is loaded and on "Reload", if the file has been updated
+
+#### Calculating ★ (NLM estimate)
+
+Maps that are not ranked on BeatLeader have no ★.
+If you have installed the add-on plugin (nlm-rating) used by "Estimate difficulty" in [chapter 8](#the-first-time-install-the-plugin),
+NLM can calculate an approximate ★ and show it in the ★ column.
+
+Right-click a row in the detail view and choose one of the following.
+
+![The right-click menu of a row (two songs selected)](images/tutorial-advanced-en/03-8-media-row-menu.png)
+
+| No. | Item | Songs to calculate |
+|---|---|---|
+| ① | ★ Calculate ★ of selected rows (NLM est.) | The songs of the selected rows (select several with **Ctrl / Shift + click**) |
+| ② | ★ Calculate ★ of filtered rows (NLM est.) | The songs of the rows now in the list (narrowed by the search and filter) |
+
+- Only songs that have a difficulty without an official ★ are calculated (songs already calculated by NLM, and songs outside the folders added in the desktop version, are skipped).
+  The number in the parentheses is the number of songs to calculate
+- The calculation is done per song, for all its difficulties at once. Each song takes one to a few seconds
+- While it runs, "Calculating ★ 3/12" appears at the top of MEDIA; press **Stop** to stop it. With more than 30 songs, you are asked before it starts
+- The results appear in the ★ column in a different color, such as "**NLM est. 7.12**". They are also used for sorting and filtering by ★
+- The results are recorded and still shown after you restart the app (after you update the plugin, the results of the old version are no longer used and can be calculated again)
+- Difficulties with fewer than 20 notes cannot be calculated ("–"). Hover over the cell to see why a calculation failed
+- The number of songs calculated at the same time can be changed in the **MEDIA** tab of Preferences ([chapter 9](#media))
+- If the plugin is not installed, NLM tells you how to install it (with **Install from GitHub** in the "Estimate difficulty" panel)
+
+> **The NLM-estimated ★ is not the official BeatLeader ★.** It is an approximation that NLM calculates with the plugin, and it can differ from the value on the BeatLeader site.
+> It is labeled "NLM est." and shown in a different color so that you don't mistake it for the official ★.
 
 <!-- chapter-nav -->
 > **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)
@@ -488,13 +659,14 @@ In LIGHTING mode, you place lights on these 10 lanes.
 
 | Action | What it does |
 |---|---|
-| **W** (hold, choose, release) | Behavior pie menu (select, on, off, flash, fade, transition) |
-| **C** (hold, choose, release) | Color pie menu (left note color, right note color, saved colors) |
+| **W** (hold, choose, release) | Behavior pie menu (Off, On, Flash, Fade, Transition) |
+| **C** (hold, choose, release) | Color pie menu (in vanilla: ①, ② and White. In Chroma: the left note color, the right note color, White and your saved colors) |
 | **F** | Cycle through the colors to place |
+| **1 / 2 / 3** (over the 3D view) | Choose a color (in vanilla: ①, ② and White; in Chroma: left, right and White). Here the number keys do not switch the difficulty |
 
 ![The behavior pie menu of the W key](images/tutorial-advanced-en/06-1-light-pie.png) ![The color pie menu of the C key](images/tutorial-advanced-en/06-2-color-pie.png)
 
-On the left is the behavior pie menu of the W key, on the right the color pie menu of the C key (it shows the left note color, the right note color and your saved colors).
+On the left is the behavior pie menu of the W key, on the right the color pie menu of the C key (the screenshot is in vanilla mode, so it shows ①, ② and White).
 Hold the key, move the mouse toward the item you want, and release the key to choose it.
 
 ### Changing brightness and speed
@@ -808,13 +980,21 @@ When R10.A (at least one light per beat) or R7.B (bomb lighting) is a violation 
 It starts [auto lighting](#auto-lighting-making-lights-from-the-notes) (chapter 6) and checks again afterwards.
 When R1.A.4 (size, shape and format of the cover image) is a violation, **🖼 Fix cover image…** appears ([Fixing the cover image](#fixing-the-cover-image)).
 
-#### The item that needs ★ and Tech (R5.A)
+#### The items that use ★ and Tech (R5.A, R11.H.5)
 
 R5.A (whether notes are visible long enough to react) is judged with a formula that uses BeatLeader's ★ and Tech values.
-The item has input fields for each difficulty (①); enter the values from "Estimate difficulty" below.
-The values are remembered only while the app is open.
+The item has fields for each difficulty (②). If the plugin of "Estimate difficulty" below is installed,
+the values are calculated and filled in automatically when you open the BL criteria list (①). After you fix the map, they are measured again when you re-check.
 
-![The ★ and Tech input fields of R5.A](images/tutorial-advanced-en/08-3-bl-stars.png)
+![The ★ and Tech fields of R5.A](images/tutorial-advanced-en/08-3-bl-stars.png)
+
+- If the plugin is not installed yet, ① shows **📥 Install the plugin and auto-calculate…**.
+  Pressing it shows an explanation; press **Install from GitHub** to install the plugin and calculate right away
+- The values are approximations. If you know BeatLeader's actual values, you can overwrite the fields.
+  Overwritten fields get a yellow border and are kept when measuring again (**Back to auto** returns to the calculated value)
+- The values are remembered only while the app is open
+- R11.H.5 (whether the difficulties are in ascending order of ★) is also judged with the ★ in these fields.
+  Because the values are approximations, an inverted order is shown as "Check", not as a "Violation"
 
 ### Estimate difficulty (approximate BeatLeader ★)
 
@@ -844,7 +1024,8 @@ If you have installed two or more versions, a field to choose the version appear
 | ② | ↻ Measure again | Measure again after fixing the map |
 | ③ | Plugin | The version of the plugin in use, and the update check |
 
-It measures every time you open the panel. If you fix the map with the panel open, press **↻ Measure again**.
+It measures every time you open the panel (if the map has not changed since the last measurement, that result is shown as is).
+If you fix the map with the panel open, press **↻ Measure again**. Results measured in the NLM BL criteria list also appear here.
 
 | Column | Meaning |
 |---|---|
@@ -863,9 +1044,10 @@ It measures every time you open the panel. If you fix the map with the panel ope
 #### Ways to use it
 
 - **Check the order of ★ across difficulties**: check that higher difficulties have higher ★
-  (ranking criterion R11.H.5 requires difficulties to be in ascending order of ★, with an inversion of up to 0.5★ allowed)
+  (ranking criterion R11.H.5 requires difficulties to be in ascending order of ★, with an inversion of up to 0.5★ allowed. The NLM BL criteria list also checks it)
 - **Adjust the gaps between difficulties**: use it as a guide when neighboring difficulties are too close or too far apart in ★
-- **Enter the values into R5.A of the NLM BL criteria list**: copy the ★ and Tech values into the input fields
+- The measured ★ and Tech are filled in automatically in R5.A and R11.H.5 of the NLM BL criteria list (no need to copy them)
+- With the same plugin, you can also calculate the ★ of songs in the MEDIA library at once ([chapter 3](#calculating--nlm-estimate))
 
 ### Checklist before publishing
 
@@ -878,7 +1060,7 @@ It measures every time you open the panel. If you fix the map with the panel ope
 - [ ] **NJS and offset**: chose comfortable values for each difficulty while watching JD / RT in the header
 - [ ] **Lights**: every difficulty has lights, and you checked how they look in PREVIEW (if there are not enough, auto lighting can make a base)
 - [ ] **Map check**: no unrankable items or errors (and you looked through the warnings)
-- [ ] **Order of ★**: measured the difficulty, and higher difficulties have higher ★
+- [ ] **Order of ★**: higher difficulties have higher ★ (R11.H.5 of the NLM BL criteria list is not "Check")
 - [ ] **Test play**: exported the map and played every difficulty all the way through in Beat Saber
 - [ ] **Project saved**: saved the `.nlmf` (you need it to make fixes later)
 
@@ -891,7 +1073,7 @@ It measures every time you open the panel. If you fix the map with the panel ope
 ## 9. Customizing the settings
 
 In **Preferences** in the menu, you can adjust how the app feels and looks.
-The settings are divided into five tabs.
+The settings are divided into six tabs.
 
 ![Preferences. ① Tabs ② Reset to defaults](images/tutorial-advanced-en/09-1-settings.png)
 
@@ -911,6 +1093,7 @@ The settings are divided into five tabs.
 | Update check | Whether to check for a new version at startup (connects to GitHub) |
 
 Once you have learned the shortcuts, hiding the floating windows gives you more room on screen.
+Instead of hiding them, you can also fold each window into a single line showing only its title with its **—** button.
 
 ### Volume
 
@@ -944,10 +1127,23 @@ The wheel direction can be set separately for the 3D view and the 2D views (NLE,
 
 Change the key assignments ([chapter 1](#customizing-shortcuts)).
 
+### MEDIA
+
+Settings for the MEDIA library ([chapter 3](#media-library-record-song-folders-then-list-and-search-them)).
+
+![The MEDIA tab of Preferences. ① Song data ② ★ calculations ③ Play records](images/tutorial-advanced-en/09-2-settings-media.png)
+
+| No. | Item | Content |
+|---|---|---|
+| ① | Download the song data | Download the song data (upload date, rating, ★ and more) from jsDelivr at most once a day (on at first). Nothing is sent from your PC. When off, it is not downloaded or shown in the list. "Status" shows the date of the data in use |
+| ② | ★ calculations at the same time | How many songs are calculated at the same time when you calculate NLM-estimated ★ (4 at first; the maximum is the number of CPU cores of your PC or 5, whichever is smaller). More finishes sooner, but your PC is slower while it calculates. It applies from the next calculation, without restarting |
+| ③ | Game play records (PlayerData.dat) | The status and location of the play records. At first it is automatic (the default location of Beat Saber on PC, `AppData\LocalLow\Hyperbolic Magnetism\Beat Saber`). If it is not found, choose it with **Choose file…** (desktop version only). **Use default** returns to automatic |
+
 ### Reset to defaults
 
 **Reset to defaults** at the bottom left of Preferences returns all the settings here to their initial state.
-Projects, assets and plugins are not deleted.
+Projects, assets, plugins, the folders recorded in MEDIA and the location of the play records are not deleted
+(the names shown in the catalog and the columns, sort order and filter of the detail view return to their initial state).
 
 <!-- chapter-nav -->
 > **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)

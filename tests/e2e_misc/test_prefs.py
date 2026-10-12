@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 
 from cdp import CdpError
-from misc_helpers import (center, click_in_view, close_prefs, hover_3d, ls, ls_json, mirror_json, open_prefs, prefs_page, prefs_set_number,
-                          prefs_tab, prefs_toggle, reload_keep, wait_mirrored, wait_until)
+from misc_helpers import (center, click_in_view, click_sel, close_prefs, hover_3d, ls, ls_json, mirror_json, open_prefs, prefs_page,
+                          prefs_set_number, prefs_tab, prefs_toggle, reload_keep, to_info, wait_mirrored, wait_until)
 from e2e_helpers import canvas_center
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,12 +27,12 @@ def _near(a, b, tol=1e-3):
 
 # ---------------------------------------------------------------- ダイアログ
 def test_prefs_dialog_tabs(t):
-    '''環境設定を開くとアプリケーション設定のタブが出る→5つのタブ（アプリ/音量/Preview/カメラ/ショートカット）を押すとその画面だけが出る→閉じる・外側のクリックで閉じる'''
+    '''環境設定を開くとアプリケーション設定のタブが出る→6つのタブ（アプリ/音量/Preview/カメラ/ショートカット/MEDIA）を押すとその画面だけが出る→閉じる・外側のクリックで閉じる'''
     with prefs_page(t) as ed:
         t.eq(ed.js("document.getElementById('settingsBg').style.display"), "", "最初は閉じている")
         open_prefs(ed)
         tabs = ed.js("[...document.querySelectorAll('#settingsBox .setTab')].map(b=>b.dataset.tab)")
-        t.eq(tabs, ["app", "vol", "preview", "cam", "keys"], "タブの並び")
+        t.eq(tabs, ["app", "vol", "preview", "cam", "keys", "media"], "タブの並び")
         t.eq(ed.js("[...document.querySelectorAll('#settingsBox .setPanel.on')].map(p=>p.dataset.panel)"), ["app"], "最初はアプリケーション設定")
         for tab in tabs:
             prefs_tab(ed, tab)
@@ -422,6 +422,56 @@ def test_prefs_shortcut_sheet_follows_remap(t):
         reload_keep(ed)
         t.eq(_sheet_key(ed, "#modeKeys", "直前ノーツ表示 切替"), "<img src=x id=nlmInj>", "キー名はそのままの文字で出る")
         t.eq(ed.js("!!document.getElementById('nlmInj')"), False, "HTMLとしては解釈されない")
+        t.no_errors()
+
+
+def _sheet(ed, sel):
+    """早見表 sel の題名・たたんでいるか・本文が見えるか・画面上の矩形と、親ペインの矩形"""
+    return ed.js(f"""(()=>{{const e=document.querySelector('{sel}'), r=e.getBoundingClientRect(), p=e.offsetParent.getBoundingClientRect();
+      return {{title:e.querySelector('.mktitle').textContent, folded:e.classList.contains('keysFolded'),
+        body:getComputedStyle(e.querySelector('.mkbody')).display!=='none', l:r.left, r:r.right, t:r.top, b:r.bottom, w:r.width, h:r.height,
+        pl:p.left, pr:p.right, pt:p.top, pb:p.bottom}}}})()""")
+
+
+def test_prefs_shortcut_sheet_title_and_fold(t):
+    '''早見表の帯には何の一覧かの題名（環境設定の「ショートカット表示」の項目名）が出て、NOTES/LIGHTING・NLE/INFO の切り替えで変わる。
+    「—」でたたむと題名とボタンだけの1行に縮み（右寄せの早見表は右端の位置のまま）、ひらくと元の大きさ。たたんだ状態は開き直しても残る。
+    動かした早見表をペインの端の近くでひらいても、ペインの外へはみ出さない'''
+    with prefs_page(t) as ed:
+        t.eq([_sheet(ed, s)["title"] for s in ("#modeKeys", "#commonKeys", "#nodeKeys")], ["⌨ NOTES", "⌨ 標準操作", "⌨ NLE"], "題名")
+        hover_3d(ed)
+        ed.key("Tab")   # 3Dの上で Tab ＝ LIGHTING
+        wait_until(ed, "document.querySelector('#modeKeys .mktitle').textContent==='⌨ LIGHTING'", label="LIGHTINGの題名")
+        hover_3d(ed)
+        ed.key("Tab")
+        wait_until(ed, "document.querySelector('#modeKeys .mktitle').textContent==='⌨ NOTES'", label="NOTESへ戻る")
+        to_info(ed)
+        wait_until(ed, "document.querySelector('#nodeKeys .mktitle').textContent==='⌨ INFO'", label="INFOの題名")
+        # たたむ（右上の標準操作＝右寄せ）
+        open0 = _sheet(ed, "#commonKeys")
+        t.ok(open0["body"] and not open0["folded"], "最初はひらいている")
+        click_sel(ed, "#commonKeys .mkFold", "たたむ")
+        f = _sheet(ed, "#commonKeys")
+        t.ok(f["folded"] and not f["body"], "たたむと本文が消える")
+        t.ok(f["w"] < 200 and f["h"] < 32, f"題名とボタンだけの1行に縮む: {f['w']:.0f}×{f['h']:.0f}（ひらいた時 {open0['w']:.0f}×{open0['h']:.0f}）")
+        t.ok(abs(f["r"] - open0["r"]) < 1, "右寄せの早見表は右端の位置のまま（「—」がマウスの下に残る）")
+        t.eq(f["title"], "⌨ 標準操作", "たたんでも題名は出ている")
+        t.eq(ls_json(ed, "bsnm_keyfold"), {"commonKeys": 1}, "たたんだ状態の保存")
+        # たたんだまま右下の角へ動かしてからひらく → ペインの中へ押し戻す
+        ed.drag(f["l"] + 20, f["t"] + f["h"] / 2, f["pr"] - 4, f["pb"] - 4)
+        moved = _sheet(ed, "#commonKeys")
+        t.ok(moved["r"] > f["pr"] - 3 and moved["b"] > f["pb"] - 3, f"右下の角まで動いた: {moved}")
+        click_sel(ed, "#commonKeys .mkFold", "ひらく")
+        o = _sheet(ed, "#commonKeys")
+        t.ok(o["body"] and abs(o["h"] - open0["h"]) < 2, "ひらくと元の大きさ")
+        t.ok(o["l"] >= o["pl"] - 0.5 and o["r"] <= o["pr"] + 0.5 and o["t"] >= o["pt"] - 0.5 and o["b"] <= o["pb"] + 0.5,
+             f"ペインの外へはみ出さない: {o}")
+        # 開き直してもたたんだ状態が残る
+        click_sel(ed, "#modeKeys .mkFold", "NOTESの早見表をたたむ")
+        reload_keep(ed)   # bsnm_keyfold は config/settings.json へ写さない（settings-mirror.js の LOCAL_ONLY）＝localStorage に残る
+        m = _sheet(ed, "#modeKeys")
+        t.ok(m["folded"] and not m["body"] and m["w"] < 200, f"開き直してもたたんだまま: {m['w']:.0f}px")
+        t.eq(m["title"], "⌨ NOTES", "開き直した後も題名")
         t.no_errors()
 
 

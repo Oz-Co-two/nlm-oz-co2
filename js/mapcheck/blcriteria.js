@@ -71,14 +71,14 @@ export const RULES = [
   { id: 'R11.A', kind: 'manual' }, { id: 'R11.B', kind: 'cand', g: metaLetters }, { id: 'R11.C', kind: 'cand', g: metaSymbols },
   { id: 'R11.D.1', kind: 'manual' }, { id: 'R11.D.2', kind: 'cand', g: nameTags }, { id: 'R11.E', kind: 'manual' },
   { id: 'R11.F.1', kind: 'manual' }, { id: 'R11.F.2', kind: 'cand', g: authorTags },
-  { id: 'R11.G', kind: 'partial', g: mapperField }, { id: 'R11.H.1', kind: 'auto', g: diffNames }, { id: 'R11.H.5', kind: 'manual' },
+  { id: 'R11.G', kind: 'partial', g: mapperField }, { id: 'R11.H.1', kind: 'auto', g: diffNames }, { id: 'R11.H.5', kind: 'cand', g: starOrder },
   { id: 'R11.I', kind: 'manual' }, { id: 'R11.J', kind: 'manual' },
 ];
 export const SECTIONS = ['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'R11'];
 
 /**
  * @param p  runMapCheck と同じ入力＋ p.meta{songName,subName,author,mapper} / p.infoRaw{songTimeOffset,shuffle,shufflePeriod,colorSchemes,requirements}
- *           / p.cover{w,h,name} / p.stars{難易度:{star,tech}}（視界ブロックの式に使う。空なら判定しない）
+ *           / p.cover{w,h,name} / p.stars{難易度:{star,tech}}（視界ブロックの式・★の並びに使う。空なら判定しない）
  * @param mc runMapCheck の結果（候補の流用元）
  */
 export function runBlCriteria(p, mc) {
@@ -105,6 +105,7 @@ export function runBlCriteria(p, mc) {
 function ruleStatus(kind, fs) {
   if (fs.some(f => f.status === BL.FAIL)) return BL.FAIL;
   if (fs.some(f => f.status === BL.CHECK)) return BL.CHECK;
+  if (fs.some(f => f.status === BL.MANUAL)) return BL.MANUAL;   // 入力が足りず判定しきれない（★の並び）
   return { auto: BL.PASS, partial: BL.PARTIAL, cand: BL.PASS, manual: BL.MANUAL, na: BL.NA }[kind];
 }
 
@@ -676,6 +677,25 @@ function mapperField({ p }) {
 function diffNames({ p }) {
   const labels = p.diffs.map(d => d.label).filter(Boolean);
   return labels.length ? [F(null, BL.CHECK, 'customLabels', { list: labels.join(' / ') })] : [F(null, 'note', 'defaultNames')];
+}
+// R11.H.5（候補）: 難易度は★の低い順（0.5★までの逆転は許容）。★は p.stars（プラグインの近似値か手入力）。
+// 並びは書き出しの順（易しい順）。どれかの易しい難易度より0.5★を超えて低い難易度を挙げる（隣どうしだけでなく全体で比べる）。
+// 近似値なので違反(FAIL)にはせず要確認。★の無い難易度は除いて判定し、除いたことを手動確認として出す
+function starOrder({ p }) {
+  const dns = p.diffs.map(d => d.difficulty);
+  if (dns.length < 2) return [F(null, 'note', 'oneDiff')];
+  const starOf = dn => { const s = p.stars && p.stars[dn]; return s && s.star >= 0 ? s.star : null; };
+  const known = dns.filter(dn => starOf(dn) != null), missing = dns.filter(dn => starOf(dn) == null);
+  const out = [];
+  let top = null;   // ここまでで★が一番高い難易度
+  for (const dn of known) {
+    if (top && starOf(dn) < starOf(top) - 0.5 - EPS) out.push(F(dn, BL.CHECK, 'starOrder', { star: starOf(dn), lo: top, loStar: starOf(top) }));
+    if (!top || starOf(dn) > starOf(top)) top = dn;
+  }
+  if (known.length < 2) return [F(null, BL.MANUAL, 'orderNoStars')];
+  if (!out.length) out.push(F(null, 'note', 'starOrderOk', { order: known.map(dn => [dn, starOf(dn)]) }));
+  if (missing.length) out.push(F(null, BL.MANUAL, 'orderNeedStars', { diffs: missing }));
+  return out;
 }
 
 const uniq = a => [...new Set(a)];

@@ -13,11 +13,11 @@ English: [README.en.md](README.en.md)
 
 はじめて使う方は、まず **[チュートリアル](docs/tutorial.md)** をどうぞ。曲の読み込みからノーツ配置、
 Beat Saber で遊べる形への書き出し・保存までを、画像付きで順番に説明しています。
-慣れてきたら **[上級編チュートリアル](docs/tutorial-advanced.md)** もどうぞ。作業を速くする操作や、公開前のチェック・★の測定などを説明しています。
+慣れてきたら **[上級編チュートリアル](docs/tutorial-advanced.md)** もどうぞ。作業を速くする操作や、MEDIA ライブラリ、公開前のチェック・★の測定などを説明しています。
 各パネルの細かい操作は、原作サイトのリファレンスマニュアルが詳しいです。
 
 - **チュートリアル（画像付き・基本の流れ）**: [docs/tutorial.md](docs/tutorial.md)
-- **上級編チュートリアル（作業を速くする操作・公開前のチェック・★の測定など）**: [docs/tutorial-advanced.md](docs/tutorial-advanced.md)
+- **上級編チュートリアル（作業を速くする操作・MEDIA ライブラリ・公開前のチェック・★の測定など）**: [docs/tutorial-advanced.md](docs/tutorial-advanced.md)
 - **原作 / 公式ドキュメント**: https://helba.flashhub.net/nlm/
 - **リファレンスマニュアル**: https://helba.flashhub.net/nlm/manual/
 - **原作の修正履歴**: https://helba.flashhub.net/nlm/changelog.html
@@ -108,6 +108,13 @@ Kival Evan 作の [BS Map Check](https://github.com/KivalEvan/BeatSaber-MapCheck
 別配布のプログラム（MIT）で、BeatLeader の [RatingAPI](https://github.com/BeatLeader/RatingAPI)・
 [beatleader-analyzer](https://github.com/BeatLeader/beatleader-analyzer)（MIT）を使っています。
 
+MEDIA ライブラリの詳細表示のアップロード日・評価・ランク状態・★は、Kinsi さんが公開している
+[BeatSaberScrappedData](https://github.com/kinsi55/BeatSaberScrappedData) の全曲データ（元のデータは BeatSaver・BeatLeader・ScoreSaber。
+Beat Saber の一部の Mod も使っている物）です。お使いの PC が jsDelivr から1日1回まで取得し、こちらからは何も送りません
+（環境設定の「MEDIA」で OFF にできます）。全曲データに無い曲だけ、🔍 を押して確認した時に、その1曲の識別子（ハッシュ）を
+[BeatSaver](https://beatsaver.com/) の公開 API へ送って調べます。プレイ回数・自己ベストは、PC にある Beat Saber のプレイ記録のファイルを読むだけです。
+曲のフォルダは読むだけで、書き込みはしません。
+
 - 原作者: [helba](https://helba.flashhub.net/nlm/)
 - 本フォークでの改良: Oz-Co2
 
@@ -181,6 +188,8 @@ python3 serve.py
 - **機能の制限**: 出力フォルダやカバー画像の「自動再接続」はデスクトップ版専用です。ブラウザでは、
   プロジェクトを開くたびに選び直す必要があります。
 - **「難易度を測る」は使えません。** 追加プラグイン（nlm-rating）が Windows 用の exe しか無いためです。
+- **MEDIA のライブラリ**: ブラウザで追加したフォルダは記録されず、詳細表示も `Info.dat` に書かれている値だけです
+  （NPS・長さ・アップロード日・プレイ記録などはデスクトップ版だけ）。
 - **ターミナルは開いたままにしてください。** 閉じるとサーバーが止まります。また、`file://` で
   `editor.html` を直接開いても動きません。
 - **保存場所**: 環境設定と「アセットへ保存」したクリップは、クローンしたフォルダ内の `config/` と `asset/` に保存されます。

@@ -62,19 +62,27 @@
           </div>
         </div>
         <div class="pvbody" id="tabFolder">
-          <div id="libTop">
+          <!-- 操作部品は MEDIA の見出しの行（MEDIA [TAB] PREVIEW の帯の右）へ並べ、入りきらない分だけ2行目へ折り返す。
+               #libHeadGap は帯の幅ぶんの空き（js/media/lib-layout.js が帯の幅を測って入れる） -->
+          <div id="libHead">
+            <span id="libHeadGap"></span>
             <button id="loadBtn" style="display:none" data-i18n="ui.loadSongFolder">曲フォルダ読込</button>
             <button id="libAddBtn"><svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:-3px;margin-right:6px"><path d="M2.5 6.6 a1.8 1.8 0 0 1 1.8-1.8 h4.3 a1 1 0 0 1 .8.4 l1 1.35 a1 1 0 0 0 .8.4 h8.5 a1.8 1.8 0 0 1 1.8 1.8 v8.2 a1.8 1.8 0 0 1 -1.8 1.8 H4.3 a1.8 1.8 0 0 1 -1.8-1.8 z" fill="#e3b34e"/></svg><span data-i18n="ui.addFolder">フォルダを追加</span></button>
             <input id="folder" type="file" webkitdirectory directory multiple style="display:none">
             <span id="libTitle" style="display:none"></span>
-            <input id="libSize" type="range" min="4" max="8" step="1" value="5" data-i18n-t="ui.thumbSize" title="サムネイルの大きさ"
-              style="width:96px;accent-color:#56ffc1;margin-left:auto;flex:0 0 auto;">
+            <span id="libSearchBox"><svg class="lsIco" viewBox="0 0 16 16" width="13" height="13"><circle cx="6.8" cy="6.8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10.3 10.3 L14.2 14.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg><input id="libSearch" type="search" spellcheck="false" autocomplete="off" data-i18n-ph="lib.searchPh" placeholder="曲名・アーティスト・マッパー" data-i18n-t="lib.searchTip" title="曲名・アーティスト・マッパーで探す（打つとすぐ絞り込みます。Esc で消す）"><button id="libSearchX" type="button" data-i18n-t="lib.searchClear" title="検索を消す">×</button></span>
+            <span class="libSep"></span>
+            <!-- フィルター・件数・解除・表示の切り替え・大きさは1つの組（折り返す時は一緒に次の段へ。表示の切り替えと大きさは組の右端＝行の右端）。大きさは表示に合わせた印（グリッド＝画像・詳細＝Aa）とスライダー -->
+            <span id="libFiltGrp"><button id="libFiltBtn" data-i18n-t="lib.filterTip" title="条件で絞り込む（★・長さ・難易度・モード など）。丸の数字は今効いている条件の数"><svg class="lfIco" viewBox="0 0 16 16" width="12" height="12"><path d="M1.8 2.5 h12.4 l-4.7 5.6 v4.6 l-3 1.6 v-6.2 z" fill="currentColor"/></svg><span data-i18n="lib.filterBtn">フィルター</span><span class="lfCaret">▾</span><span id="libFiltN"></span></button><span id="libCount"></span><button id="libFiltClear" data-i18n="lib.f.clear" disabled>解除</button><span id="libViewSeg"><button data-view="grid" data-i18n-t="lib.viewGrid" title="グリッド表示"><svg viewBox="0 0 16 16" width="14" height="14"><g fill="currentColor"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/><rect x="9" y="9" width="5.5" height="5.5" rx="1"/></g></svg></button><button data-view="detail" data-i18n-t="lib.viewDetail" title="詳細表示（1行＝1難易度）"><svg viewBox="0 0 16 16" width="14" height="14"><g fill="currentColor"><rect x="1.5" y="2" width="13" height="2.2" rx=".8"/><rect x="1.5" y="6.9" width="13" height="2.2" rx=".8"/><rect x="1.5" y="11.8" width="13" height="2.2" rx=".8"/></g></svg></button></span><span id="libSizeGrp"><span id="libSizeIco" aria-hidden="true"><svg class="lszImg" viewBox="0 0 16 16" width="14" height="14"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="5.4" cy="6.2" r="1.4" fill="currentColor"/><path d="M2.8 12.2 L6.6 8.4 L9 10.6 L11 8.8 L13.2 11 V12.2 Z" fill="currentColor"/></svg><span class="lszAa">Aa</span></span><input id="libSize" type="range" min="4" max="8" step="1" value="5"></span></span>
           </div>
+          <div id="libRateBar" style="display:none"><span class="lrTxt"></span><button id="libRateStop" data-i18n="lib.rate.stop">中止</button></div>
           <div id="libBody">
             <div id="libSide">
               <div id="libList"></div>
+              <div id="libSrc" style="display:none"></div>
             </div>
-            <div id="libMain"><div id="libGrid"></div></div>
+            <div id="libSideSplit" data-i18n-t="lib.sideSplitTip" title="ドラッグでカタログの幅を変える（ダブルクリックで元の幅）"></div>
+            <div id="libMain"><div id="libGrid"></div><div id="libTable" style="display:none"></div></div>
           </div>
           <div class="row" style="display:none"><button id="saveBtn"></button><button id="exportBtn"></button>
             <button id="saveAsBtn"></button><button id="openProjBtn"></button></div>
@@ -257,6 +265,7 @@
     <button class="setTab" data-tab="preview" data-i18n="set.tabPreview">Preview設定</button>
     <button class="setTab" data-tab="cam" data-i18n="set.tabCam">カメラ設定</button>
     <button class="setTab" data-tab="keys" data-i18n="set.tabKeys">ショートカット編集</button>
+    <button class="setTab" data-tab="media" data-i18n="set.tabMedia">MEDIA</button>
   </div>
   <div class="t" style="color:#c9a24a;margin:2px 0 14px;font-size:12.5px" data-i18n="set.applyOnRestart">※ スライダーの変更は再起動（リロード）後に反映されます</div>
   <div class="setPanel on" data-panel="app">
@@ -321,6 +330,21 @@
     <div class="t" style="color:#c9a24a;margin-bottom:8px" data-i18n="set.keysHint">キーの割り当てを変更できます。「変更」を押して、割り当てたいキー（修飾キー可）を押してください。マウス/ホイール操作は変更できません（参考表示）。</div>
     <div id="keyEditBody"></div>
     <div style="margin-top:10px"><button id="keysResetAll" data-i18n="set.keysResetAll" style="background:#3a2226;border:1px solid #5a3038;color:#ff8a94">全て既定に戻す</button></div>
+  </div>
+  <!-- MEDIA ライブラリ（2026-10-12・js/media/lib-online.js）: 全曲データ・★の計算・ゲームのプレイ記録 -->
+  <div class="setPanel" data-panel="media">
+    <div class="row"><div class="t" data-i18n="set.libNet">全曲データ（アップロード日・評価・★）</div>
+      <label class="setChk"><input id="libNetOn" type="checkbox" checked><span class="t" data-i18n="set.libNetOn">全曲データを取得する</span></label>
+      <div class="t setNote" data-i18n="set.libNetHint">Beat Saber の Mod も使っている全曲データ（BeatSaberScrappedData・元は BeatSaver/BeatLeader/ScoreSaber）を jsDelivr から1日1回まで取得し、アップロード日・評価・★などを表示します。こちらからは何も送りません</div>
+      <div class="t setState"><span data-i18n="set.libState">状態:</span> <span id="libNetState"></span></div></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.libRatePar">★の計算を同時に何曲まで</span> <span id="libRateParVal">4</span></div>
+      <input id="libRatePar" type="range" min="1" max="5" step="1" value="4"></div>
+    <div class="t setNote" data-i18n="set.libRateParHint">増やすと速く終わりますが、計算の間 PC が重くなります（次の計算からすぐに使います）</div>
+    <div class="row"><div class="t" data-i18n="set.libPlay">ゲームのプレイ記録（PlayerData.dat）</div>
+      <div class="t setState"><span data-i18n="set.libState">状態:</span> <span id="libPlayState"></span></div>
+      <div class="t setState"><span id="libPlayMode"></span> <span id="libPlayPath" class="setPath"></span></div>
+      <div class="setBtns"><button id="libPlayPick" data-i18n="set.libPlayPick">ファイルを選ぶ…</button><button id="libPlayReset" data-i18n="set.libPlayReset">既定に戻す</button>
+        <span id="libPlayExeOnly" class="t setNote" data-i18n="set.libPlayExeOnly">ファイルを選ぶのはデスクトップ版（exe）だけでできます</span></div></div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;border-top:1px solid #ffffff14;padding-top:12px">
     <button id="settingsReset" style="background:#3a2226;border:1px solid #5a3038;color:#ff8a94" data-i18n-t="set.resetTip" title="画面比率・音量・カメラ速度など全ての環境設定を初回起動時の状態に戻します"><span data-i18n="set.reset">初期設定に戻す</span></button>

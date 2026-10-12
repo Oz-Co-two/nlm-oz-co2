@@ -4,6 +4,9 @@ import hmac, http.server, json, math, os, posixpath, re, secrets, shutil, subpro
 from urllib.parse import unquote, urlsplit, parse_qs
 from rating_plugin import RatingPlugin, PluginError
 from app_update import Updater, UpdateError
+from media_library import MediaLibrary, LibError, RatingCache
+from song_details import SongDetails
+from beatsaver_api import BeatSaverLookup
 
 # BASE_DIR = Webコンテンツの置き場（読み取り専用でよい）。exe化(PyInstaller)ではバンドル展開先を渡す。
 # DATA_DIR = 書き込み対象（config/settings.json と asset/*.nlmclip）。exe化では exe と同居のユーザー書込み可フォルダを渡す。
@@ -20,6 +23,21 @@ OPEN_FILE = os.environ.get('NLM_OPEN_FILE') or ''              # ダブルクリ
 
 # 本体の自動更新（app_update.py）。exe 版では DATA_DIR＝exe の隣＝差し替える配布フォルダ
 UPDATER = Updater(BASE_DIR, DATA_DIR, bool(getattr(sys, 'frozen', False)))
+
+# MEDIA ライブラリ（2026-10-12）。記録したフォルダ（config/library.json）は exe 版のフォルダ選択ダイアログ（app.py の
+# Api.lib_pick_folder）からだけ増える。JS から受け取るのは記録の id と、その中の相対パス・ファイル名だけ（media_library.py）。
+# 全曲データ（song_details.py・jsDelivr）と BeatSaver（beatsaver_api.py）の取得先 URL はそれぞれのファイルに固定。
+# NLM_PLAYDATA はプレイ記録の既定の場所の差し替え（テスト用。利用者の本物の記録を読まないように）
+# NLM_NO_NET=1 はネットへ出ない（自動テスト用。画面は記録したライブラリを読むと全曲データの取得を頼むため、テストのサーバーが
+# 毎回 jsDelivr から約10MB を取りに行かないように。全曲データ・BeatSaver の取得は「通信の失敗」として扱われる）
+def _no_net(*a, **k):
+    import urllib.error
+    raise urllib.error.URLError('NLM_NO_NET')
+_NET = None if os.environ.get('NLM_NO_NET') != '1' else _no_net
+LIBRARY = MediaLibrary(DATA_DIR, default_playdata=os.environ.get('NLM_PLAYDATA') or None)
+SONG_DETAILS = SongDetails(DATA_DIR, app_root=BASE_DIR, opener=_NET)
+BEATSAVER = BeatSaverLookup(DATA_DIR, app_root=BASE_DIR, opener=_NET)
+RATING_CACHE = RatingCache(DATA_DIR)
 
 def _safe(name):
     # ファイル名を安全化（パストラバーサル・不正文字の除去）。ディレクトリ部は捨てる
@@ -375,6 +393,107 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             return self._reply(200, {'ok': False, 'error': e.code, 'detail': e.detail})
         return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
 
+    def _reply_bytes(self, data, ctype):
+        self._drain()
+        self.send_response(200)
+        self.send_header('Content-Type', ctype)
+        self.send_header('X-NLM-File', '1')   # ファイルの中身（失敗の {ok:false} と見分ける。.dat も application/json のため）
+        self.send_header('Content-Length', str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    @staticmethod
+    def _lib_net(m, use_dump):
+        """1曲の「ネットの情報」（取り決めの Extra の net）。版が一致する（ハッシュで当たった）物を優先し、全曲データ＞BeatSaver の記録の順。
+        どちらにも無ければ {'src':'none'}（画面に🔍を出す）。BeatSaver にも無かった曲は bsMissAt 付き"""
+        h, k = m.get('hash'), m.get('key')
+        dump = SONG_DETAILS.lookup(hash=h, key=k) if use_dump else None
+        bs = BEATSAVER.cached(h) if h else None
+        cands = [x for x in (dump, bs) if isinstance(x, dict) and x.get('src') in ('dump', 'beatsaver')]
+        for x in cands:
+            if x.get('match') == 'hash':
+                return x
+        if cands:
+            return cands[0]
+        if isinstance(bs, dict) and bs.get('bsMissAt'):
+            return {'src': 'none', 'bsMissAt': bs['bsMissAt']}
+        return {'src': 'none'}
+
+    def _lib(self):
+        # MEDIA ライブラリ（media_library.py・song_details.py・beatsaver_api.py）。JS から受け取るのは記録の id・相対パス・ファイル名・
+        # 同時に計算する数・全曲データを使うか、だけ。フォルダを増やす口は無い（exe 版のダイアログ＝app.py の Api.lib_pick_folder だけ）
+        act = self.path[len('/__lib/'):]
+        b = self._body()
+        b = b if isinstance(b, dict) else {}
+        sv = lambda k: b.get(k) if isinstance(b.get(k), str) else ''
+        lid, rel = sv('id'), sv('rel')
+        use_dump = b.get('net') is not False
+        try:
+            if act == 'list':
+                return self._reply(200, {'ok': True, 'libs': LIBRARY.list(), 'details': SONG_DETAILS.status(),
+                                         'playdata': LIBRARY.playdata_status()})
+            if act == 'scan':
+                return self._reply(200, LIBRARY.scan(lid, b.get('from') or 0))
+            if act == 'rescan':
+                return self._reply(200, LIBRARY.rescan(lid))
+            if act == 'remove':
+                return self._reply(200, LIBRARY.remove(lid))
+            if act == 'open':
+                return self._reply(200, LIBRARY.open_folder(lid, rel))
+            if act == 'file':
+                data, ctype = LIBRARY.read_file(lid, rel, sv('name'))
+                return self._reply_bytes(data, ctype)
+            if act == 'extra':
+                maps = LIBRARY.scan(lid, 0)['maps']
+                plays = LIBRARY.play_all(lid)
+                cur = RatingPlugin(DATA_DIR).current()
+                ver = cur['version'] if cur else None
+                out = {}
+                for m in maps:
+                    e = {'net': self._lib_net(m, use_dump)}
+                    if m['rel'] in plays:
+                        e['play'] = plays[m['rel']]
+                    est = RATING_CACHE.get(m.get('hash'), ver) if ver else None
+                    if est:
+                        e['est'] = {'version': ver, 'diffs': est}
+                    out[m['rel']] = e
+                return self._reply(200, {'ok': True, 'extra': out})
+            if act == 'details':   # 全曲データ。update は JS が環境設定 ON の時だけ呼ぶ（1日1回の決まりは song_details.py が守る）
+                return self._reply(200, SONG_DETAILS.update() if sv('act') == 'update' else SONG_DETAILS.status())
+            if act == 'beatsaver':   # 利用者が🔍を押して確認した1曲だけ（確認は JS が取る）
+                m = LIBRARY.get_map(lid, rel)
+                if not m or not m.get('hash'):
+                    return self._reply(200, {'ok': False, 'error': 'not-found'})
+                r = BEATSAVER.lookup(m['hash'])
+                if 'error' in r:
+                    return self._reply(200, {'ok': False, **r})
+                return self._reply(200, {'ok': True, 'net': self._lib_net(m, use_dump)})
+            if act == 'rate':   # NLM推定の★（nlm-rating）。同時に動かす数は rating_plugin が 1〜CPU数に丸める
+                m = LIBRARY.get_map(lid, rel)
+                if not m or not m.get('hash'):
+                    return self._reply(200, {'ok': False, 'error': 'not-found'})
+                rp = RatingPlugin(DATA_DIR)
+                cur = rp.current()
+                if not cur:
+                    return self._reply(200, {'ok': False, 'error': 'notInstalled'})
+                hit = RATING_CACHE.get(m['hash'], cur['version'])
+                if hit is None:
+                    try:
+                        par = int(b.get('parallel') or 1)
+                    except (TypeError, ValueError):
+                        par = 1
+                    res = rp.measure({'files': LIBRARY.rating_input(lid, rel), 'modifiers': ['none']}, par)
+                    hit = RatingCache.from_plugin(res.get('results'))
+                    RATING_CACHE.put(m['hash'], cur['version'], hit)
+                return self._reply(200, {'ok': True, 'est': {'version': cur['version'], 'diffs': hit}})
+            if act == 'playdata':
+                return self._reply(200, LIBRARY.reset_playdata() if sv('act') == 'reset' else LIBRARY.playdata_status())
+        except LibError as e:
+            return self._reply(200, {'ok': False, 'error': e.code})
+        except PluginError as e:
+            return self._reply(200, {'ok': False, 'error': e.code, 'detail': e.detail})
+        return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
+
     def do_POST(self):
         self._raw = None   # 本体の読み込みは要求ごと（_raw_body）
         if not self._access_ok(write=True):
@@ -408,6 +527,8 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 return self._update()
             if self.path.startswith('/__rating/'):   # 難易度を測る（BeatLeaderの星の近似）プラグイン。詳細は rating_plugin.py
                 return self._rating()
+            if self.path.startswith('/__lib/'):   # MEDIA ライブラリ。詳細は _lib
+                return self._lib()
             os.makedirs(ASSET_DIR, exist_ok=True)
             if self.path == '/__asset/save':
                 b = self._body()

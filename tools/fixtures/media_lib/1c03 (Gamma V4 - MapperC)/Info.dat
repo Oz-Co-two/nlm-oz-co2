@@ -1,0 +1,41 @@
+{
+ "version": "4.0.0",
+ "song": {
+  "title": "Gamma V4",
+  "subTitle": "",
+  "author": "Artist Gamma"
+ },
+ "audio": {
+  "songFilename": "song.ogg",
+  "songDuration": 61.5,
+  "audioDataFilename": "AudioData.dat",
+  "bpm": 100,
+  "lufs": 0,
+  "previewStartTime": 3,
+  "previewDuration": 5
+ },
+ "songPreviewFilename": "song.ogg",
+ "coverImageFilename": "",
+ "environmentNames": [
+  "WeaveEnvironment"
+ ],
+ "colorSchemes": [],
+ "difficultyBeatmaps": [
+  {
+   "characteristic": "Standard",
+   "difficulty": "Expert",
+   "beatmapAuthors": {
+    "mappers": [
+     "MapperC"
+    ],
+    "lighters": []
+   },
+   "environmentNameIdx": 0,
+   "beatmapColorSchemeIdx": 0,
+   "noteJumpMovementSpeed": 17,
+   "noteJumpStartBeatOffset": 0,
+   "lightshowDataFilename": "Lightshow.dat",
+   "beatmapDataFilename": "Expert.dat"
+  }
+ ]
+}

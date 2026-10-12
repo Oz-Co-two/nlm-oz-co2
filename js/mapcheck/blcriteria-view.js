@@ -102,7 +102,7 @@ export const BL_MSG_JA = {
   precList: '使われている実効精度（拍）: {list}', noSliders: 'スライダーが無いので、チェーンの長さを比べられません',
   chainLong: 'スライダーの平均の2倍（{ms}ms）より長いチェーン',
   swing45: '最初の角度から45度を超えて曲がるスイング', swingBothWays: '左右両方へ曲がるスイング',
-  needStars: '下の欄にこの難易度の★とTechを入れると判定します', vision: '最小時間{ms}ms未満で隠れる物（ゲーム内かArcViewerで確認）',
+  needStars: '下の欄にこの難易度の★とTechが入ると判定します（自動計算か手入力）', vision:'最小時間{ms}ms未満で隠れる物（ゲーム内かArcViewerで確認）',
   visionOk: '最小時間{ms}msで判定・該当なし', wallHide: '下からの壁で出現が隠れる物（正当化が必要）',
   first16: '最初の16ノーツに入っているチェーン', chainReverse: '逆向き（尾が頭より前か同時）のチェーン',
   chainTurn: '45度を超えて曲がるチェーン', chainHeadOut: '頭が枠の外のチェーン', chainLinkOut: 'リンクが許される範囲の外に出るチェーン',
@@ -118,6 +118,9 @@ export const BL_MSG_JA = {
   unsearchable: '{field}に打てない文字「{chars}」（公式の翻訳/ローマ字にする）', specialChar: '{field}に打てない記号「{chars}」（似た文字か記号名に置き換え）',
   nameTag: '曲名にタグらしい語: 「{v}」', authorTag: '作者名にタグらしい語: 「{v}」', noMapper: 'マッパー欄が空です',
   customLabels: '独自の難易度名: {list}（ゲーム内で重なり・行数を確認）', defaultNames: 'NLMは標準の難易度名で書き出す（重なり・行数の問題なし）',
+  starOrder: '★{star}で、{lo}（★{loStar}）より0.5★を超えて低い', starOrderOk: '★の並び: {order}',
+  orderNeedStars: '★が分からない難易度（{diffs}）は除いて判定（R5.A の欄に入ると判定します）',
+  orderNoStars: 'R5.A の欄に各難易度の★が入ると判定します（自動計算か手入力）', oneDiff: '難易度が1つなので並びの問題はありません',
   failed: '判定中にエラー（{err}）', fSong: '曲名', fSub: 'サブ名', fAuthor: '作者名', fMapper: 'マッパー名',
 };
 // 文面に定義が無くNLMが解釈した・近似した項目の注記
@@ -128,12 +131,13 @@ export const BL_NOTE_JA = {
   'R4.A.3': '区間の精度は自動で決められないため、1/4刻みの区間を想定した候補（1/8刻みの区間なら下限は1/32）',
   'R4.A.6': '「実効長」は最初から最後のノーツまでの時間で近似',
   'R4.C': 'BS Map Check の「手拍子になる配置」を候補として表示',
-  'R5.A': '式はBeatLeader公式（750-325)·e^(-★/7.6-Tech·0.06)+325ms。★とTechはBeatLeaderの値（申請前は見込み）を入れる。下段の例外は流れに沿うかを目視',
+  'R5.A': '式はBeatLeader公式（750-325)·e^(-★/7.6-Tech·0.06)+325ms。★とTechは「難易度を測る」プラグインの近似値を自動で入れる（BeatLeaderの値が分かれば手で書き換えられる）。下段の例外は流れに沿うかを目視',
   'R6.D': '文面に計算方法が無いため、チェーンの詰め具合（squish）をリンクの割合とみなした',
   'R7.A': '「軌道の上」を切る向きの手前/先の隣のマスとみなした候補',
   'R7.B': '明るさ50を0.5とみなし、基本ライトイベントを再現して判定',
   'R8.A.2': 'BS Map Check の「中央の2マス幅の壁（回復250ms未満）」を候補として表示',
   'R8.A.3': '真ん中の片側だけを塞ぐ壁で、塞ぐ側が0.5秒未満で入れ替わる所を候補にした',
+  'R11.H.5': '★は R5.A の欄の値（プラグインの近似値か手入力）。近似値のため違反ではなく要確認として出す。どれかの易しい難易度より0.5★を超えて低い難易度を挙げる',
 };
 const ST = {
   [BL.FAIL]: { ic: '✖', ja: '違反' }, [BL.CHECK]: { ic: '⚠', ja: '要確認' }, [BL.PASS]: { ic: '✔', ja: '合格' },
@@ -142,7 +146,8 @@ const ST = {
 const ST_ORDER = [BL.FAIL, BL.CHECK, BL.PASS, BL.PARTIAL, BL.MANUAL, BL.NA];
 const KIND_JA = { auto: '自動', partial: '一部自動', cand: '候補', manual: '手動', na: '対象外' };
 
-export function blView({ t, escHtml, dispDiff, mcLabel, fixHTML }) {   // fixHTML(所見)＝その所見を直すボタン（無ければ''）
+// fixHTML(所見)＝その所見を直すボタン（無ければ''） / starsHTML(難易度の一覧)＝R5.A の★/Tech の欄（bl-stars.js）
+export function blView({ t, escHtml, dispDiff, mcLabel, fixHTML, starsHTML }) {
   const fill = (s, vars) => { if (vars) for (const k in vars) s = s.split('{' + k + '}').join(String(vars[k])); return s; };
   const stLab = s => t('bl.st.' + s, ST[s].ja);
   const fmtBeat = b => String(Math.round(b * 1000) / 1000);
@@ -151,6 +156,10 @@ export function blView({ t, escHtml, dispDiff, mcLabel, fixHTML }) {   // fixHTM
     const v = { ...(f.vars || {}) };
     if (v.field) v.field = t('bl.m.' + v.field, BL_MSG_JA[v.field]);
     if (v.key) v.key = mcLabel(v.key);
+    if (v.lo) v.lo = dispDiff(v.lo);   // R11.H.5（★の並び）の難易度名・★の一覧
+    if (Array.isArray(v.diffs)) v.diffs = v.diffs.map(dispDiff).join(' / ');
+    if (Array.isArray(v.order)) v.order = v.order.map(([dn, s]) => `${dispDiff(dn)} ★${s.toFixed(2)}`).join(' → ');
+    for (const k of ['star', 'loStar']) if (typeof v[k] === 'number') v[k] = v[k].toFixed(2);
     return fill(t('bl.m.' + f.key, BL_MSG_JA[f.key] || f.key), v);
   };
   const counts = rules => { const c = {}; for (const r of rules) c[r.status] = (c[r.status] || 0) + 1; return c; };
@@ -168,7 +177,7 @@ export function blView({ t, escHtml, dispDiff, mcLabel, fixHTML }) {   // fixHTM
       ? `<span class="mcMore" data-id="${ref}">${escHtml(t('mc.more', '他{n}件').replace('{n}', f.objs.length - n))}</span>` : ''}</div>`;
   }
 
-  // res: runBlCriteria の結果 / st: {onlyIssues, stars, expanded}
+  // res: runBlCriteria の結果 / st: {onlyIssues, expanded}
   function render(res, st, CHIP_MAX) {
     const tot = counts(res.rules);
     let h = `<div class="blBanner"><b>${escHtml(t('bl.banner', 'NLM版 BeatLeader評価リスト'))}</b>`
@@ -191,14 +200,7 @@ export function blView({ t, escHtml, dispDiff, mcLabel, fixHTML }) {   // fixHTM
       const cls = f.status === BL.FAIL || f.status === BL.CHECK ? ' st-' + f.status : '';
       return `<div class="blF${cls}">${d}<span>${escHtml(msg(f))}</span>${f.objs ? `<span class="mcN">${new Set(f.objs.map(o => o.beat)).size}</span>` : ''}${fixHTML ? fixHTML(f) : ''}${chips(f, 'bl:' + ri + ':' + fi, st.expanded, CHIP_MAX)}</div>`;
     }).join('');
-    let inp = '';
-    if (r.input === 'stars') {
-      inp = `<div class="blStars">` + res.diffs.map(dn => {
-        const v = st.stars[dn] || {};
-        return `<span class="blStar"><b>${escHtml(dispDiff(dn))}</b> ★<input type="number" step="0.01" min="0" data-star="${escHtml(dn)}" value="${v.star ?? ''}">`
-          + ` Tech<input type="number" step="0.01" min="0" data-tech="${escHtml(dn)}" value="${v.tech ?? ''}"></span>`;
-      }).join('') + `</div>`;
-    }
+    const inp = r.input === 'stars' && starsHTML ? starsHTML(res.diffs) : '';
     return `<div class="blRule st-${r.status}"><div class="blLine"><span class="blId">${escHtml(r.id)}</span>`
       + `<span class="blSt" title="${escHtml(stLab(r.status))}">${ST[r.status].ic}</span><span class="blTxt">${escHtml(txt)}</span>`
       + `<span class="blKind">${escHtml(t('bl.kind.' + r.kind, KIND_JA[r.kind]))}</span></div>${fs}${inp}${note}</div>`;

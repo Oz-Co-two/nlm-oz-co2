@@ -244,3 +244,58 @@ def test_measure_filters_plugin_output(t):
     t.eq(r["ratings"]["none"], {"stars": 5.5, "pass": 1.0, "acc": 2.0, "predictedAcc": 0.9}, "数値だけ・知らないキーと非数値は捨てる")
     t.eq(r["ratings"]["SS"], None, "辞書でない値はNone")
     t.eq(res["elapsedMs"], 12, "elapsedMs は整数")
+
+
+def test_measure_parallel_limit(t):
+    '''measure は同時に parallel 個まで動く（1なら1つずつ・CPU数を超えない）。取り込み中は測定を待たせる'''
+    import os
+    import threading
+    import time
+    p, d = _plugin()
+    p.install_zip(_zip(), "0.1.0")
+    state = {"now": 0, "max": 0}
+    lock = threading.Lock()
+
+    class R:
+        returncode = 0
+        stdout = json.dumps({"ok": True, "results": []}).encode()
+        stderr = b""
+
+    def fake_run(cmd, input=None, **kw):
+        with lock:
+            state["now"] += 1
+            state["max"] = max(state["max"], state["now"])
+        time.sleep(0.15)
+        with lock:
+            state["now"] -= 1
+        return R()
+
+    def run_many(n, parallel):
+        state["max"] = 0
+        body = {"files": [{"name": "Info.dat", "text": "{}"}, {"name": "A.dat", "text": "{}"}]}
+        ths = [threading.Thread(target=p.measure, args=(body, parallel)) for _ in range(n)]
+        for th in ths:
+            th.start()
+        for th in ths:
+            th.join(10)
+        return state["max"]
+
+    orig = rp.subprocess.run
+    try:
+        rp.subprocess.run = fake_run
+        t.eq(run_many(4, 1), 1, "parallel=1 は1つずつ")
+        cpu = max(1, os.cpu_count() or 1)
+        t.eq(run_many(6, 3), min(3, cpu), "parallel=3 は同時に3つまで")
+        t.eq(run_many(3, 999), min(3, cpu), "CPU数より大きい値はCPU数に丸める（ここでは要求が3つ）")
+        # 取り込み中は測定が始まらない
+        started = []
+        with rp._Install():
+            th = threading.Thread(target=lambda: started.append(p.measure(
+                {"files": [{"name": "Info.dat", "text": "{}"}, {"name": "A.dat", "text": "{}"}]}, 2)))
+            th.start()
+            time.sleep(0.2)
+            t.eq(started, [], "取り込みが終わるまで待つ")
+        th.join(5)
+        t.eq(len(started), 1, "取り込みの後に測定が動く")
+    finally:
+        rp.subprocess.run = orig
