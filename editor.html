@@ -131,7 +131,12 @@
         <canvas id="ndcv"></canvas>
         </div>
         <div id="proll"><canvas id="prcv"></canvas></div>
-        <div id="overview"><canvas id="ovcv"></canvas></div>
+        <div id="overview"><canvas id="ovcv"></canvas>
+          <div id="musicGain"><!-- 曲の音量補正（Musicレーンの左溝に重ねる。2026-10-18） -->
+            <button id="gainAutoBtn" class="bfField" data-i18n-t="ui.songGainAutoT" title="曲の音量を測り、平均 -9 LUFS を目標に、一番大きい瞬間が -1 dB を超えない所まで上げます（自動では下げません）"><span data-i18n="ui.songGainAuto">自動調整</span></button>
+            <div id="gainField" class="bfField" data-i18n-t="ui.songGain" title="曲の音量補正（dB・全難易度共通）。再生にそのまま効き、書き出し時にsong.eggへ実際に反映されます（環境設定のミュージック音量は作業中の聞こえ方だけで、書き出しには入りません）。‹›=±0.5dB・Shift+‹›=±0.1dB・値クリック=手打ち"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.songGainL">音量</span><span class="bfV">0.0 dB</span><span class="bfA" data-k="up">›</span></div>
+          </div>
+        </div>
         <div id="specPane"><canvas id="speccv"></canvas></div>
         <div id="nodeKeys"></div><!-- NLE/INFO用ショートカット表示（右端）。中身は editor-app.js の KEYS_NLE / KEYS_NODE -->
         <div id="infoPanel" style="display:none"></div>

@@ -142,7 +142,7 @@ py -3.14 -m venv .venv-build
 
 ### ffmpeg（song.egg 変換に必要）
 
-song.egg への書き出し（OGG 以外の音源の変換、無音追加の焼き込み）には、PATH 上に
+song.egg への書き出し（OGG 以外の音源の変換、無音追加・音量補正の焼き込み）には、PATH 上に
 `ffmpeg` が必要です。**自動ではインストールされない**ため、事前に導入しておいてください。
 
 ```bash
@@ -184,7 +184,7 @@ python3 serve.py
 
 - **Chromium 系ブラウザが必要です。** Firefox には必要な API がないため、ファイルの保存・読込ができません。
   Brave も設定によっては API が無効になっている場合があります。
-- **ffmpeg**: `song.egg` の書き出しに必要です（`sudo apt install ffmpeg` などで導入。元の音源が OGG なら不要）。
+- **ffmpeg**: `song.egg` の書き出しに必要です（`sudo apt install ffmpeg` などで導入。元の音源が OGG で、無音追加・音量補正を使わないなら不要）。
 - **機能の制限**: 出力フォルダやカバー画像の「自動再接続」はデスクトップ版専用です。ブラウザでは、
   プロジェクトを開くたびに選び直す必要があります。
 - **「難易度を測る」は使えません。** 追加プラグイン（nlm-rating）が Windows 用の exe しか無いためです。

@@ -23,6 +23,15 @@
    /* 右16px=スクロールバー列ぶんの空白。ndcvと密着（Light/Musicの継ぎ目はndcv最下部に描画＝再生ヘッドが一本につながる） */
   #ovcv{display:block;width:100%;height:100%;}
 
+  /* 曲の音量補正: Musicレーンの左溝（canvas の TLGUT=128px）に重ねる。上の段=「Music」の文字の右に［自動調整］、下の段=音量のステッパー（2026-10-18） */
+  #musicGain{position:absolute;left:0;top:0;width:128px;height:100%;pointer-events:none;}
+  #musicGain>*{pointer-events:auto;position:absolute;right:6px;}
+  #gainAutoBtn{top:4px;height:18px;padding:0 7px;font-size:10.5px;color:#cfcfd4;cursor:pointer;white-space:nowrap;}
+  #gainAutoBtn:hover{color:#fff;border-color:#55555e;}
+  #gainField{left:6px;top:33px;height:22px;font-size:11px;white-space:nowrap;}
+  #gainField .bfLbl{color:#9a9a9a;cursor:text;}
+  #gainField .bfV{min-width:0;flex:1;}
+
   #specPane{height:96px;margin-top:3px;border-radius:10px;overflow:hidden;background:#0c0c0e;position:relative;padding-right:16px;}
    /* スペクトログラム表示帯。Musicの波形(#overview=64px)の1.5倍の高さを確保（ヘルバ様指定）。独立した箱として下に追加 */
   #speccv{display:block;width:100%;height:100%;}

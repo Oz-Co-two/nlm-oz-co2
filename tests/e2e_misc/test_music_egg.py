@@ -12,12 +12,14 @@ from info_helpers import to_info
 from test_native import OUT_BASE, _native_project, _reopen, _export_and_wait, _text
 
 
-def _open_with_music(t, music_beat=0, segs=None):
-    """exe版で保存した rich のプロジェクトに Musicの配置（開始の拍・区間）を書き込み、開き直す（曲・出力フォルダは自動で接続）。
+def _open_with_music(t, music_beat=0, segs=None, gain_db=None):
+    """exe版で保存した rich のプロジェクトに Musicの配置（開始の拍・区間）と曲の音量補正を書き込み、開き直す（曲・出力フォルダは自動で接続）。
     開き直しで配置が残ること（以前は曲の自動読込で分割・トリムが消えていた）もここで確かめる"""
     pj, state, _b64 = _native_project(t)
     d = json.loads(pj)
     d["musicBeat"], d["musicSegs"] = music_beat, segs
+    if gain_db is not None:
+        d["graph"]["song"]["gainDb"] = gain_db
     ed = _reopen(t, json.dumps(d, ensure_ascii=False), state)
     wait_until(ed, "window._dbgApp.nle().music.audio", label="音源の自動読み込み")
     m = ed.js("window._dbgApp.nle().music")
@@ -75,4 +77,24 @@ def test_music_arrangement_cache(t):
     urls = [c["url"] for c in convert_calls(ed)]
     t.eq(len(urls), 2, "配置を変えたら変換し直す")
     t.ok(quote(json.dumps([[0, 4, 0], [8, 12, 5]], separators=(",", ":"))) in urls[1], f"新しい切り貼り表: {urls[1]}")
+    t.no_errors()
+
+
+def test_song_gain_export(t):
+    '''曲の音量補正（graph.song.gainDb）: 開き直しても残り、書き出しで変換へ渡す（gainDb=3.5）。変換のマーカーにも入り、
+    同じ値なら2回目は変換しない。値を変えれば（Undoの仕組みを通して）変換し直す。無音追加と一緒に渡せる'''
+    ed = _open_with_music(t, music_beat=2, gain_db=3.5)
+    t.eq(ed.js("window._dbgApp.songGain().db"), 3.5, "開き直しても音量補正が残る")
+    wait_until(ed, "window._dbgApp.songGain().applied===3.5", label="再生の音量へ反映")
+    _export_and_wait(ed, "gain")
+    t.eq([c["url"] for c in convert_calls(ed)], ["__convert/toOgg?ext=wav&leadInMs=1000&gainDb=3.5"], "変換の呼び方（無音1秒＋音量補正）")
+    t.eq(json.loads(_text(ed, OUT_BASE + "\\gain\\.nlm-egg.json"))["gainDb"], 3.5, "変換のマーカー")
+    _export_and_wait(ed, "gain")
+    t.eq(len(convert_calls(ed)), 1, "同じ値なら変換し直さない")
+    ed.js("""(()=>{ const rt=window._dbg.rt; const st=JSON.parse(rt.dumpDomain('node'));
+      st.song.gainDb=-2; rt.restoreDomain('node',JSON.stringify(st)); return true; })()""")
+    wait_until(ed, "window._dbgApp.songGain().applied===-2", label="値の変更が再生の音量へ反映")
+    _export_and_wait(ed, "gain")
+    urls = [c["url"] for c in convert_calls(ed)]
+    t.eq(urls[1:], ["__convert/toOgg?ext=wav&leadInMs=1000&gainDb=-2"], "値を変えたら変換し直す")
     t.no_errors()

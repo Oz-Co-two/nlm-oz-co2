@@ -5,7 +5,7 @@
 For those who have finished the [basic tutorial](tutorial.en.md). This tutorial explains faster ways to work,
 the checks before publishing a map, and how to measure the difficulty (★).
 
-> The screenshots show the English UI (v1.5.0-oz). The numbers (①, ②, …) in the screenshots match the tables in the text.
+> The screenshots show the English UI (v1.6.0-oz). The numbers (①, ②, …) in the screenshots match the tables in the text.
 
 ## Contents
 
@@ -223,7 +223,7 @@ From top to bottom, these rows are shown.
 | ③ | Marker band | Move and rename markers ([chapter 1](#marking-sections-of-the-song-with-markers)) |
 | ④ | Notes lanes | Clips (colored bands) of notes, bombs, walls, arcs and chains |
 | ⑤ | Light lanes | Clips of lights |
-| ⑥ | Music | The waveform of the song, with the spectrogram below it |
+| ⑥ | Music | The waveform of the song, with the spectrogram below it. You can change the song volume at its left end ([chapter 5](#song-volume-volume-adjustment)) |
 
 The **L / S / M** buttons at the left end of each lane are lock, solo and mute (see "Adding lanes, lock, solo and mute" below).
 
@@ -633,6 +633,39 @@ adding 200 ms of silence puts the first beat at 500 ms (on the line of beat 1).
 - The silence is written into the audio of song.egg itself when exporting, so ffmpeg is needed for the conversion ([chapter 10](#a-message-says-ffmpeg-was-not-found))
 - The song preview section (the part played on the song select screen) is corrected automatically for the added silence when exporting
 - When the time to the first note is short ("Hot start" in the map check), adding silence also gives you room
+
+### Song volume (volume adjustment)
+
+You can change the volume of the song at the left end of the **Music** row at the bottom of the NLE.
+
+![The left end of the Music row. ① Auto ② Vol ③ the result of Auto (it actually appears at the bottom of the screen)](images/tutorial-advanced-en/05-2-song-gain.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Auto | Measures the loudness of the song and raises it to a good level |
+| ② | Vol | The volume adjustment (dB). ‹ › changes it by ±0.5 dB, **Shift + ‹ ›** by ±0.1 dB. Click the number to type a value (-20 to +20 dB) |
+| ③ | Result message | How much Auto raised the volume |
+
+**How Auto works**
+
+- It measures the average loudness of the song (LUFS — an average that follows how loud it sounds to the ear) and its loudest moment (peak)
+- It raises the volume toward an average of **-9 LUFS**, but stops where the peak would go above **-1 dB** (any louder would clip)
+- **It never lowers the volume.** A song that is already loud enough stays at 0.0 dB
+- It measures only the parts that go into the exported song (if you split the Music or deleted part of it, the sound after that). Pressing it again gives the same value
+
+The result appears at the bottom of the screen, for example "Set the volume adjustment to +7.5 dB (average -17.3 → -9.8 LUFS, peak -8.5 → -1.0 dB)".
+In this example the peak reached -1 dB, so it stopped a little short of the -9 LUFS target
+(in that case the message goes on with "This is below the -9 LUFS target, but any louder would clip").
+
+> **Rule of thumb:** most Beat Saber custom songs are around -13 to -5 LUFS on average.
+> Quieter songs sound quieter than the songs before and after them in the game.
+
+**Where it applies**
+
+- It is shared by all difficulties. It is saved with the project and can be undone with Ctrl + Z
+- It applies as-is to playback with Space and to **▶ Preview** on the **Song Preview** node of INFO
+- When exporting, it is written into the audio of song.egg itself, so ffmpeg is needed for the conversion even for an ogg song ([chapter 10](#a-message-says-ffmpeg-was-not-found))
+- It is different from **Music volume** in Preferences ([chapter 9](#volume)). Music volume only changes what you hear while editing and is not included in the exported song
 
 <!-- chapter-nav -->
 > **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)
@@ -1057,6 +1090,7 @@ If you fix the map with the panel open, press **↻ Measure again**. Results mea
 - [ ] **Cover image**: chose a square image of at least 256×256
 - [ ] **Preview section**: set the part played on the song select screen with the Song Preview node (and checked it with ▶ Preview)
 - [ ] **Start of the song**: at least 1.5 seconds before the first note (2 seconds or more is recommended)
+- [ ] **Song volume**: raised a quiet song with **Auto** on the Music row ([chapter 5](#song-volume-volume-adjustment))
 - [ ] **NJS and offset**: chose comfortable values for each difficulty while watching JD / RT in the header
 - [ ] **Lights**: every difficulty has lights, and you checked how they look in PREVIEW (if there are not enough, auto lighting can make a base)
 - [ ] **Map check**: no unrankable items or errors (and you looked through the warnings)
@@ -1099,6 +1133,8 @@ Instead of hiding them, you can also fold each window into a single line showing
 
 You can set the volume of master, music (the song), note hits and the metronome separately.
 When placing notes, turning up the note hit sound makes it easier to check the timing.
+
+These only change what you hear while editing. To change the volume of the exported song, use the volume adjustment on the Music row ([chapter 5](#song-volume-volume-adjustment)).
 
 ### Preview
 
@@ -1188,7 +1224,7 @@ Some "Required" items in the export node's checklist have a ✕.
 
 ### A message says ffmpeg was not found
 
-To export songs other than ogg (mp3, wav, etc.), or to use lead-in, **ffmpeg** is needed to convert the song.
+To export songs other than ogg (mp3, wav, etc.), or to use lead-in or the volume adjustment, **ffmpeg** is needed to convert the song.
 ffmpeg is not installed together with NLM.
 
 1. Open Windows "Terminal" (or PowerShell) and run this to install it

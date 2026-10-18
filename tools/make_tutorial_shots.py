@@ -195,11 +195,14 @@ def main():
         t.shot("02-file-menu", marks="[{t:'#mFileMenu button[data-act=loadsong]',n:1,at:'r'}]", clip=(0, 0, 900, 420))
         t.click_el("#mFileMenu button[data-act=loadsong]"); ed.wait(2.5)
 
-        # 03 曲を読み込んだ直後のNLE
+        # 03 曲を読み込んだ直後のNLE。①は波形だけを囲み、左の溝（「Music」の文字・自動調整・音量）は⑦の音量補正として別に囲む
+        ov, mg = t.rect("#overview"), t.rect("#musicGain")
+        wave = [round(mg["x"] + mg["w"]), round(ov["y"]), round(ov["x"] + ov["w"] - mg["x"] - mg["w"]), round(ov["h"])]
         t.shot("03-song-loaded", marks="""[
-          {t:'#overview',n:1,at:'in',pad:-2},
+          {t:%s,n:1,at:'b',pad:-2},
           {t:'#bpmField',n:2,at:'l'},{t:'#vmBpmBtn',n:3,at:'tr'},{t:'#leadInField',n:4,at:'b'},
-          {t:'#diffBar',n:5,at:'b'},{t:'#njsField',n:6,at:'b'}]""", clip=(580, 28, 1340, 532))
+          {t:'#diffBar',n:5,at:'b'},{t:'#njsField',n:6,at:'b'},{t:'#musicGain',n:7,at:'b',pad:-2}]""" % wave,
+               clip=(580, 28, 1340, 532))
 
         # 04 BPM測定
         t.click_el("#vmBpmBtn"); ed.wait(2.0)

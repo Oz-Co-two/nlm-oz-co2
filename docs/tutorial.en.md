@@ -6,7 +6,7 @@ This tutorial walks you step by step through loading a song, placing notes, expo
 
 > **Switching the UI to English**
 > NLM starts in Japanese. Click **環境設定** (Preferences — the second menu at the top left, next to ファイル)
-> and set **言語 / Language** to **English** on the first tab. The screenshots in this tutorial show the English UI (v1.5.0-oz).
+> and set **言語 / Language** to **English** on the first tab. The screenshots in this tutorial show the English UI (v1.6.0-oz).
 
 This tutorial covers only the basic flow. For the details of each panel, see the original
 [reference manual](https://helba.flashhub.net/nlm/manual/) (Japanese).
@@ -77,6 +77,7 @@ After loading, the waveform of the song appears in the **Music** row at the bott
 | ④ | Lead-in | Silence (ms) added to the start of the song. Use it when the beat lines and the start of the song do not line up |
 | ⑤ | Difficulty | Which difficulty you are editing. Click it or press 1–5 to switch |
 | ⑥ | NJS | Note jump speed — how fast the notes fly in. Each difficulty has its own value |
+| ⑦ | Volume adjustment | The volume of the song (dB). Press **Auto** to raise a quiet song to a good level. You can also change it yourself with ‹ › |
 
 ### Set the BPM
 
@@ -91,6 +92,15 @@ If you know the BPM, you can also type it directly into ②.
 To check by ear, turn on the metronome button to the right of the BPM and play with Space.
 If the clicks and the beat of the song drift apart little by little, the BPM is wrong.
 If they are off by the same amount from the very start, shift the start of the song with **Lead-in** (④).
+
+### Adjust the song volume
+
+A quiet song sounds quieter than the songs before and after it in Beat Saber.
+Press the **Auto** button (⑦) to measure the loudness of the song and raise it to a good level (a song that is already loud enough is left as it is).
+The adjustment applies both to playback and to the exported song (song.egg). You can also change it yourself with ‹ ›.
+
+When you use the volume adjustment, the song is converted with ffmpeg on export even if it is an ogg.
+For details, see [Song volume (volume adjustment)](tutorial-advanced.en.md#song-volume-volume-adjustment) in the advanced tutorial.
 
 ---
 

@@ -312,6 +312,16 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                     segs.append((a, b, at))
             except (TypeError, ValueError):
                 return self._reply(200, {'ok': False, 'error': 'bad-segs'})
+        # gainDb: 曲の音量補正（dB・editor-app.js の setSongGainDb。画面の範囲は ±20）。0 なら何もしない
+        gain_db = 0.0
+        if 'gainDb' in qs:
+            try:
+                gain_db = float(qs['gainDb'][0])
+                if not (math.isfinite(gain_db) and -40 <= gain_db <= 40):
+                    raise ValueError
+            except (TypeError, ValueError):
+                return self._reply(200, {'ok': False, 'error': 'bad-gain'})
+        vol = 'volume=%.2fdB' % gain_db if abs(gain_db) >= 0.005 else ''
         try:
             with tempfile.TemporaryDirectory() as td:
                 src = os.path.join(td, 'in.' + ext)
@@ -328,9 +338,15 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                         parts.append(''.join('[p%d]' % i for i in range(len(segs)))
                                      + 'amix=inputs=%d:normalize=0:dropout_transition=0[out]' % len(segs))
                         out = '[out]'
+                    if vol:   # 並べ終えた後で音量を変える
+                        parts.append(out + vol + '[vol]')
+                        out = '[vol]'
                     cmd += ['-filter_complex', ';'.join(parts), '-map', out]
-                elif lead_in_ms > 0:   # 曲頭に無音を追加(ms)＝実際の音声データを前にずらす（Info.dat側の指定に頼らず確実に効かせる）
-                    cmd += ['-af', 'adelay=%d:all=true' % lead_in_ms]
+                else:
+                    # 曲頭に無音を追加(ms)＝実際の音声データを前にずらす（Info.dat側の指定に頼らず確実に効かせる）
+                    af = (['adelay=%d:all=true' % lead_in_ms] if lead_in_ms > 0 else []) + ([vol] if vol else [])
+                    if af:
+                        cmd += ['-af', ','.join(af)]
                 cmd += ['-c:a', 'libvorbis', '-q:a', '5', dst]
                 # creationflags=CREATE_NO_WINDOW: 親(exe)にコンソールが無くてもffmpeg単体がコンソール窓を
                 # 一瞬出してしまう(Windowsの既定動作)のを防ぐ

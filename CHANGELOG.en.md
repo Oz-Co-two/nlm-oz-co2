@@ -8,6 +8,18 @@ For basic usage, see the [tutorial](docs/tutorial.en.md), the [advanced tutorial
 <!-- Format: one "## v1.2.3-oz" heading per version. Top-level bold items ("- **...**") are the headlines shown in the in-app
 update notice (tools/make_release.py puts them into update.json). Keep the same versions and the same number of headlines as CHANGELOG.md. -->
 
+## v1.6.0-oz
+
+- **You can now adjust the song volume (with automatic adjustment)**
+  "Vol" and "Auto" were added to the left of the Music row of the NLE (below the word "Music").
+  Click "Auto" to measure the song's loudness and raise it toward an average of -9 LUFS (a typical level for Beat Saber custom songs), stopping before the sound
+  would clip (songs that are already loud enough are not raised; Auto never lowers the volume). You can also change the volume by hand with ‹› or by typing a value (±20 dB).
+  - It applies to playback as-is, and song.egg is exported at the same volume (exporting it needs ffmpeg).
+  - The volume is saved in the project and can be undone with Ctrl+Z. It is separate from "Music volume" in Preferences, which only changes what you hear while editing.
+- **The window position and size are now remembered for the next start (exe version)**
+  NLM remembers the window's position, its size and whether it was maximized when you close it, and opens the same way next time.
+  If the window was on a monitor that is no longer connected, it opens in the center of the screen.
+
 ## v1.5.0-oz
 
 - **MEDIA now remembers the song folders you added (exe version)**

@@ -19,6 +19,8 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - Node/npm は使わない。ビルドツールなし、素のES Modules。
 - `app.py` — デスクトップ版ランチャー。`pywebview`でWebView2(Edge Chromium)ネイティブウィンドウを開く。
   内部で`serve.py`をローカルの空きポートでスレッド起動し、`http://127.0.0.1:<port>/editor.html`を表示。
+  窓の位置・大きさ・最大化は、実際に閉じる時に`config/window.json`へ残し、次に開く時に使う（2026-10-18・play-list と同じ作り。
+  値は pywebview の論理の値・最大化中は`RestoreBounds`・タイトルバーが今の画面に見えない位置は使わない。未保存の3択でキャンセルした時は残さない）。
 - `serve.py` — 静的ファイル配信＋ローカル専用API（`__settings/save`, `__openarg`, `__asset/*`,
   `__convert/toOgg`等）。`python serve.py`単体でも起動でき、その場合は起動時に表示される合言葉付きの URL
   （`http://127.0.0.1:8138/editor.html#k=…`。既定のブラウザで自動で開く）を普通のブラウザ（Edge/Chrome）で開いて動作確認できる
@@ -140,6 +142,18 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
      `eggPieces()`＝`play()`と同じ計算。切っていなければ「無音追加＋Musicの開始位置」ぶんの`adelay`だけ、分割・トリムが
      あれば`?segs=`で切り貼り表を渡し serve.py が`atrim`→`adelay`→`amix`で並べ直す。以前は無音追加だけで、Musicを動かすと
      エディタでは合っているのにゲームではずれた。**Musicの再生の仕方（`play()`）を変えたら`eggPieces()`も合わせること。**
+
+## 曲の音量補正（2026-10-18）
+
+- 置き場所は NLE の Music レーンの左溝（HTML の`#musicGain`を canvas の溝の上に重ねる）。難易度ボタンの右の帯`#musicBar`は既定の幅で
+  ほぼ満杯で、部品を足すと飛来速度の欄が EXPERT のボタンに重なり、画面テストで「崩れ」になる（利用者と決めて溝へ移した）。
+- 値は`songNode.gainDb`（dB・±20・0 の時はキーを持たない＝0 に戻せば未保存のランプも消える）。プロジェクトに保存され、'node' の履歴で戻せる。
+  再生は`songGain`（Web Audio の音量部品）。**Musicの音を鳴らす経路を足したら`songGain`へ繋ぐこと**（本編の`play()`と試聴ノードは繋いである）。
+  書き出しは`/__convert/toOgg`の`gainDb`→ffmpeg の`volume`（無音追加・切り貼りの後）。補正があれば元が OGG でも変換する。
+- 環境設定の「ミュージック音量」（`volCfg.mu`）は作業中の聞こえ方だけで、書き出しには入らない。別物なのでツールチップに書いてある。
+- 「自動調整」は`js/audio/loudness.js`（BS.1770 の LUFS とトゥルーピーク。実曲で ffmpeg の loudnorm と 0.05 LU 以内で一致）。
+  目標 -9 LUFS・ピーク -1 dB で止める・**自動では下げない**（利用者の決定。手元のカスタム曲の相場が -13〜-5 LUFS だったため）。
+  測るのは`eggPieces()`の区間（書き出す song.egg に入る所）の元の音源＝何度押しても同じ値になる。
 
 ## 試聴ノード（選曲画面のプレビュー区間・2026-09-28）
 
@@ -287,7 +301,7 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   接続がリセットされ、ffmpeg無し等の応答がJSに届かず通信エラーになる（2026-10-04に修正）。2026-10-05からは全POST共通で、
   `_reply()`/`_deny()`が応答の前に`_drain()`でまだ読んでいない本体を読み捨てる（使う本体は`_raw_body()`/`_body()`で1回だけ読む。
   拒否する要求の本体は保存せず、16MBを超えたら読まない）。**`_reply()`を通さずに応答するPOST APIを足す時は、先に`_raw_body()`か`_drain()`を呼ぶこと**。
-- 出力先フォルダに`.nlm-egg.json`という小さなマーカーファイルを置いて、音源のsize/mtime/leadInMs/segsが
+- 出力先フォルダに`.nlm-egg.json`という小さなマーカーファイルを置いて、音源のsize/mtime/leadInMs/segs/gainDbが
   前回と同一なら再変換をスキップする（ffmpeg起動・大きい音声ファイルの再書き込みを避ける）。
 - 書き出しパネルの「song.eggを強制再変換」チェックボックスでキャッシュを無視して強制再生成できる
   （初期化・やり直し用）。

@@ -548,6 +548,52 @@ def _make_api(access, data_root, close_state, webview, library=None):
     return Api()
 
 
+# ---- 窓の位置・大きさ（閉じた時の状態で次も開く・2026-10-18。play-list と同じ作り） ----
+# 値は pywebview の create_window と同じ「論理の値」（DPI の倍率で割った値。pywebview が倍率を掛けて窓を作る）。
+# 拡大率の違うモニターを並べていると、2つ目の画面の上では少しずれることがある（pywebview の換算の都合）
+WINDOW_SIZE, MIN_SIZE = (1600, 980), (1100, 720)   # 初めて開く時の窓の大きさと、最小の大きさ
+WINDOW_FILE = 'window.json'   # config/ の中。最後に閉じた時の窓の位置・大きさ（環境設定には出さない＝「初期化」でも消えない）
+
+def _load_window(config_dir, screens):
+    """create_window に渡す width・height（と x・y・maximized）。前回の記録が無い・壊れていれば初めての大きさ。
+    位置は、今つながっている画面のどれかにタイトルバーが見える時だけ（外したモニターの上に開いて見えなくならないように）"""
+    out = {'width': WINDOW_SIZE[0], 'height': WINDOW_SIZE[1]}
+    try:
+        with open(os.path.join(config_dir, WINDOW_FILE), encoding='utf-8') as f:
+            w = json.load(f)
+        width, height, x, y = (int(w[k]) for k in ('width', 'height', 'x', 'y'))
+    except (OSError, ValueError, KeyError, TypeError):
+        return out
+    out.update(width=max(width, MIN_SIZE[0]), height=max(height, MIN_SIZE[1]), maximized=w.get('maximized') is True)
+    if any(_title_bar_visible(x, y, out['width'], s) for s in screens):
+        out.update(x=x, y=y)
+    return out
+
+def _title_bar_visible(x, y, width, screen):
+    """窓のタイトルバー（上の 30）が画面 screen（x・y・width・height）に、つかめるくらい（横 100・縦 20）見えるか"""
+    w = min(x + width, screen.x + screen.width) - max(x, screen.x)
+    h = min(y + 30, screen.y + screen.height) - max(y, screen.y)
+    return w >= 100 and h >= 20
+
+def _window_geometry(form, dpi=None):
+    """閉じる時の窓の位置・大きさ（form は WinForms の Form＝window.native。UI スレッドから呼ぶ）。最大化・最小化して
+    いる時は、元に戻した時の位置・大きさ（RestoreBounds）。dpi はテスト用の差し替え（省略時はその窓の DPI）"""
+    if dpi is None:
+        import ctypes
+        dpi = ctypes.windll.user32.GetDpiForWindow(form.Handle.ToInt32())   # pywebview と同じ求め方
+    scale = (dpi or 96) / 96
+    state = str(form.WindowState)
+    b = form.Bounds if state.endswith('Normal') else form.RestoreBounds
+    return {'x': round(b.X / scale), 'y': round(b.Y / scale), 'width': round(b.Width / scale),
+            'height': round(b.Height / scale), 'maximized': state.endswith('Maximized')}
+
+def _save_window(config_dir, geometry):
+    path = os.path.join(config_dir, WINDOW_FILE)
+    os.makedirs(config_dir, exist_ok=True)
+    with open(path + '.tmp', 'w', encoding='utf-8') as f:   # 書きかけで落ちても前回の記録は壊さない
+        json.dump(geometry, f)
+    os.replace(path + '.tmp', path)
+
 def main():
     # 自動更新の差し替え役として起動された（旧版が _update/new/ に展開したこの exe を起動した）時は、
     # 差し替えて配布フォルダの exe を起動し直すだけで終わる。画面・サーバー・関連付けの登録はしない
@@ -586,16 +632,27 @@ def main():
     api = _make_api(access, data_root, close_state, webview, serve.LIBRARY)
 
     url = serve.access_url(port)   # 合言葉（#k=…）付き。serve.py の SESSION_TOKEN の説明
+    config_dir = os.path.join(data_root, 'config')
+    try:
+        screens = list(webview.screens)
+    except Exception:
+        screens = []   # 分からなければ位置は覚えていても使わない（真ん中に開く）
     win = webview.create_window(
         ('Non-Linear Mapper ' + _app_version(app_root)).strip(),   # 例: Non-Linear Mapper v1.1.0-oz（スクリーンショットで版が分かるように）
         url,
-        width=1600, height=980, min_size=(1100, 720),
-        js_api=api,
+        min_size=MIN_SIZE, js_api=api,
+        **_load_window(config_dir, screens),   # 前回閉じた時の位置・大きさ・最大化
     )
 
     def _on_closing():
         # UIスレッドで同期実行される＝ここでJSの結果を待つとデッドロックするので、止めてから別スレッドでJSへ依頼する
         if close_state['force'] or not close_state['dirty']:
+            # 実際に閉じる時だけ、次に開く時の位置・大きさを残す（未保存の3択で「キャンセル」なら閉じない＝残さない。
+            # 3択で終了が決まった時は quit_app → destroy でもう一度ここへ来る）。失敗しても閉じるのは止めない
+            try:
+                _save_window(config_dir, _window_geometry(win.native))
+            except Exception:
+                pass
             return True
         def ask():
             res = {}

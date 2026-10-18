@@ -1,4 +1,4 @@
-"""song.egg の変換（serve.py の /__convert/toOgg）: 無音追加と、Musicの配置（分割・トリム）の切り貼り。
+"""song.egg の変換（serve.py の /__convert/toOgg）: 無音追加と、Musicの配置（分割・トリム）の切り貼り、曲の音量補正。
 ffmpeg が無い環境では飛ばす。出来た OGG を ffmpeg で WAV に戻し、「ピッ」の位置で切り貼りの結果を確かめる"""
 import io
 import json
@@ -61,6 +61,18 @@ def _beeps_in(ogg):
     return starts, len(vals) / RATE
 
 
+def _peak(ogg):
+    """OGG を WAV に戻した時の最大振幅（0〜1）"""
+    with tempfile.TemporaryDirectory() as td:
+        src, dst = Path(td, "a.ogg"), Path(td, "a.wav")
+        src.write_bytes(ogg)
+        subprocess.run([shutil.which("ffmpeg"), "-y", "-i", str(src), "-ac", "1", "-ar", str(RATE), str(dst)],
+                       capture_output=True, timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        with wave.open(str(dst), "rb") as w:
+            raw = w.readframes(w.getnframes())
+    return max(abs(v) for v in struct.unpack("<%dh" % (len(raw) // 2), raw)) / 32767
+
+
 def _need_ffmpeg(t):
     if not shutil.which("ffmpeg"):
         t.skip("ffmpeg が無い環境")
@@ -90,6 +102,35 @@ def test_egg_segments_gap_and_order(t):
     starts, dur = _beeps_in(_convert(t, "ext=wav&segs=" + segs, _beep_wav([1, 9])))
     t.eq([round(s, 1) for s in starts], [3.0, 7.0], "「ピッ」の位置（元の9秒→3秒、元の1秒→7秒）")
     t.ok(abs(dur - 8.0) < 0.1, f"長さ 8秒: {dur:.2f}")
+
+
+def test_egg_gain(t):
+    '''音量補正（gainDb）: 「ピッ」の振幅（元は0.7）が -6dB で半分になる。無音追加・切り貼りと一緒でも効き、位置は変わらない'''
+    _need_ffmpeg(t)
+    wav = _beep_wav([1, 9])
+    p0 = _peak(_convert(t, "ext=wav", wav))
+    t.ok(abs(p0 - 0.7) < 0.05, f"補正なしの振幅 0.7: {p0:.3f}")
+    p = _peak(_convert(t, "ext=wav&gainDb=-6", wav))
+    t.ok(abs(p - 0.35) < 0.03, f"-6dB で 0.35: {p:.3f}")
+    ogg = _convert(t, "ext=wav&leadInMs=500&gainDb=-6", wav)
+    t.ok(abs(_peak(ogg) - 0.35) < 0.03, f"無音追加と一緒: {_peak(ogg):.3f}")
+    starts, dur = _beeps_in(_convert(t, "ext=wav&leadInMs=500&gainDb=3", wav))
+    t.eq([round(s, 1) for s in starts], [1.5, 9.5], "無音追加と一緒でも「ピッ」の位置は無音追加の分だけ遅れる")
+    ogg = _convert(t, "ext=wav&gainDb=-6&segs=" + quote(json.dumps([[0, 4, 0], [8, 12, 4]])), wav)
+    t.ok(abs(_peak(ogg) - 0.35) < 0.03, f"切り貼りと一緒: {_peak(ogg):.3f}")
+    starts, dur = _beeps_in(_convert(t, "ext=wav&gainDb=3&segs=" + quote(json.dumps([[0, 4, 0], [8, 12, 4]])), wav))
+    t.eq([round(s, 1) for s in starts], [1.0, 5.0], "切り貼りと一緒でも「ピッ」の位置は切り貼りどおり")
+
+
+def test_egg_gain_rejects_bad_input(t):
+    '''音量補正の値がおかしい（数でない・範囲外・無限）時は変換せず bad-gain（空の値は parse_qs が捨てる＝指定なしと同じ）'''
+    for bad in ("x", "41", "-41", "inf", "nan", "1e999"):
+        st, hd, body = H.req("POST", "/__convert/toOgg?ext=wav&gainDb=" + quote(bad),
+                             headers={"X-NLM-Request": "1"}, body=_beep_wav([1], seconds=2))
+        if not shutil.which("ffmpeg"):
+            t.eq(json.loads(body).get("error"), "ffmpeg-not-found", "ffmpeg無し")
+            continue
+        t.eq(json.loads(body), {"ok": False, "error": "bad-gain"}, f"音量補正 {bad!r}")
 
 
 def test_egg_segments_rejects_bad_input(t):

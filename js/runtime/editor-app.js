@@ -32,6 +32,7 @@ import { createRatingClient } from '../rating/rating-client.js';
 import { installUpdater } from '../update/update-dialog.js';
 import { generateAutoLights, showAutoLightDialog } from '../lighting/auto-light.js';
 import { fitCoverImage, measureCoverFit, coverNeedsFix, coverFitSize, showCoverFitDialog } from '../media/cover-fit.js';
+import { measureLoudness, autoGain, AUTO_TARGET_LUFS, GAIN_MIN_DB, GAIN_MAX_DB } from '../audio/loudness.js';   // 曲の音量補正の「自動調整」（LUFS・トゥルーピークの測定）
 import { libPost, libFileHandle, libDirHandle, dirOf as libDirOf, infoToV2, quickInfo, entryFromInfo, runScan, makeCoverLoader, nativeFilePath } from '../media/lib-native.js';   // MEDIAの記録したフォルダ（serve.py の /__lib/*）
 import { installLibTable, charName as libCharName } from '../media/lib-table.js';   // MEDIAの詳細表示（1行＝1難易度）・並べ替え・選択
 import { installLibFilter } from '../media/lib-filter.js';   // MEDIAの検索・絞り込み・件数
@@ -1425,6 +1426,7 @@ function drawOverview(curV){
     ovg.fillStyle='#9a9a9a'; ovg.font='bold 10px '+FONT; ovg.textAlign='left'; ovg.textBaseline='middle';
     ovg.fillText('Music',8,13);
     // BPM・メトロ・プレビュー秒は難易度バーとルーラーの間の帯 #musicBar（HTML）へ集約（2026-07-08ヘルバ様指示）
+    // 曲の音量補正（［自動調整］と音量のステッパー）は HTML の #musicGain をこの溝の上に重ねている（帯は満杯のため・2026-10-18）
   };
   // MEDIAドラッグ中のゴースト（音源のドロップ位置プレビュー）
   const drawOvGhost=()=>{ if(!_dragMedia||_mediaGhostOv==null) return;
@@ -4642,6 +4644,7 @@ function setSnap(v){ snap=v; [...snapsEl.children].forEach(c=>c.classList.toggle
 const actx=new (window.AudioContext||window.webkitAudioContext)();
 const masterGain=actx.createGain(); masterGain.gain.value=1; masterGain.connect(actx.destination);
 const gain=actx.createGain(); gain.gain.value=0.12; gain.connect(masterGain);
+var songGain=actx.createGain(); songGain.connect(gain);   // 曲の音量補正（songNode.gainDb・applySongGain）。Musicの音（本編・試聴）だけが通る。var＝起動初期の refreshMusicHdr から触られても TDZ で落ちない
 const analyser=actx.createAnalyser(); analyser.fftSize=1024; masterGain.connect(analyser);
 const vmData=new Float32Array(analyser.fftSize);
 let audioBuf=null,srcNs=[],playing=false,startedAt=0,offset=0,playStartB=0;
@@ -4667,14 +4670,14 @@ function play(){ if(!audioBuf)return;
     let du=rel>=0?sg.dur-rel:sg.dur;
     if(bo<0){ when+=-bo; du+=bo; bo=0; }                   // off負=先頭無音（その分あとから鳴らす）
     if(du<=0.001||bo>=audioBuf.duration-0.001) continue;   // 全部無音区間なら鳴らさない
-    const s=actx.createBufferSource(); s.buffer=audioBuf; s.connect(gain);
+    const s=actx.createBufferSource(); s.buffer=audioBuf; s.connect(songGain);
     s.start(when,bo,du);                                   // 末尾はバッファ終端で自然に無音
     srcNs.push(s);
   }
   playing=true; document.getElementById('play').textContent='⏸'; }
 function stopS(){ for(const s of srcNs){ try{s.stop()}catch(e){} try{s.disconnect()}catch(e){} } srcNs=[]; }
 // ---- 試聴ノードの再生（Beat Saber選曲画面の近似: 区間の頭と終わりをフェードしてループ・2026-09-28）----
-// 音はMusicと同じ gain（Music音量・マスター音量に従う）へ流す。本編の再生(play)とは排他。
+// 音はMusicと同じ songGain（曲の音量補正→Music音量・マスター音量に従う）へ流す。本編の再生(play)とは排他。
 // ※_pvPlay は var＝起動初期の refreshInfoCards から参照されても TDZ で落ちないように
 var _pvPlay=null;
 const PV_FADE=1.0;   // フェード秒（区間が短い時は長さの1/3まで縮める）
@@ -4689,7 +4692,7 @@ function startPrevPlay(id){
   const st=Math.max(0,+n.data.start||0), du=Math.min(+n.data.dur||0,audioBuf.duration-st);
   if(!(du>0.2)){ showErr(tf('msg.pvOutOfRange','試聴の開始 {sec}秒 が音源の長さ（{len}秒）を超えています',{sec:st,len:audioBuf.duration.toFixed(2)})); return; }
   if(actx.state==='suspended') actx.resume();
-  const g=actx.createGain(); g.connect(gain);
+  const g=actx.createGain(); g.connect(songGain);
   const p=_pvPlay={id,g,srcs:[],timer:0}, fade=Math.min(PV_FADE,du/3);
   const once=when=>{ if(_pvPlay!==p) return;
     const s=actx.createBufferSource(); s.buffer=audioBuf;
@@ -6531,6 +6534,8 @@ if(NLM_DEV) window._dbgApp=Object.freeze({
     markers, lanes:{n:notesLanes,l:lightLanes}, mute:[...layerMuteS], solo:[...layerSoloS], lock:[...layerLockS],
     music:{beat:musicBeat, segs:musicSegs, sel:[...musicSelSet], audio:!!audioBuf, dur:songDur}, hover:tlHoverBeat, snap,
     vp:(r=>({n:[r.top+laneTopOf('n'),r.top+laneTopOf('n')+laneVP('n')], l:[r.top+laneTopOf('l'),r.top+laneTopOf('l')+laneVP('l')]}))(ndcv.getBoundingClientRect())}),   // 各グループの表示窓（ページ座標px。レーンが多いと窓の外はスクロールで隠れる）
+  /** 曲の音量補正: 値（dB）・再生へ反映済みの値（dB）・再生の音量部品の今の倍率 */
+  songGain:()=>({db:getSongGainDb(),applied:_songGainApplied,param:songGain.gain.value}),
   /** NLE・Musicの表示窓（拍）: 左端・幅（ズーム）・手動スクロール中か・追従を始める位置（窓の中の割合） */
   tl:()=>({b0:tlShownB0(),span:tlSpan,manual:tlViewB0!=null,followAt:TL_FOLLOW_AT}),
   /** Musicレーン（ovcv）の拍beatのx と上端・高さ（ページ座標px） */
@@ -6778,21 +6783,23 @@ async function exportMap(forceEgg=false){
         const P=eggPieces(), whole=P.length===1&&P[0][0]<1e-6&&audioBuf&&Math.abs(P[0][1]-audioBuf.duration)<1e-3;
         const leadInMs=!P.length?getLeadInMs():whole?Math.round(P[0][2]*1000):0;
         const segs=(P.length&&!whole)?P.map(q=>q.map(v=>Math.round(v*1000)/1000)):null;
-        const mark={name:f.name,size:f.size,mtime:f.lastModified,leadInMs,segs};
+        const gainDb=getSongGainDb();   // 曲の音量補正（dB）
+        const mark={name:f.name,size:f.size,mtime:f.lastModified,leadInMs,segs,gainDb};
         let eggExists=true; try{ await dest.getFileHandle('song.egg'); }catch(_){ eggExists=false; }
         const prev=(!forceEgg&&eggExists)?await readEggMark(dest):null;
         if(prev&&prev.name===mark.name&&prev.size===mark.size&&prev.mtime===mark.mtime&&(prev.leadInMs||0)===leadInMs
-          &&JSON.stringify(prev.segs||null)===JSON.stringify(segs)){
-          eggWritten=true;   // 音源・無音追加・Musicの配置が前回と同一＝再変換不要
+          &&JSON.stringify(prev.segs||null)===JSON.stringify(segs)&&(prev.gainDb||0)===gainDb){
+          eggWritten=true;   // 音源・無音追加・Musicの配置・音量補正が前回と同一＝再変換不要
         } else {
           const buf=await f.arrayBuffer();
           const u=new Uint8Array(buf.slice(0,4)), isOgg=(u[0]===0x4F&&u[1]===0x67&&u[2]===0x67&&u[3]===0x53);   // "OggS"
           let outBuf=buf;
-          if(!isOgg||leadInMs>0||segs){   // 無音追加・Musicの配置があれば、元がOGGでも必ずffmpegで焼き込む
+          if(!isOgg||leadInMs>0||segs||gainDb){   // 無音追加・Musicの配置・音量補正があれば、元がOGGでも必ずffmpegで焼き込む
             stat(t('m:song.eggへ変換中…（ffmpeg）','song.eggへ変換中…（ffmpeg）'));
             const ext=(f.name.match(/\.([^.]+)$/)||[,'bin'])[1].toLowerCase();
             let qs='ext='+encodeURIComponent(ext); if(leadInMs>0) qs+='&leadInMs='+leadInMs;
             if(segs) qs+='&segs='+encodeURIComponent(JSON.stringify(segs));
+            if(gainDb) qs+='&gainDb='+gainDb;
             let r; try{ r=await fetch('__convert/toOgg?'+qs,{method:'POST',headers:{'X-NLM-Request':'1'},body:buf}); }catch(e){ r=null; }
             if(r&&r.ok&&(r.headers.get('content-type')||'').includes('audio')){
               outBuf=await r.arrayBuffer();
@@ -10279,7 +10286,7 @@ function wireStepper(el,{get,set,fmt,editFmt,prefix='',step=1,shiftStep=0.1}){  
   el._sync=sync; sync();
 }
 // ※試聴区間（旧ヘッダーの「プレビュー開始/プレビュー長」）はINFO画面の試聴ノードへ移設（2026-09-28）
-function refreshMusicHdr(){ ['bpmField','njsField','offField','leadInField'].forEach(id=>{ const el=document.getElementById(id); if(el&&el._sync) el._sync(); }); refreshJdInfo(); refreshChainPanel(); refreshArcPanel(); }
+function refreshMusicHdr(){ ['bpmField','njsField','offField','leadInField','gainField'].forEach(id=>{ const el=document.getElementById(id); if(el&&el._sync) el._sync(); }); applySongGain(); refreshJdInfo(); refreshChainPanel(); refreshArcPanel(); }
 wireStepper(document.getElementById('bpmField'),{get:()=>BPM,set:setBPMv,fmt:x=>x.toFixed(2)});   // 見出し「BPM」は .bfLbl（フィールド内）に分離
 wireStepper(document.getElementById('njsField'),{get:()=>njsOffCur().njs, set:v=>setNjsCur('njs',Math.max(0,Math.round(v*100)/100)), fmt:x=>String(parseFloat((+x).toFixed(2)))});   // 飛来速度NJS（難易度別・整数～小数）
 wireStepper(document.getElementById('offField'),{get:()=>njsOffCur().offset, set:v=>setNjsCur('offset',Math.round(v*1000)/1000), fmt:x=>(+x).toFixed(3), step:0.01, shiftStep:0.001});   // 飛来オフセット（難易度別・0.000表示・‹›=±0.01・Shift=±0.001）
@@ -10313,6 +10320,47 @@ function setLeadInMs(ms){ if(!songNode) return; ms=Math.max(0,Math.round(ms));
   if(audioBuf) buildWaveData();
   if(pv4On&&typeof pv4Push==='function') pv4Push(); }
 wireStepper(document.getElementById('leadInField'),{get:getLeadInMs, set:setLeadInMs, fmt:x=>Math.round(x)+' ms', editFmt:x=>String(Math.round(x)), step:10, shiftStep:1});
+// ---- 曲の音量補正（dB・全難易度共通・2026-10-18）----
+// 無音追加と同じく曲そのものの加工: 再生（本編・試聴）は songGain で効かせ、書き出しは ffmpeg の volume で song.egg に焼き込む。
+// 環境設定の「ミュージック音量」（作業中の聞こえ方だけ・書き出しに入らない）とは別物。値は songNode.gainDb（0 の時はキーを持たない＝
+// 0 に戻せば未保存のランプも消える）。「自動調整」は loudness.js（平均 -9 LUFS を目標・ピーク -1 dB で止める・自動では下げない）。
+// 部品は Musicレーンの左溝（#musicGain）
+function getSongGainDb(){ const g=songNode?+(songNode.gainDb||0):0; return isFinite(g)?g:0; }
+const fmtGainDb=x=>(x>0?'+':'')+(+x).toFixed(1)+' dB';
+function setSongGainDb(db){ if(!songNode) return;
+  db=Math.round(Math.min(GAIN_MAX_DB,Math.max(GAIN_MIN_DB,+db||0))*10)/10;
+  if(db===getSongGainDb()) return;
+  snapshot('node');   // 戻す/やり直すの対象（songNode は 'node' の履歴に入っている）
+  if(db) songNode.gainDb=db; else delete songNode.gainDb;
+  metaDirty=true; applySongGain(); }
+var _songGainApplied=null;   // var＝起動初期の refreshMusicHdr から呼ばれても TDZ で落ちない
+/** songNode.gainDb を再生の音量へ反映（変更・Undo・プロジェクトの読込のどれでも、refreshMusicHdr の定期同期で追従する） */
+function applySongGain(){ if(!songGain) return;
+  const db=getSongGainDb(); if(db===_songGainApplied) return; _songGainApplied=db;
+  const p=songGain.gain, now=actx.currentTime;   // 急に変えるとプツッと鳴るので 30ms かけて変える
+  p.cancelScheduledValues(now); p.setValueAtTime(p.value,now); p.linearRampToValueAtTime(10**(db/20),now+0.03); }
+wireStepper(document.getElementById('gainField'),{get:getSongGainDb, set:setSongGainDb, fmt:fmtGainDb, editFmt:x=>(+x).toFixed(1), step:0.5, shiftStep:0.1});
+let _gainBusy=false;
+async function autoSongGain(){
+  if(_gainBusy) return;
+  if(!songNode||!audioBuf){ showErr(t('msg.gainNoAudio','音源が読み込まれていないため音量を測れません')); return; }
+  _gainBusy=true;
+  try{
+    stat(t('msg.gainMeasuring','曲の音量を測っています…'));
+    await new Promise(r=>setTimeout(r,30));   // 表示してから測る（3分の曲で0.4秒ほど止まる）
+    const P=eggPieces();   // 書き出す song.egg に入る所だけを測る（Musicを切っていれば切った後の音）
+    const chs=Array.from({length:audioBuf.numberOfChannels},(_,i)=>audioBuf.getChannelData(i));
+    const m=measureLoudness(chs,audioBuf.sampleRate,P.length?P.map(q=>[q[0],q[1]]):null), a=autoGain(m);
+    if(a.by==='silent'){ showErr(t('msg.gainSilent','音が小さすぎて測れませんでした')); return; }
+    setSongGainDb(a.db); refreshMusicHdr();
+    const f1=v=>(+v).toFixed(1), v={gain:fmtGainDb(a.db),l0:f1(m.lufs),p0:f1(m.peakDb),l1:f1(m.lufs+a.db),p1:f1(m.peakDb+a.db),target:AUTO_TARGET_LUFS};
+    if(a.by==='loud') showOk(tf('msg.gainLoud','十分な音量のため上げません（平均 {l0} LUFS・目標 {target} LUFS。自動では下げません）。音量補正は 0.0 dB です',v));
+    else if(a.by==='noRoom') showOk(tf('msg.gainNoRoom','これ以上上げると音が割れるため上げません（ピーク {p0} dB）。音量補正は 0.0 dB です',v));
+    else if(a.by==='peak') showOk(tf('msg.gainUpPeak','音量補正を {gain} にしました（平均 {l0} → {l1} LUFS・ピーク {p0} → {p1} dB）。目標の {target} LUFS の手前ですが、これ以上は音が割れます',v));
+    else showOk(tf('msg.gainUp','音量補正を {gain} にしました（平均 {l0} → {l1} LUFS・ピーク {p0} → {p1} dB）',v));
+  } finally { _gainBusy=false; }
+}
+{ const b=document.getElementById('gainAutoBtn'); if(b) b.addEventListener('click',()=>autoSongGain()); }
 { const b=document.getElementById('tempoDetectAllBtn'); if(b) b.addEventListener('click',()=>autoDetectAllTempoParts()); }
 setInterval(refreshMusicHdr,300);   // BPM/プレビュー/NJS/オフセットは曲読込・難易度切替・マーカー転送など外部からも変わるため定期同期
 // ---- 簡易レベルメーター ----

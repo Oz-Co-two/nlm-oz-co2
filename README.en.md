@@ -36,7 +36,7 @@ The English tutorials show the English UI; the Japanese tutorials ([basic](docs/
   ★ for unranked maps can be estimated with nlm-rating (shown as "NLM est.", not official).
 - **Auto lighting**: generates basic vanilla lights from your notes on a new lane, so your own lights are kept
 - **Cover image fix**: makes the cover square / at least 256×256 / png when exporting, without changing the original file
-- **song.egg export**: converts non-OGG audio with ffmpeg and writes the lead-in silence and the Music clip placement into the audio
+- **song.egg export**: converts non-OGG audio with ffmpeg and writes the lead-in silence, the Music clip placement and the song volume adjustment into the audio
 - **In-app updates** (from v1.3.0-oz)
 
 See [CHANGELOG.en.md](CHANGELOG.en.md) for the changes in each version.
@@ -62,7 +62,7 @@ and on the first tab change **言語 / Language** to **English**. The setting is
 
 ### ffmpeg (needed to write song.egg)
 
-To export song.egg from audio that is not OGG (and to write the lead-in silence into the audio), `ffmpeg` must be on the PATH.
+To export song.egg from audio that is not OGG (and to write the lead-in silence or the song volume adjustment into the audio), `ffmpeg` must be on the PATH.
 **It is not installed automatically**, so install it beforehand:
 
 ```bash
@@ -185,7 +185,7 @@ the server starts, so a bookmarked URL will not work after a restart. Press `Ctr
 
 - **A Chromium-based browser is required.** Firefox lacks the required API, so files cannot be saved or loaded.
   Brave may also have the API disabled depending on its settings.
-- **ffmpeg** is needed to export `song.egg` (install it with `sudo apt install ffmpeg` etc.; not needed if your audio is OGG).
+- **ffmpeg** is needed to export `song.egg` (install it with `sudo apt install ffmpeg` etc.; not needed if your audio is OGG and you use neither lead-in nor the song volume adjustment).
 - **Limitations**: automatic reconnection of the output folder and cover image is desktop-only. In the browser you need to select them
   again each time you open a project.
 - **"Estimate difficulty" is not available**, because the add-on plugin (nlm-rating) is a Windows exe only.

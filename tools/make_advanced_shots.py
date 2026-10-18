@@ -340,6 +340,27 @@ def main():
                clip=box(ed, ["#ctxmenu", [g["x"] - 200, g["ruler"], 400, 60], "#tempoDetectAllBtn"], pad=24))
         hide_menu(ed)
 
+        # ---- 5章: 曲の音量補正（Music の段の左溝）。自動調整を押し、結果のメッセージと一緒に撮る ----
+        t.click_el("#gainAutoBtn")
+        wait_until(ed, "(e=>e.style.display==='block'&&e.textContent.startsWith('✅'))(document.getElementById('errToast'))",
+                   lambda: "自動調整の結果が出ません: " + str(ed.js("document.getElementById('errToast').textContent")))
+        if not ed.js("window._dbgApp.songGain().db>0"):
+            raise SystemExit("自動調整で音量補正が上がりません: " + str(ed.js("document.getElementById('errToast').textContent")))
+        # 結果のメッセージは画面の下に4秒だけ出る。写しを作り、Music の段のすぐ下（スペクトログラムの上）に2行で置く
+        ov, mg = t.rect("#overview"), t.rect("#musicGain")
+        ed.js(f"""(()=>{{ const c=document.getElementById('errToast').cloneNode(true); c.id='tutToast';
+          Object.assign(c.style,{{left:'{round(mg["x"] + mg["w"] + 8)}px',top:'{round(ov["y"] + ov["h"] + 14)}px',bottom:'auto',
+            transform:'none',maxWidth:'620px'}});
+          document.body.appendChild(c); return 1; }})()""")
+        ed.move(960, 800); ed.wait(0.4)   # 自動調整のボタンからマウスを離す（ホバーの色を写さない）
+        tr = t_rect(ed, "#tutToast")
+        t.shot("05-2-song-gain", marks="[{t:'#gainAutoBtn',n:1,at:'r'},{t:'#gainField',n:2,at:'b'},{t:'#tutToast',n:3,at:'r'}]",
+               clip=box(ed, ["#musicGain", "#tutToast", [tr["x"] + tr["w"], tr["y"], 50, tr["h"]]], pad=24))
+        ed.js("document.getElementById('tutToast').remove();true")
+        ed.move(960, 800); ed.key("z", ctrl=True); ed.wait(0.5)   # 音量補正を取り消す（後の画像を前と同じ状態で撮る）
+        if ed.js("window._dbgApp.songGain().db") != 0:
+            raise SystemExit("音量補正を取り消せません")
+
         # ---- 4章: 難易度のメニュー（選択中のボタンをもう一度クリック → 受信のサブメニュー） ----
         t.click_el("#diffBar .dfSeg.on"); ed.wait(0.5)
         if not menu_mark(ed, mts.L("ノーツを受信"), "tutRecv"):
