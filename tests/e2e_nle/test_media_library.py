@@ -428,8 +428,17 @@ def test_missing_library(t):
     t.ok("missing" in c["cls"] and "見つかりません" in c["title"], f"薄く表示・ツールチップ: {c}")
     click_sel(ed, "#libList .libCat.missing")
     wait_until(ed, "!window._dbgApp.lib().libs.find(l=>l.native).scanning", label="探し直し")
+    # 無いフォルダは走査を始める前（rescan の応答）で知らせる＝scanning は最初から false のまま。知らせが届くまで待つ
+    #（以前は 0.3 秒だけ待っていて、他のテストと同時に回して PC が混んでいると応答が間に合わず落ちた・2026-10-20）
+    n = 0
+    for _ in range(50):
+        n = take_errors(ed, "読み込めませんでした")
+        if n:
+            break
+        ed.wait(0.1)
     ed.wait(0.3)
-    t.eq(take_errors(ed, "読み込めませんでした"), 1, "まだ無い")
+    n += take_errors(ed, "読み込めませんでした")
+    t.eq(n, 1, "まだ無い")
     t.eq(lib(ed)["libs"][-1]["state"], "missing", "見つからないまま")
     shutil.copytree(LIB / REL["b"], gone / REL["b"])
     click_sel(ed, "#libList .libCat.missing")

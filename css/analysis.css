@@ -1,0 +1,114 @@
+/* Non-Linear Mapper — analysis.css
+   曲の解析（テンポの推定・構成の解析・2026-10-19・js/analysis/song-analysis.js）。
+   帯はスペクトログラムの箱（#specPane・高さ96px）の上の段に重ねる。結果がある時・解析中だけ出し（#specPane.anaOn）、
+   その間スペクトログラム（#speccv）は帯の下へ詰める＝NLE のレーンの高さは変えない。左の溝は NLE・Music と同じ 128px。 */
+
+#anaPane{display:none;position:absolute;left:0;top:0;right:16px;height:40px;z-index:2;}
+#specPane.anaOn #anaPane{display:block;}
+#specPane.anaOn #speccv{margin-top:42px;height:calc(100% - 42px);}
+#anacv{display:block;width:100%;height:100%;}
+
+/* 溝の「⋯」（解析のメニュー）: 「構成」の文字の右 */
+#anaMenuBtn{position:absolute;left:98px;top:3px;width:24px;height:18px;padding:0;box-sizing:border-box;display:flex;align-items:center;justify-content:center;
+  background:#2b2b2b;border:1px solid #1d1d1d;border-radius:6px;color:#cfcfd4;font-size:12px;line-height:1;cursor:pointer;}
+#anaMenuBtn:hover{color:#fff;border-color:#55555e;}
+
+/* 結果が無い時: スペクトログラムの溝に［曲を解析］。目立たせるため、主な操作のボタン（3D の上の「配置モード」）と同じ紫の塗り＋白い文字
+   （2026-10-20・利用者の要望。以前は Music の溝の［自動調整］と同じ灰色で目立たなかった）。溝（128px）の中に収める */
+#anaStartBtn{position:absolute;left:8px;top:5px;height:22px;padding:0 9px;box-sizing:border-box;display:flex;align-items:center;z-index:2;
+  background:var(--accent);border:1px solid var(--accent);border-radius:8px;color:#fff;font-size:10.5px;font-weight:700;white-space:nowrap;cursor:pointer;}
+#anaStartBtn:hover{filter:brightness(1.15);}
+
+/* 帯の上の知らせ: 解析中＝進み具合と［やめる］／目盛りが変わった＝［解析し直す］（右寄せ。帯の結果の上に出るので、左だと帯の頭の区切りを隠す） */
+#anaMsg{position:absolute;right:8px;top:5px;height:30px;display:none;align-items:center;gap:9px;padding:0 6px 0 10px;box-sizing:border-box;
+  background:rgba(18,18,24,.94);border:1px solid #3a3a46;border-radius:7px;font-size:11.5px;color:#d8dce4;white-space:nowrap;}
+#anaMsg.stale{border-color:#8a6d2a;color:#f0d79a;}
+#anaMsg .amTxt{min-width:0;overflow:hidden;text-overflow:ellipsis;}
+#anaMsg .amBar{width:120px;height:5px;border-radius:3px;background:#2a2a32;overflow:hidden;flex:0 0 auto;}
+#anaMsg .amBar i{display:block;height:100%;background:#56c7ff;}
+#anaMsg .amBtn{flex:0 0 auto;height:20px;padding:0 10px;border-radius:5px;border:1px solid #55555e;background:#34343b;color:#eee;font-size:11px;cursor:pointer;}
+#anaMsg .amBtn:hover{background:#40404a;}
+/* 解析中（2026-10-20・利用者の要望: 右端では気づきにくい・処理が続いていることを分かりやすく）: 帯の左寄せ＝溝（128px）のすぐ右から（NLE は画面の右側に
+   あるので画面の中央寄りになる）。塗りは［🎼 曲を解析］の紫（--accent）を濃くした色＋白い太字。動きは控えめに2つ（どちらも合成だけで済む opacity・transform）:
+   進み具合のバーに斜めの縞が流れる・枠の外の光がゆっくり明滅する。縞は進み具合が少なくても見えるよう最小の幅を持たせる。
+   部品は進み具合が届くたびに作り直さない（song-analysis.js の syncMsg）＝縞は跳ねない。動きを減らす設定（prefers-reduced-motion）では止める */
+#anaMsg.run{left:136px;right:auto;max-width:calc(100% - 144px);background:#3a2a7c;border-color:#9a80f5;color:#fff;font-weight:700;}
+#anaMsg.run::before{content:'';position:absolute;inset:-1px;border-radius:inherit;box-shadow:0 0 9px 2px rgba(154,128,245,.65);opacity:0;pointer-events:none;
+  animation:anaRunPulse 1.6s ease-in-out infinite alternate;}
+@keyframes anaRunPulse{to{opacity:1;}}
+/* 文の欄は一番長い文の幅に固定（song-analysis.js の fixRunTextWidth）・数字は等幅＝桁・段階が変わっても箱とバーが動かない */
+#anaMsg.run .amTxt{flex:0 0 auto;white-space:nowrap;font-variant-numeric:tabular-nums;}
+#anaMsg.run .amBar{width:220px;height:7px;border-radius:4px;background:rgba(0,0,0,.42);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);}
+#anaMsg.run .amBar i{position:relative;min-width:16px;overflow:hidden;border-radius:4px;}
+#anaMsg.run .amBar i::after{content:'';position:absolute;top:0;bottom:0;left:-14px;right:0;
+  background:repeating-linear-gradient(-45deg,rgba(255,255,255,.55) 0 3.5px,rgba(255,255,255,0) 3.5px 7px);animation:anaBarFlow .8s linear infinite;}
+@keyframes anaBarFlow{to{transform:translateX(9.9px);}}
+#anaMsg.run .amBtn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.42);color:#fff;font-weight:400;}
+#anaMsg.run .amBtn:hover{background:rgba(255,255,255,.26);}
+@media (prefers-reduced-motion:reduce){ #anaMsg.run::before,#anaMsg.run .amBar i::after{animation:none;} #anaMsg.run::before{opacity:.6;} }
+
+/* テンポの推定の画面（#dirtyDlg の様式・文が長いので少し広く） */
+#dirtyDlg.anaTempo{max-width:600px;max-height:86vh;overflow-y:auto;}
+#dirtyDlg.anaTempo .atLine{margin:0 0 7px;line-height:1.55;white-space:pre-line;}
+#dirtyDlg.anaTempo .atHead{font-weight:700;margin-bottom:10px;}
+#dirtyDlg.anaTempo .atProp{font-weight:700;color:#bfe3ff;}
+#dirtyDlg.anaTempo .atNote{color:#a9adb8;font-size:12px;}
+#dirtyDlg.anaTempo .atWarn{color:#f0d79a;font-size:12.5px;}
+#dirtyDlg.anaTempo .atDrift{color:#a9adb8;font-size:11.5px;font-variant-numeric:tabular-nums;white-space:normal;word-spacing:4px;}
+#dirtyDlg.anaTempo .ddBtns{margin-top:14px;}
+#dirtyDlg.anaTempo button:disabled{opacity:.5;cursor:default;}
+
+/* 曲を取り込んだ時の「曲を解析しますか？」（#dirtyDlg の様式・2026-10-20） */
+#dirtyDlg.anaAsk{max-width:540px;}
+#dirtyDlg.anaAsk .aaHead{font-weight:700;margin-bottom:10px;}
+#dirtyDlg.anaAsk .aaLead{margin-bottom:6px;color:#d6d6de;}
+#dirtyDlg.anaAsk .aaList{margin:0 0 10px;padding-left:20px;line-height:1.55;}
+#dirtyDlg.anaAsk .aaList li{margin-bottom:5px;}
+#dirtyDlg.anaAsk .aaNote{margin-bottom:10px;color:#a9adb8;font-size:12px;line-height:1.5;}
+#dirtyDlg.anaAsk .aaChk{display:flex;align-items:center;gap:7px;width:fit-content;margin-bottom:14px;color:#d6d6de;font-size:12.5px;cursor:pointer;}
+#dirtyDlg.anaAsk .aaChk input{margin:0;}
+
+/* 解析からクリップを作る画面（js/analysis/ana-clips.js・#dirtyDlg の様式。一覧の行はリンクの画面の .lkOpt） */
+#dirtyDlg.anaClips{max-width:580px;max-height:90vh;overflow-y:auto;}
+#dirtyDlg.anaClips .acHead{font-weight:700;font-size:12px;color:#c9c9d2;margin:8px 0 4px;}
+#dirtyDlg.anaClips .lkOpts{margin:0 0 6px;gap:5px;}
+#dirtyDlg.anaClips .lkOpt{padding:5px 10px;}
+#dirtyDlg.anaClips .acEo{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;margin:0 0 2px 24px;font-size:12px;color:#d6d6de;}
+#dirtyDlg.anaClips .acEo.dis{opacity:.45;}
+#dirtyDlg.anaClips .acEoOpt{display:flex;align-items:center;gap:4px;cursor:pointer;}
+#dirtyDlg.anaClips .acDiffs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px;}
+#dirtyDlg.anaClips .acDiff{display:flex;align-items:center;gap:5px;background:#2e2e35;border:1px solid #3d3d46;border-radius:7px;padding:4px 9px;cursor:pointer;font-size:12px;}
+#dirtyDlg.anaClips .acDiff.cur{border-color:#5a86ec;}
+#dirtyDlg.anaClips .acDiffName{font-weight:700;color:#f0f0f4;}
+#dirtyDlg.anaClips .acDiffSub{color:#a9a9b4;font-size:11px;}
+#dirtyDlg.anaClips .acWarn{margin:0 0 6px;}
+#dirtyDlg.anaClips .acSum{margin:6px 0 12px;color:#bfe3ff;}
+
+/* 溝の［🧩 クリップを作る］（2026-10-20・利用者の要望: 「⋯」を開かないと次にやることが分からなかった）。結果がある時だけ。
+   帯（#anaPane・40px）の溝だけを 26px 下へ延ばした所（#anaAct）に置く＝スペクトログラムの溝（何も描いていない）に重ねるだけで、スペクトログラムは詰めない。
+   色は［🎼 曲を解析］と同じ（配置モードの紫の塗り＋白い太字）。目盛りが変わった（stale）時は薄く（押すと理由を知らせる） */
+#anaAct{display:none;position:absolute;left:0;top:40px;width:129px;height:26px;box-sizing:border-box;background:#1b1b1f;border-right:1px solid #161616;border-bottom-right-radius:6px;}
+#anaAct.on{display:block;}
+#anaClipsBtn{position:absolute;left:6px;right:6px;top:3px;height:20px;padding:0 6px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;
+  background:var(--accent);border:1px solid var(--accent);border-radius:8px;color:#fff;font-size:10.5px;font-weight:700;white-space:nowrap;overflow:hidden;cursor:pointer;}
+#anaClipsBtn:hover{filter:brightness(1.15);}
+/* この解析の結果から一度クリップを作った後（song-analysis.js の S.data.made・保存される・解析し直すと元の紫）: 目障りにならないよう彩度を落として暗く沈めた紫。
+   もう一度押せることは分かるように、枠・明るめの文字・指のカーソルは残し、hover で明るくする（2026-10-20・利用者の要望） */
+#anaClipsBtn.made{background:#463c6a;border-color:#6c5e9f;color:#dcd6ef;}
+#anaClipsBtn.made:hover{filter:none;background:#564a84;border-color:#9384d0;color:#fff;}
+#anaClipsBtn.stale{opacity:.45;filter:grayscale(.7);}
+#anaClipsBtn.stale:hover{filter:grayscale(.7);}
+/* 案内を閉じた時に少しの間光らせる（ここを押せば次へ進める、を示す） */
+#anaClipsBtn.glow{animation:anaGlow .6s ease-in-out 0s 4 alternate;}
+@keyframes anaGlow{from{box-shadow:0 0 0 0 rgba(255,214,90,0);border-color:var(--accent);}to{box-shadow:0 0 0 2px #ffd65a,0 0 10px 3px rgba(255,214,90,.75);border-color:#ffd65a;}}
+
+/* 解析が終わった時の「次にやること」の案内（#dirtyDlg の様式・2026-10-20）。画像は guide/（tools/make_guide_shots.py が撮る） */
+#dirtyDlg.anaGuide{max-width:600px;max-height:90vh;overflow-y:auto;}
+#dirtyDlg.anaGuide .agHead{font-weight:700;margin-bottom:10px;}
+#dirtyDlg.anaGuide .agList{margin:0 0 10px;padding-left:22px;line-height:1.55;}
+#dirtyDlg.anaGuide .agList li{margin-bottom:6px;}
+#dirtyDlg.anaGuide .agFig{margin:0 0 12px;}
+#dirtyDlg.anaGuide .agFig img{display:block;max-width:100%;height:auto;border:1px solid #3d3d46;border-radius:6px;}
+#dirtyDlg.anaGuide .agFig figcaption{margin-top:4px;color:#a9adb8;font-size:12px;}
+#dirtyDlg.anaGuide .agChk{display:flex;align-items:center;gap:7px;width:fit-content;margin-bottom:14px;color:#d6d6de;font-size:12.5px;cursor:pointer;}
+#dirtyDlg.anaGuide .agChk input{margin:0;}

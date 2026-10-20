@@ -193,8 +193,14 @@ def test_asset_rename_and_delete(t):
     t.no_errors()
 
 
+def _all_tracks(ed, lk):
+    """全難易度のクリップの (難易度, 段) の並び（レーンの増減は全難易度のクリップをずらす）"""
+    return sorted((c["dk"], c["track"]) for c in ed.js("window._dbgApp.links().clips") if c["lk"] == lk)
+
+
 def test_drop_when_lanes_full(t):
-    '''Notesのレーンが全部埋まっている拍へアセットを落とすと置かず、履歴も積まない（空振りのUndoを作らない）'''
+    '''Notesのレーンが全部埋まっている拍へアセットを落とすと、一番上にレーンを1本足してそこへ置く（既存のクリップは全難易度で1段下がる）→
+    1回のUndoでレーン・クリップ・他の難易度の段も戻る。上限（10本）まで全部埋まっていれば置かず、履歴も積まない（空振りのUndoを作らない）'''
     ed = t.ed
     clear_assets(ed)
     ed = open_nle(t, "rich")
@@ -204,10 +210,26 @@ def test_drop_when_lanes_full(t):
     for tr in (1, 2):   # Notes 2・Notes 1 の拍0にも空のクリップ（16拍）＝拍0〜16は3本とも埋まる
         menu(ed, scr(ed, 0)["x"] + 30, lane_y(ed, "n", tr), "空のクリップを作成")
         wait_until(ed, f"window._dbgApp.nle().clips.filter(c=>c.lk==='n').length==={tr + 1}", label=f"Notes {3 - tr} に空のクリップ")
-    undo0 = ed.js("window._dbgApp.state().undo")
+    all0, undo0 = _all_tracks(ed, "n"), ed.js("window._dbgApp.state().undo")
+    t.ok(any(dk != "hardstandard.dat" for dk, _ in all0), f"前提: 他の難易度にもノーツのクリップがある {all0}")
+    drag_media(ed, lib_items(ed)[0], *_lane_target(ed, 0, "n", 0))
+    wait_until(ed, "window._dbgApp.nle().lanes.n===4", label="一番上にレーンを足す")
+    top = [c for c in clips(ed, "n") if c["track"] == 0]
+    t.eq([(c["beat"], c["n"]["notes"]) for c in top], [(0, nc["n"]["notes"])], "足したレーン（Notes 4）の拍0に置く")
+    t.eq(_all_tracks(ed, "n"), sorted([(dk, tr + 1) for dk, tr in all0] + [("hardstandard.dat", 0)]), "既存のクリップは全難易度で1段下がる")
+    t.eq(ed.js("window._dbgApp.state().undo") - undo0, 1, "履歴は1つ")
+    nle_mouse(ed)
+    undo(ed)
+    wait_until(ed, "window._dbgApp.nle().lanes.n===3", label="Undoでレーンも戻る")
+    t.eq(_all_tracks(ed, "n"), all0, "Undoで全難易度のクリップの段も戻る")
+    # 上限: 10本とも拍0に埋まっていれば置かない
+    ed.js("(()=>{const rt=window._dbg.rt; let k=0; while(rt.laneCountOf('n')<rt.LANE_MAX){ rt.laneAdd('n'); k++; }"
+          " for(let i=0;i<k;i++) rt.makeClipAt(0,'n',{tr:i,add:false,beat:0,len:16}); return k; })()")
+    wait_until(ed, "window._dbgApp.nle().clips.filter(c=>c.lk==='n').length===10", label="準備: 10本とも埋める")
+    undo1 = ed.js("window._dbgApp.state().undo")
     drag_media(ed, lib_items(ed)[0], *_lane_target(ed, 0, "n", 0))
     ed.wait(0.3)
-    t.eq(len(clips(ed, "n")), 3, "置かない")
+    t.eq((len(clips(ed, "n")), nle(ed)["lanes"]["n"]), (10, 10), "上限なので置かず、レーンも足さない")
     t.eq(take_errors(ed, "埋まっています"), 1, "全部埋まっている旨のエラー")
-    t.eq(ed.js("window._dbgApp.state().undo"), undo0, "置けなかった時は履歴を積まない（次のCtrl+Zが空振りしない）")
+    t.eq(ed.js("window._dbgApp.state().undo"), undo1, "置けなかった時は履歴を積まない（次のCtrl+Zが空振りしない）")
     t.no_errors()

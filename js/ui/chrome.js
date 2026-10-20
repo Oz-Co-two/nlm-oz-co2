@@ -26,7 +26,7 @@ export class UiChrome {
     'paneOf',
     'refreshMusicHdr',
     'saveSplits',
-    'setLaneRatio',
+    'setNoteLanes',
     'showErr',
     'showOk',
     'stat',
@@ -53,7 +53,7 @@ export class UiChrome {
   paneOf(...args) { return this.rt.paneOf(...args); }
   refreshMusicHdr(...args) { return this.rt.refreshMusicHdr(...args); }
   saveSplits(...args) { return this.rt.saveSplits(...args); }
-  setLaneRatio(...args) { return this.rt.setLaneRatio(...args); }
+  setNoteLanes(...args) { return this.rt.setNoteLanes(...args); }
   showErr(...args) { return this.rt.showErr(...args); }
   showOk(...args) { return this.rt.showOk(...args); }
   stat(...args) { return this.rt.stat(...args); }

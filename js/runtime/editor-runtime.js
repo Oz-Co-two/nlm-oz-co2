@@ -159,6 +159,16 @@ export class EditorRuntimeHelpers {
     'timelineEndBeat',
     'timelineSections',
     'toggleLaneState',
+    'setEditOnly',
+    'toggleEditOnly',
+    'linkSelected',
+    'linkUnlink',
+    'linkMakeParent',
+    'linkJumpParent',
+    'linkOtherDiffs',
+    'linkSync',
+    'anaOpenClips',
+    'anaMakeClips',
     'togglePanel',
     'toggleSizeMode',
     'updateColorBtn',
@@ -318,6 +328,16 @@ export class EditorRuntimeHelpers {
   timelineEndBeat(...args) { return this.rt.timelineEndBeat(...args); }
   timelineSections(...args) { return this.rt.timelineSections(...args); }
   toggleLaneState(...args) { return this.rt.toggleLaneState(...args); }
+  setEditOnly(...args) { return this.rt.setEditOnly(...args); }
+  toggleEditOnly(...args) { return this.rt.toggleEditOnly(...args); }
+  linkSelected(...args) { return this.rt.linkSelected(...args); }
+  linkUnlink(...args) { return this.rt.linkUnlink(...args); }
+  linkMakeParent(...args) { return this.rt.linkMakeParent(...args); }
+  linkJumpParent(...args) { return this.rt.linkJumpParent(...args); }
+  linkOtherDiffs(...args) { return this.rt.linkOtherDiffs(...args); }
+  linkSync(...args) { return this.rt.linkSync(...args); }
+  anaOpenClips(...args) { return this.rt.anaOpenClips(...args); }
+  anaMakeClips(...args) { return this.rt.anaMakeClips(...args); }
   togglePanel(...args) { return this.rt.togglePanel(...args); }
   toggleSizeMode(...args) { return this.rt.toggleSizeMode(...args); }
   updateColorBtn(...args) { return this.rt.updateColorBtn(...args); }

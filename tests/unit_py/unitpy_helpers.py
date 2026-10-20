@@ -41,6 +41,7 @@ def server():
     os.environ["NLM_PLAYDATA"] = os.path.join(s.data_dir, "no-playdata", "PlayerData.dat")   # 利用者の本物のプレイ記録を読まない
     os.environ["NLM_ALLOWED_HOSTS"] = EXTRA_HOST
     os.environ["NLM_NO_NET"] = "1"   # 全曲データ・BeatSaver の取得でネットへ出ない（serve.py の _no_net）
+    os.environ["NLM_ANALYSIS_DIR"] = os.path.join(s.data_dir, "analysis")   # 曲の解析の音源の置き場（OS の一時フォルダの専用フォルダを使わない）
     os.environ.pop("NLM_OPEN_FILE", None)
     sys.path.insert(0, str(ROOT))
     if "serve" in sys.modules:

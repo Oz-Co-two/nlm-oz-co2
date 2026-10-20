@@ -278,6 +278,12 @@ def _launch_with_pipe(args):
 class Editor:
     """serve.py + ヘッドレスEdgeでエディタを開いて操作する。with文で使う（終了時に後始末）"""
 
+    # 検証・テスト・撮影の環境の既定の環境設定（初期値 config/settings.default.json の上に重ねて、一時のデータフォルダの config/settings.json に書く）。
+    # bsnm_anaAsk='0': 曲を読み込むたびに出る「曲を解析しますか？」を出さない（多くのテスト・撮影が曲を読み込むため）。
+    # その画面を確かめるテストは localStorage の bsnm_anaAsk を消して（キーが無い＝聞く）出す
+    # bsnm_anaGuide='0': 解析が終わった時の「次にやること」の案内を出さない（多くのテスト・撮影が解析を走らせるため）。確かめる時は同じくキーを消す
+    TEST_SETTINGS = {"bsnm_anaAsk": "0", "bsnm_anaGuide": "0"}
+
     def __init__(self, width=1600, height=980, wait=6.0, fixture=None, keep_data=False, ready=False, auto_dialog=True, max_fps=None):
         """ready=True: 固定のwait秒ではなく起動完了を検知して進む（テスト用）。auto_dialog: ページのダイアログを自動で承諾。
         max_fps: 描画ループ（requestAnimationFrame）を毎秒この回数までに抑える（テストを並列に回す時のCPU節約。_fps_cap_js）"""
@@ -312,6 +318,8 @@ class Editor:
             del sys.modules["serve"]
         import serve
         _allow_static_cache(serve)
+        self._serve = serve
+        self.seed_settings()
         self.token = serve.SESSION_TOKEN   # 合言葉。ページへは URL の #k= で渡す（url()）。Python から直接要求する時は X-NLM-Token に付ける
         self.port = _free_port()
         self.httpd = serve.make_server(port=self.port)
@@ -361,6 +369,18 @@ class Editor:
             self.wait(self.wait_s)
         if self.fixture:
             self.load_fixture(self.fixture)
+
+    def seed_settings(self):
+        """一時のデータフォルダの config/settings.json を「初期値（config/settings.default.json）＋TEST_SETTINGS」にする（次にページを開いた時に読まれる）"""
+        try:
+            base = json.loads((ROOT / "config" / "settings.default.json").read_text(encoding="utf-8"))
+        except Exception:
+            base = {}
+        base.update(self.TEST_SETTINGS)
+        cfg = Path(self.data_dir) / "config"
+        cfg.mkdir(parents=True, exist_ok=True)
+        with self._serve._settings_lock:   # ページの保存（__settings/save）・配信と交互にする（書きかけを読ませない）
+            self._serve._write_text_atomic(str(cfg / "settings.json"), json.dumps(base, ensure_ascii=False, indent=1))
 
     def url(self):
         # 合言葉は #k=。# 付きの同じ URL へ移ると「同じページ内の移動」になって読み込み直さないので、呼ぶたびに n を変える

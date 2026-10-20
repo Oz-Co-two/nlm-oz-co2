@@ -6,6 +6,10 @@
 
 UIが変わったらこれを実行し直せば画像が追従する（座標は要素の位置から計算しているので、多少の配置変更には強い）。
 ファイル選択ダイアログは撮れない（ブラウザの showOpenFilePicker をテスト素材を返す関数に差し替えている）。
+「曲を解析」(04b〜04d) は、解析の応答を自動テストと同じ偽物（tests/_lib/analysis_helpers.py の ana_mock）にして、見本の結果で撮る
+（合成音を本当に解析しても今の設定と同じ結果になり、確認の画面が出ないため）。
+曲を取り込んだ時の「曲を解析しますか？」(02b) と解析が終わった時の「次にやること」の案内 (04d) は、撮影の環境
+（cdp.Editor.TEST_SETTINGS）では出ない設定なので、撮る直前に localStorage のキー（bsnm_anaAsk / bsnm_anaGuide）を消して出す。
 
 使い方: .venv-build/Scripts/python.exe tools/make_tutorial_shots.py [--en] [撮る番号...]
         番号を省略すると全部撮る（例: make_tutorial_shots.py 05 06 で05と06だけ）
@@ -16,7 +20,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent / "tests" / "_lib"))   # 曲の解析の偽の応答（analysis_helpers。serve を import しない）
 from cdp import Editor  # noqa: E402
+import analysis_helpers as ana_h  # noqa: E402
 
 LANG = "en" if "--en" in sys.argv else "ja"
 OUT = HERE.parent / "docs" / "images" / ("tutorial-en" if LANG == "en" else "tutorial")
@@ -35,12 +41,28 @@ TEXT_EN = {
     "自動判定": "Auto-detect",
     "ノーツを受信": "Receive notes",
     "書き出しノード": "Export node",
+    "セクションの頭にマーカーを書き出す": "Export section starts as markers",
 }
 
 
 def L(ja):
     """画面の文言（日本語）を、撮影する言語の文言にする"""
     return TEXT_EN[ja] if LANG == "en" else ja
+
+
+# 「曲を解析」のテンポの見本（基本編 04b 用）: 今の設定（BPM 120・無音追加 0）と BPM は同じで無音追加だけ違う、知らせの無い結果
+TEMPO_BASIC = {"version": 1, "bpm": 120.0, "raw_bpm": 120.0, "lead_ms": 132.6, "alt_lead_ms": 382.6, "low_offbeat": False, "offbeat_ratio": 0.0,
+               "steps": [], "drift_pct": 0.4, "drift": [], "alt": None, "block_mad_ms": 6.0, "n_beats": 30, "family": 120.0,
+               "slope_sig": False, "slope": 0.0, "resid_mad_ms": 7.0}
+
+
+def wait_js(ed, js, err, timeout=20):
+    """js が真になるまで待つ"""
+    for _ in range(int(timeout / 0.25)):
+        if ed.js(js):
+            ed.wait(0.3); return
+        ed.wait(0.25)
+    raise SystemExit(err)
 
 
 def use_lang(ed):
@@ -76,6 +98,7 @@ window.__tut = {
         const pos=it.at||'tl'; let x=r.x-p-12, y=r.y-p-12;
         if(pos==='tr'){ x=r.x+r.w+p-18; } if(pos==='l'){ x=r.x-p-38; y=r.y+r.h/2-15; } if(pos==='r'){ x=r.x+r.w+p+8; y=r.y+r.h/2-15; }
         if(pos==='in'){ x=r.x+6; y=r.y+6; } if(pos==='b'){ x=r.x+r.w/2-15; y=r.y+r.h+p+6; }
+        x+=it.dx||0; y+=it.dy||0;   // 番号だけをずらす（下の文字に重なる時）
         Object.assign(n.style,{left:Math.max(2,x)+'px',top:Math.max(2,y)+'px'}); document.body.appendChild(n); } } },
   clear(){ document.querySelectorAll('.tutBox,.tutNum').forEach(e=>e.remove()); },
 };
@@ -193,16 +216,31 @@ def main():
         # 02 ファイルメニュー
         t.click_el("#mFileBtn"); ed.wait(0.5)
         t.shot("02-file-menu", marks="[{t:'#mFileMenu button[data-act=loadsong]',n:1,at:'r'}]", clip=(0, 0, 900, 420))
-        t.click_el("#mFileMenu button[data-act=loadsong]"); ed.wait(2.5)
+        # 02b 曲を取り込んだ時の「曲を解析しますか？」。撮影の環境（cdp.Editor.TEST_SETTINGS）は聞かない設定なので、
+        # 読み込む直前にキーを消して初めて使う人と同じにする（tests/_lib/analysis_helpers.py の ask_on）。撮った後は［今はしない］
+        ana_h.ask_on(ed)
+        t.click_el("#mFileMenu button[data-act=loadsong]")
+        wait_js(ed, "!!document.querySelector('#dirtyDlg[data-ana=ask]')", "「曲を解析しますか？」が出ません")
+        ed.move(1700, 1060); ed.wait(0.4)
+        d = t.rect("#dirtyDlg")
+        t.shot("02b-analyze-ask", marks="""[{t:'#dirtyDlg button[data-v=go]',n:1,at:'b'},{t:'#dirtyDlg button[data-v=later]',n:2,at:'b'},
+          {t:'#dirtyDlg .aaChk',n:3,at:'l'}]""",
+               clip=(round(d["x"]) - 50, round(d["y"]) - 30, round(d["w"]) + 100, round(d["h"]) + 75))
+        t.click_el("#dirtyDlg button[data-v=later]")
+        wait_js(ed, "!document.querySelector('#dirtyDlg[data-ana=ask]')", "「曲を解析しますか？」が閉じません")
+        ed.wait(1.5)
 
-        # 03 曲を読み込んだ直後のNLE。①は波形だけを囲み、左の溝（「Music」の文字・自動調整・音量）は⑦の音量補正として別に囲む
+        # 03 曲を読み込んだ直後のNLE。①は波形だけを囲み、左の溝（「Music」の文字・自動調整・音量）は⑦の音量補正として別に囲む。
+        # ⑧はスペクトログラムの溝の［🎼 曲を解析］（音源があって解析の結果が無い時だけ出る）。⑦の下に⑧のボタンがあるので、⑦の番号は左上に付け、
+        # その番号が入るように左を少し広く撮る
+        wait_js(ed, "window._dbgApp.analysis().startBtn", "［曲を解析］のボタンが出ません")
         ov, mg = t.rect("#overview"), t.rect("#musicGain")
         wave = [round(mg["x"] + mg["w"]), round(ov["y"]), round(ov["x"] + ov["w"] - mg["x"] - mg["w"]), round(ov["h"])]
         t.shot("03-song-loaded", marks="""[
           {t:%s,n:1,at:'b',pad:-2},
           {t:'#bpmField',n:2,at:'l'},{t:'#vmBpmBtn',n:3,at:'tr'},{t:'#leadInField',n:4,at:'b'},
-          {t:'#diffBar',n:5,at:'b'},{t:'#njsField',n:6,at:'b'},{t:'#musicGain',n:7,at:'b',pad:-2}]""" % wave,
-               clip=(580, 28, 1340, 532))
+          {t:'#diffBar',n:5,at:'b'},{t:'#njsField',n:6,at:'b'},{t:'#musicGain',n:7,at:'tl',pad:-2},{t:'#anaStartBtn',n:8,at:'r'}]""" % wave,
+               clip=(round(mg["x"]) - 18, 28, 1354, 532))
 
         # 04 BPM測定
         t.click_el("#vmBpmBtn"); ed.wait(2.0)
@@ -211,6 +249,42 @@ def main():
         t.shot("04-bpm-detect", marks="[{t:'#ctxmenu',pad:4}]", clip=(900, 30, 940, 330))
         ed.js("document.getElementById('ctxmenu').style.display='none'")
         ed.click(1200, 300); ed.wait(0.3)
+
+        # 04b〜04d 曲を解析（見本の結果）: 04b テンポの確認の画面 →「適用しない」→ 04c 構成の解析中の知らせ（帯の左・進み具合のバー）→
+        # 解析が終わって 04d「次にやること」の案内（撮影の環境は出さない設定なので、guide_on でキーを消して出す）→［わかった］→
+        # 出た帯を Ctrl+Z で消す（後の画像を前と同じ状態で撮る）
+        running_s = {"ok": True, "state": "running", "stage": "structure", "progress": 0.5}
+        ana_h.ana_mock(ed, tempo=TEMPO_BASIC, structure=ana_h.STRUCT,
+                       status_s1=[running_s, {"waitFor": "s", "then": running_s}] + ana_h.status_seq("structure", ana_h.STRUCT, steps=()))
+        ana_h.guide_on(ed)
+        t.click_el("#mFileBtn"); ed.wait(0.5)
+        t.click_el("#mFileMenu button[data-act=analyze]")
+        wait_js(ed, "!!document.querySelector('#dirtyDlg.anaTempo')", "テンポの確認の画面が出ません")
+        ed.move(1700, 1060); ed.wait(0.3)
+        d = t.rect("#dirtyDlg")
+        # ①の「提案」の行は文字の周りに余白が無いので、枠の余白を広めにとる（既定の3pxだと枠が文字に接して見える）
+        t.shot("04b-analyze-tempo", marks="""[{t:'#dirtyDlg .atProp',n:1,at:'l',pad:7},{t:'#dirtyDlg button[data-v=a]',n:2,at:'b'},
+          {t:'#dirtyDlg button[data-v=b]',n:3,at:'b'}]""",
+               clip=(round(d["x"]) - 50, round(d["y"]) - 30, round(d["w"]) + 100, round(d["h"]) + 70))
+        t.click_el("#dirtyDlg button[data-v=none]")
+        wait_js(ed, "(a=>a.running&&a.running.stage==='structure'&&a.running.progress>=0.5)(window._dbgApp.analysis())", "構成の解析が始まりません")
+        ed.move(1700, 1060); ed.wait(1.2)
+        sp, ms = t.rect("#specPane"), t.rect("#anaMsg")
+        t.shot("04c-analyze-running", marks="[{t:'#anaMsg',pad:4}]",
+               clip=(round(sp["x"]), round(ms["y"]) - 40, 1000, round(sp["y"] + sp["h"] - ms["y"]) + 44))
+        ana_h.ana_go(ed, "s")   # 止めておいた応答を返す → 構成の解析が終わる
+        wait_js(ed, "!!document.querySelector('#dirtyDlg[data-ana=guide]')", "解析が終わった時の案内が出ません")
+        wait_js(ed, "(i=>!i||(i.complete&&i.naturalWidth>0))(document.querySelector('#dirtyDlg[data-ana=guide] img'))", "案内の画像が読めません")
+        ed.move(1700, 1060); ed.wait(0.4)
+        d = t.rect("#dirtyDlg")
+        t.shot("04d-analyze-guide", clip=(round(d["x"]) - 40, round(d["y"]) - 30, round(d["w"]) + 80, round(d["h"]) + 60))
+        t.click_el("#dirtyDlg[data-ana=guide] button[data-v=ok]")
+        wait_js(ed, "!document.querySelector('#dirtyDlg[data-ana=guide]')", "案内が閉じません")
+        ed.wait(3.0)   # 溝の［クリップを作る］が光り終わるまで
+        ed.move(1200, 300); ed.key("z", ctrl=True)   # 帯を消す（解析の結果が届いた所を戻す）
+        wait_js(ed, "(a=>!a.running&&!a.shown&&!a.data&&a.startBtn)(window._dbgApp.analysis())", "解析の帯を消せません")
+        if ed.js("window._dbgApp.state().BPM") != 120 or ed.js("window._dbgApp.prev().leadInMs") != 0:
+            raise SystemExit("曲の解析で BPM・無音追加が変わりました")
 
         # 05〜07 配置モードでノーツを置く
         seq = [  # (拍, 列x, 段y, 色c, 向きd)  色0=赤(左手) 1=青(右手) / 向き0=上 1=下

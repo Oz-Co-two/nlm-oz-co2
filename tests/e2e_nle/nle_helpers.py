@@ -5,6 +5,7 @@
 
 - open_nle(t, 素材名): ページを開き直して素材を読み、起動時の非同期の初期化が終わるまで待つ（各テストの最初に使う）
 - clips(ed, lk) / clip_xy(ed, clip, beat) / lane_y(ed, lk, track): クリップ一覧とクリック位置
+- lane_h(s, lk) / show_lane(ed, lk, track): レーンの高さ（ノーツとライトで違う）と、表示窓の外のレーンを見せるスクロール
 - hover(ed, beat, lk, track): NLEの上にマウスを置く（C・L/S/M・Ctrl+E はマウスの位置で効く）
 - menu(ed, x, y, text): 右クリックしてメニューの項目を押す
 - export_dat(ed): 書き出しの各難易度.dat を辞書で（e2e_helpers.export_files を JSON にしたもの）
@@ -38,17 +39,39 @@ def total(cs):
     return {k: sum(c["n"][k] for c in cs) for k in KINDS}
 
 
+def lane_h(s, lk):
+    """nleScreen の結果 s から、グループ lk（'n'/'l'）のレーンの高さ（2026-10-20〜ノーツとライトで違う: laneH＝ノーツ・laneHL＝ライト）"""
+    return s["laneH"] if lk == "n" else s["laneHL"]
+
+
 def lane_y(ed, lk, track, frac=0.7):
     """レーンの中のy。frac=0.7 はクリップの本体（上端16pxのヘッダー・色の四角を避ける）。
     グループ（ノーツ/ライト）の表示窓より下に隠れている部分は使えないので、窓の中に収める
-    （既定の画面サイズでは各3本のうち一番下のレーンが半分ほど隠れる）"""
+    （既定の画面サイズ・ノーツ3本・ライト3本では、各グループの一番下のレーンは上の数px（ノーツ約8px・ライト約6px）しか見えない。
+    そこを使う時は先に show_lane でスクロールする）"""
     s = scr(ed)
     top = (s["notes"] if lk == "n" else s["lights"])[track]
     v0, v1 = nle(ed)["vp"][lk]
-    y = top + s["laneH"] * frac
-    lo, hi = max(top + 5, v0 + 2), min(top + s["laneH"] - 5, v1 - 3)
+    lh = lane_h(s, lk)
+    y = top + lh * frac
+    lo, hi = max(top + 5, v0 + 2), min(top + lh - 5, v1 - 3)
     assert lo <= hi, f"{lk}{track} のレーンが表示窓の外です"
     return min(max(y, lo), hi)
+
+
+def show_lane(ed, lk, tr):
+    """レーン tr がグループの表示窓に入るまで、中ボタンの縦ドラッグでそのグループをスクロールする（窓に収まらない本数の時）"""
+    for _ in range(12):
+        s = scr(ed)
+        v0, v1 = nle(ed)["vp"][lk]
+        top = (s["notes"] if lk == "n" else s["lights"])[tr]
+        lh = lane_h(s, lk)
+        if max(top + 5, v0 + 2) <= min(top + lh - 5, v1 - 3) - 4:   # 4px 以上の余裕（lane_y の y が端に寄りすぎない）
+            return
+        x, y = scr(ed, 30)["x"], (v0 + v1) / 2
+        dy = -lh if top > v1 - lh / 2 else lh   # 上へ引く=下のレーンが出る
+        ed.drag(x, y, x, y + dy, steps=4, button="middle")
+    raise AssertionError(f"{lk}{tr} のレーンを表示窓に出せません")
 
 
 def clip_xy(ed, clip, beat=None, frac=0.7):

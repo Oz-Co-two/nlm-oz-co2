@@ -6,7 +6,7 @@ import json
 import time
 
 from e2e_helpers import wait_until, counts, cell, place_at, switch_diff, hover_3d
-from nle_helpers import (open_nle, clips, select, hover, menu, clip_xy, export_dat, nle, nle_mouse, scr, lane_y,
+from nle_helpers import (open_nle, clips, select, hover, menu, clip_xy, export_dat, nle, nle_mouse, scr, lane_y, show_lane,
                          undo, redo, take_errors)
 
 OBJ_KEYS = ("colorNotes", "bombNotes", "obstacles", "sliders", "burstSliders", "basicBeatmapEvents")
@@ -115,18 +115,7 @@ def _rgb(hexs):
     return [int(hexs[i:i + 2], 16) for i in (1, 3, 5)]
 
 
-def _show_lane(ed, lk, tr):
-    """レーン tr がグループの表示窓に入るまで、中ボタンの縦ドラッグでそのグループをスクロールする（7本以上は窓に収まらない）"""
-    for _ in range(12):
-        s = scr(ed)
-        v0, v1 = nle(ed)["vp"][lk]
-        top = (s["notes"] if lk == "n" else s["lights"])[tr]
-        if max(top + 5, v0 + 2) <= min(top + s["laneH"] - 5, v1 - 3):
-            return
-        x, y = scr(ed, 30)["x"], (v0 + v1) / 2
-        dy = -s["laneH"] if top > v1 - s["laneH"] / 2 else s["laneH"]   # 上へ引く=下のレーンが出る
-        ed.drag(x, y, x, y + dy, steps=4, button="middle")
-    raise AssertionError(f"{lk}{tr} のレーンを表示窓に出せません")
+_show_lane = show_lane   # レーンが表示窓に入るまでスクロール（nle_helpers・7本以上は窓に収まらない）
 
 
 def _lock_all(ed, lk, n):
@@ -640,7 +629,8 @@ def test_lane_max_auto_add(t):
 
 # ---- 7. 空きの無い所への貼り付け ----
 def test_paste_no_free_lane(t):
-    '''貼り付け先の拍で全レーンが埋まっている時: クリックしても貼り付けず（履歴も積まず）追従が続く→空いている拍へ動かしてクリックで貼れる→Undo／Escで取り消せる'''
+    '''貼り付け先の拍で全レーンが埋まっている時: クリックすると一番上にレーンを1本足して貼る（既存のクリップは1段下がる）→1回のUndoでレーンも戻る。
+    上限（10本）まで埋まっている拍では、クリックしても貼り付けず（履歴も積まず）追従が続く→空いている拍へ動かしてクリックで貼れる→Undo／Escで取り消せる'''
     ed = open_nle(t, "rich")
     c0 = clips(ed, "n")[0]
     select(ed, c0)
@@ -658,27 +648,44 @@ def test_paste_no_free_lane(t):
     wait_until(ed, "!!window._dbgApp.nle().paste", label="3回目の貼り付けの追従")
     x, y = hover(ed, 4, "n", 1)
     ed.click(x, y)
-    wait_until(ed, "document.getElementById('stat').textContent.includes('空きレーンがありません')", label="空きが無い旨の表示")
-    t.eq(nle(ed)["paste"], {"at": 4, "n": 1}, "貼り付けの追従は続く")
-    t.eq((len(clips(ed, "n")), _undo_n(ed)), (3, u0), "クリップは増えず履歴も積まない")
-    t.eq(export_dat(ed), before, "書き出しも変わらない")
-    x, y = hover(ed, 16, "n", 1)   # 拍16〜32はどのレーンも空いている
-    ed.click(x, y)
-    wait_until(ed, "window._dbgApp.nle().clips.filter(c=>c.lk==='n').length===4", label="空いている拍への貼り付け")
+    wait_until(ed, "window._dbgApp.nle().lanes.n===4", label="一番上にレーンを足して貼る")
     t.eq(nle(ed)["paste"], None, "貼れたら追従は終わる")
-    b = [c for c in clips(ed, "n") if c["beat"] == 16]
-    t.eq([(c["track"], c["len"], c["n"]) for c in b], [(0, 16, c0["n"])], "元と同じレーン（Notes 3）の拍16に同じ中身で貼られる")
+    b = [c for c in clips(ed, "n") if c["beat"] == 4]
+    t.eq([(c["track"], c["len"], c["n"]) for c in b], [(0, 16, c0["n"])], "足したレーン（Notes 4）の拍4に同じ中身で貼られる")
+    t.eq(sorted((c["track"], c["beat"]) for c in clips(ed, "n") if c["beat"] == 0), [(1, 0), (2, 0), (3, 0)], "既存のクリップは1段下がる")
     t.eq(_undo_n(ed) - u0, 1, "貼り付けの履歴は1つ")
     nle_mouse(ed)
     undo(ed)
-    wait_until(ed, "window._dbgApp.nle().clips.filter(c=>c.lk==='n').length===3", label="貼り付けのUndo")
+    wait_until(ed, "window._dbgApp.nle().lanes.n===3", label="Undoでレーンも戻る")
+    t.eq(sorted((c["track"], c["beat"]) for c in clips(ed, "n")), [(0, 0), (1, 0), (2, 0)], "Undoでクリップの段も戻る")
+    t.eq(export_dat(ed), before, "書き出しも元に戻る")
+    # 上限: 10本とも拍0〜16が埋まっていれば貼らない
+    ed.js("(()=>{const rt=window._dbg.rt; let k=0; while(rt.laneCountOf('n')<rt.LANE_MAX){ rt.laneAdd('n'); k++; }"
+          " for(let i=0;i<k;i++) rt.makeClipAt(0,'n',{tr:i,add:false,beat:0,len:16}); return k; })()")
+    wait_until(ed, "window._dbgApp.nle().clips.filter(c=>c.lk==='n').length===10", label="準備: 10本とも埋める")
+    u1 = _undo_n(ed)
     ed.key("v", ctrl=True)
-    wait_until(ed, "!!window._dbgApp.nle().paste", label="4回目の貼り付けの追従")
+    wait_until(ed, "!!window._dbgApp.nle().paste", label="上限での貼り付けの追従")
+    x, y = hover(ed, 4, "n", 1)
+    ed.click(x, y)
+    wait_until(ed, "document.getElementById('stat').textContent.includes('空きレーンがありません')", label="空きが無い旨の表示")
+    t.eq(nle(ed)["paste"], {"at": 4, "n": 1}, "貼り付けの追従は続く")
+    t.eq((len(clips(ed, "n")), nle(ed)["lanes"]["n"], _undo_n(ed)), (10, 10, u1), "クリップもレーンも増えず履歴も積まない")
+    x, y = hover(ed, 16, "n", 1)   # 拍16〜32はどのレーンも空いている
+    ed.click(x, y)
+    wait_until(ed, "window._dbgApp.nle().clips.filter(c=>c.lk==='n').length===11", label="空いている拍への貼り付け")
+    t.eq(nle(ed)["paste"], None, "貼れたら追従は終わる（上限）")
+    t.eq([(c["track"], c["len"]) for c in clips(ed, "n") if c["beat"] == 16], [(0, 16)], "コピーした時と同じ段の拍16に貼られる")
+    t.eq(_undo_n(ed) - u1, 1, "貼り付けの履歴は1つ（上限）")
+    nle_mouse(ed)
+    undo(ed)
+    wait_until(ed, "window._dbgApp.nle().clips.filter(c=>c.lk==='n').length===10", label="貼り付けのUndo")
+    ed.key("v", ctrl=True)
+    wait_until(ed, "!!window._dbgApp.nle().paste", label="もう一度貼り付けの追従")
     x, y = hover(ed, 8, "n", 1)
     ed.click(x, y)
     wait_until(ed, "document.getElementById('stat').textContent.includes('空きレーンがありません')", label="空きが無い旨の表示（2回目）")
     ed.key("Escape")
     wait_until(ed, "window._dbgApp.nle().paste===null", label="Escで取り消し")
-    t.eq(len(clips(ed, "n")), 3, "取り消すとクリップは増えない")
-    t.eq(export_dat(ed), before, "書き出しは元のまま")
+    t.eq(len(clips(ed, "n")), 10, "取り消すとクリップは増えない")
     t.no_errors()

@@ -39,8 +39,10 @@ def test_clip_delete_undo(t):
     '''NLEでクリップをクリックして選びDeleteで消すと中身のノーツも消え、Ctrl+Zで戻る'''
     ed = open_fixture(t, 'basic')
     n = ed.js("window._dbgApp.nleScreen(2)")
+    v0, v1 = ed.js("window._dbgApp.nle().vp.n")
     for y in n['notes']:   # クリップのある段（Notes1）を探す: 空の段のクリック＋Deleteは何もしない
-        ed.click(n['x'], y + n['laneH'] / 2)
+        # レーンの中の、ノーツの表示窓に見えている所（既定の画面では一番下の Notes 1 は上の数pxしか見えない）
+        ed.click(n['x'], min(max(y + n['laneH'] / 2, max(y + 5, v0 + 2)), min(y + n['laneH'] - 5, v1 - 3)))
         ed.key('Delete'); ed.wait(0.2)
         if counts(ed)['notes'] == 0:
             break

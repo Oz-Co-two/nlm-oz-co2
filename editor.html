@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="css/mapcheck.css">
 <link rel="stylesheet" href="css/rating.css">
 <link rel="stylesheet" href="css/update.css">
+<link rel="stylesheet" href="css/analysis.css">
 </head>
 <body>
 <div id="bootCover"></div>
@@ -39,6 +40,7 @@
       <button data-act="mapcheck"><span data-i18n="menu.mapCheck">譜面チェック（BeatLeader基準）…</span><span class="mkey"></span></button>
       <button data-act="rating"><span data-i18n="menu.rating">難易度を測る（BeatLeaderの星の近似）…</span><span class="mkey"></span></button>
       <button data-act="autolight"><span data-i18n="menu.autoLight">自動ライティング…</span><span class="mkey"></span></button>
+      <button data-act="analyze"><span data-i18n="menu.analyze">曲を解析（テンポ・構成）…</span><span class="mkey"></span></button>
       <hr>
       <button data-act="update"><span data-i18n="menu.update">更新を確認…</span><span class="mkey"></span></button>
     </div>
@@ -66,9 +68,7 @@
                #libHeadGap は帯の幅ぶんの空き（js/media/lib-layout.js が帯の幅を測って入れる） -->
           <div id="libHead">
             <span id="libHeadGap"></span>
-            <button id="loadBtn" style="display:none" data-i18n="ui.loadSongFolder">曲フォルダ読込</button>
             <button id="libAddBtn"><svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:-3px;margin-right:6px"><path d="M2.5 6.6 a1.8 1.8 0 0 1 1.8-1.8 h4.3 a1 1 0 0 1 .8.4 l1 1.35 a1 1 0 0 0 .8.4 h8.5 a1.8 1.8 0 0 1 1.8 1.8 v8.2 a1.8 1.8 0 0 1 -1.8 1.8 H4.3 a1.8 1.8 0 0 1 -1.8-1.8 z" fill="#e3b34e"/></svg><span data-i18n="ui.addFolder">フォルダを追加</span></button>
-            <input id="folder" type="file" webkitdirectory directory multiple style="display:none">
             <span id="libTitle" style="display:none"></span>
             <span id="libSearchBox"><svg class="lsIco" viewBox="0 0 16 16" width="13" height="13"><circle cx="6.8" cy="6.8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10.3 10.3 L14.2 14.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg><input id="libSearch" type="search" spellcheck="false" autocomplete="off" data-i18n-ph="lib.searchPh" placeholder="曲名・アーティスト・マッパー" data-i18n-t="lib.searchTip" title="曲名・アーティスト・マッパーで探す（打つとすぐ絞り込みます。Esc で消す）"><button id="libSearchX" type="button" data-i18n-t="lib.searchClear" title="検索を消す">×</button></span>
             <span class="libSep"></span>
@@ -128,6 +128,9 @@
         <div id="nodepane">
         <div class="laneSb" id="sbN" data-i18n-t="ui.notesLaneScroll" title="Notesレーンのスクロール"><div class="sbA sbUp">▲</div><div class="sbTr"><div class="sbTh"></div></div><div class="sbA sbDn">▼</div></div>
         <div class="laneSb" id="sbL" data-i18n-t="ui.lightLaneScroll" title="Lightレーンのスクロール"><div class="sbA sbUp">▲</div><div class="sbTr"><div class="sbTh"></div></div><div class="sbA sbDn">▼</div></div>
+        <!-- 溝の左端の細いスクロールバー（2026-10-20）: 右端の物と同じ働き・同じ位置（▲▼は無し） -->
+        <div class="laneSb laneSbL" id="sbNL" data-i18n-t="ui.notesLaneScroll" title="Notesレーンのスクロール"><div class="sbTr"><div class="sbTh"></div></div></div>
+        <div class="laneSb laneSbL" id="sbLL" data-i18n-t="ui.lightLaneScroll" title="Lightレーンのスクロール"><div class="sbTr"><div class="sbTh"></div></div></div>
         <canvas id="ndcv"></canvas>
         </div>
         <div id="proll"><canvas id="prcv"></canvas></div>
@@ -137,7 +140,17 @@
             <div id="gainField" class="bfField" data-i18n-t="ui.songGain" title="曲の音量補正（dB・全難易度共通）。再生にそのまま効き、書き出し時にsong.eggへ実際に反映されます（環境設定のミュージック音量は作業中の聞こえ方だけで、書き出しには入りません）。‹›=±0.5dB・Shift+‹›=±0.1dB・値クリック=手打ち"><span class="bfA" data-k="dn">‹</span><span class="bfLbl" data-i18n="ui.songGainL">音量</span><span class="bfV">0.0 dB</span><span class="bfA" data-k="up">›</span></div>
           </div>
         </div>
-        <div id="specPane"><canvas id="speccv"></canvas></div>
+        <div id="specPane"><canvas id="speccv"></canvas>
+          <!-- 曲の解析の帯（2026-10-19・js/analysis/song-analysis.js）: 結果がある時・解析中だけスペクトログラムの箱の上の段に出す（その間スペクトログラムは下へ詰める）。
+               無い時は溝に［曲を解析］だけ -->
+          <div id="anaPane"><canvas id="anacv"></canvas>
+            <button id="anaMenuBtn" type="button" data-i18n-t="ana.menuTip" title="解析のメニュー（クリップを作る・マーカーへ書き出す・テンポの推定結果・解析し直す・結果を消す）">⋯</button>
+            <div id="anaMsg"></div>
+            <!-- 溝の［🧩 クリップを作る］（2026-10-20）: 結果がある時だけ。帯の溝だけを下へ延ばした所に置く（スペクトログラムの溝は空き＝スペクトログラムは詰めない）。文字・ツールチップは song-analysis.js -->
+            <div id="anaAct"><button id="anaClipsBtn" type="button"></button></div>
+          </div>
+          <button id="anaStartBtn" type="button" style="display:none" data-i18n-t="ana.startTip" title="曲のテンポ（BPM・無音追加の提案）と構成（セクション・細かい区切り）を解析します。1曲 30秒〜1分ほどかかり、その間も編集できます"><span data-i18n="ana.startBtn">🎼 曲を解析</span></button>
+        </div>
         <div id="nodeKeys"></div><!-- NLE/INFO用ショートカット表示（右端）。中身は editor-app.js の KEYS_NLE / KEYS_NODE -->
         <div id="infoPanel" style="display:none"></div>
       </div>
@@ -201,6 +214,9 @@
     <div class="legend" id="stat" style="margin-top:8px;color:var(--accent)"></div>
       </div>
       <div id="selrect"></div>
+      <!-- 単独編集（Edit only）: 他のレーンのノーツをクリックした時の帯（文言はJSで入れる）と、3Dの左下の「✎ 単独編集: Notes n」 -->
+      <div id="eoBand"><span class="eoMsg"></span><button class="eoSw"></button><button class="eoOff"></button><button class="eoKeep"></button></div>
+      <div id="eoInd"><span class="eoIndMain"></span><span class="eoIndNote"></span></div>
       <div id="chainCpSlide" style="position:absolute;display:none;z-index:9;flex-direction:column;gap:4px;
         background:rgba(20,20,26,.88);border:1px solid #3a3a46;border-radius:8px;padding:5px 10px;font:11px sans-serif;color:#cfd6de;">
         <div style="display:flex;align-items:center;gap:6px;">
@@ -284,14 +300,17 @@
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:3px"><input id="keysLight" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.k.light">LIGHTING</span></label>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:3px"><input id="keysNode" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.k.node">NLE</span></label>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:3px"><input id="keysInfo" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.k.info">INFO</span></label></div>
-    <div class="slRow"><div class="t"><span data-i18n="set.laneRatio">レーン構成（ノーツ : ライト＝計6）</span> <span id="laneRatioVal">4 : 2</span></div>
-      <input id="laneRatio" type="range" min="1" max="5" value="4"></div>
+    <div class="slRow"><div class="t"><span data-i18n="set.noteLanes">ノーツのレーンの本数（新規作成の既定にもなる）</span> <span id="laneRatioVal">1</span></div>
+      <input id="laneRatio" type="range" min="1" max="5" value="1"></div>
     <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.chromaMode">ライト配色モード</div>
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="chromaMode" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.chromaOn">Chroma（各ライト自由色・要Mod）</span><span class="t" style="color:#8a8a92;font-size:11px" data-i18n="set.chromaHint">OFF＝バニラ配色（Mod無しでも全員に見える）</span></label></div>
     <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.auxPrev">直前ノーツ表示</div>
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="auxPrevShow" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.auxPrevOn">枠の左右に直前のノーツを表示（Hキーでも切替）</span></label></div>
     <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.swingWarn">同じ向きの連続の警告</div>
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="swingWarnOn" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.swingWarnOn">置いたノーツが前後と同じ向き（差45°以内）なら赤枠・ランプ・音で知らせる</span></label></div>
+    <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.anaAsk">曲の解析</div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="anaAskOn" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.anaAskOn">曲を読み込んだ時に、解析するか聞く</span></label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:3px;flex-wrap:wrap"><input id="anaGuideOn" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.anaGuideOn">解析が終わったら、次の手順を案内する</span></label></div>
     <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.updateCheck">更新の確認</div>
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="updateCheckOn" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.updateCheckOn">起動時に新しいバージョンがあるか確認する（GitHub に接続します）</span></label></div>
   </div>

@@ -2,7 +2,7 @@
 難易度ボタン（現在選択中のもの）を押して出るメニューを本物のクリックで開き、項目を押して実行する。
 rich: Hard = notes7 bombs1 walls1 arcs1 chains0 lights3 / Expert = notes23 bombs3 walls2 arcs2 chains2 lights12"""
 from e2e_helpers import RICH, counts, diff_counts_from_project, dirty, hover_3d, project, state, switch_diff, wait_until
-from project_helpers import diff_flat, diff_menu_open, diff_totals, menu_pick, toast
+from project_helpers import copy_dialog, diff_flat, diff_menu_open, diff_totals, menu_pick, toast
 
 HARD = RICH['HardStandard.dat']
 EXPERT = RICH['ExpertStandard.dat']
@@ -33,12 +33,16 @@ def _wait_toast(ed, text):
 
 
 def test_copy_notes_to_other_diff(t):
-    '''Hardのメニュー「ノーツを転送→Expert」: Expertのノーツ類がHardと同じ中身になり（ライトは変わらない）、Hardは変わらない'''
+    '''Hardのメニュー「ノーツを転送→Expert」（繋がない）: Expertのノーツ類がHardと同じ中身になり（ライトは変わらない）、Hardは変わらない。
+    画面外の難易度への転送も Undo 1回で戻る（2026-10-20〜。以前は繋がない画面外への転送は Undo できなかった）'''
     ed = _open_rich(t)
+    before = project(ed)
     hard_before = diff_flat(ed, 'HardStandard.dat')
     diff_menu_open(ed, 'Hard')
     menu_pick(ed, 'ノーツを転送', '→ Expert')
-    menu_pick(ed, '⚠')   # Expertに既存のノーツがあるので上書き確認が出る
+    text, checked = copy_dialog(ed, link=False)   # 確認の画面: Expertに既存のノーツがあるので上書きの注意が出る・「親の難易度に繋ぐ」は既定オン
+    t.ok('⚠' in text and '置き換わります' in text, f'上書きの注意が出る: {text}')
+    t.eq(checked, True, '「親の難易度に繋ぐ」は既定でオン')
     _wait_toast(ed, 'コピーしました')
     tot = diff_totals(ed)
     t.eq(tot['ExpertStandard.dat'], dict(HARD, lights=EXPERT['lights']), 'Expertの数（ノーツ類はHard、ライトは元のまま）')
@@ -47,9 +51,12 @@ def test_copy_notes_to_other_diff(t):
     for k in NOTE_KINDS:
         t.eq(ex[k], hd[k], f'Expertの{k}の中身 = Hard')
     t.eq(hd, hard_before, 'Hardの中身は変わらない')
-    t.ok('Undoできません' in toast(ed), '画面外の難易度への操作はUndoできないと案内する')
+    t.ok('Undoできません' not in toast(ed), '画面外の難易度への転送も Undo できる（案内が出ない）')
     t.eq(counts(ed), HARD, '現在の難易度（Hard）の表示は変わらない')
     wait_until(ed, "window._dbgApp.dirty().lamp===true", timeout=3, label='未保存になる')
+    _undo(ed)
+    wait_until(ed, f"window._dbg.rt.diffCountsOf('Expert').n==={sum(EXPERT[k] for k in NOTE_KINDS)}", label='Undoで Expert が戻る')
+    t.eq(project(ed), before, 'Undo 1回で転送の前に戻る')
     t.no_errors()
 
 
@@ -59,7 +66,7 @@ def test_copy_lights_to_other_diff(t):
     expert_before = diff_flat(ed, 'ExpertStandard.dat')
     diff_menu_open(ed, 'Hard')
     menu_pick(ed, 'ライティングを転送', '→ Expert')
-    menu_pick(ed, '⚠')
+    copy_dialog(ed)   # 既定（繋ぐ）のまま
     _wait_toast(ed, 'コピーしました')
     tot = diff_totals(ed)
     t.eq(tot['ExpertStandard.dat'], dict(EXPERT, lights=HARD['lights']), 'Expertの数（ライトだけHardの3）')
@@ -72,11 +79,13 @@ def test_copy_lights_to_other_diff(t):
 
 
 def test_copy_all_to_empty_diff_no_confirm(t):
-    '''空のEasyへ「丸ごと転送」: 上書き確認は出ず、ノーツもライトもHardと同じ数になる。Hardは変わらない'''
+    '''空のEasyへ「丸ごと転送」: 上書きの注意は出ず、ノーツもライトもHardと同じ数になる。Hardは変わらない'''
     ed = _open_rich(t)
     diff_menu_open(ed, 'Hard')
     menu_pick(ed, '丸ごと転送（ノーツ＋ライト）', '→ Easy')
-    _wait_toast(ed, 'コピーしました')   # 確認(⚠)を挟まず実行される（空なので上書きにならない）
+    text, _ = copy_dialog(ed)
+    t.ok('⚠' not in text, f'空なので上書きの注意は出ない: {text}')
+    _wait_toast(ed, 'コピーしました')
     tot = diff_totals(ed)
     t.eq(tot['EasyStandard.dat'], HARD, 'Easyの数 = Hard')
     t.eq(tot['HardStandard.dat'], HARD, 'Hardは変わらない')
@@ -90,12 +99,12 @@ def test_copy_all_to_empty_diff_no_confirm(t):
 
 
 def test_copy_overwrite_cancel(t):
-    '''上書き確認で「キャンセル」を選ぶと何もコピーされない'''
+    '''確認の画面で「キャンセル」を選ぶと何もコピーされない'''
     ed = _open_rich(t)
     before = project(ed)
     diff_menu_open(ed, 'Hard')
     menu_pick(ed, 'ノーツを転送', '→ Expert')
-    menu_pick(ed, 'キャンセル')
+    copy_dialog(ed, ok=False)
     ed.wait(0.3)
     t.eq(project(ed), before, '内容は変わらない')
     t.eq(dirty(ed)['lamp'], False, '未保存にならない')
@@ -108,7 +117,7 @@ def test_receive_into_current_and_undo(t):
     diff_flat_before = diff_flat(ed, 'HardStandard.dat')
     diff_menu_open(ed, 'Hard')
     menu_pick(ed, 'ノーツを受信', '← Expert')
-    menu_pick(ed, '⚠')
+    copy_dialog(ed)   # 既定（繋ぐ＝Hard のクリップが Expert のクリップの子になる）
     want = dict(EXPERT, lights=HARD['lights'])
     wait_until(ed, f"window._dbgApp.state().counts.notes==={EXPERT['notes']}", label='受信で画面が更新される')
     t.eq(counts(ed), want, '受信後の画面の数')
@@ -133,7 +142,7 @@ def test_receive_lights_into_current_and_undo(t):
     flat_before = diff_flat(ed, 'HardStandard.dat')
     diff_menu_open(ed, 'Hard')
     menu_pick(ed, 'ライティングを受信', '← Expert')
-    menu_pick(ed, '⚠')
+    copy_dialog(ed)
     wait_until(ed, f"window._dbgApp.state().counts.lights==={EXPERT['lights']}", label='ライト受信')
     t.eq(counts(ed), dict(HARD, lights=EXPERT['lights']), '受信後の画面の数')
     _undo(ed)
@@ -149,7 +158,7 @@ def test_receive_undo_restores_clip_structure(t):
     before = project(ed)
     diff_menu_open(ed, 'Hard')
     menu_pick(ed, 'ノーツを受信', '← Expert')
-    menu_pick(ed, '⚠')
+    copy_dialog(ed)   # 既定（繋ぐ＝Hard のクリップが Expert のクリップの子になる）
     wait_until(ed, f"window._dbgApp.state().counts.notes==={EXPERT['notes']}", label='受信')
     _undo(ed)
     wait_until(ed, f"window._dbgApp.state().counts.notes==={HARD['notes']}", label='Undo')
@@ -244,6 +253,7 @@ def test_copy_survives_save_and_reopen(t):
     ed = _open_rich(t)
     diff_menu_open(ed, 'Hard')
     menu_pick(ed, '丸ごと転送（ノーツ＋ライト）', '→ Easy')
+    copy_dialog(ed)
     _wait_toast(ed, 'コピーしました')
     before = project(ed)
     ed.js("(async()=>{ const rt=window._dbg.rt; await rt.applyProject(JSON.parse(rt.buildProjectText())); return true; })()")

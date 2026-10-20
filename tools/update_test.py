@@ -30,13 +30,19 @@ def write(p, text):
     p.write_text(text, encoding="utf-8")
 
 
-def make_app(d, ver, exe=b"EXE"):
-    """配布フォルダの形（exe・_internal・案内文）を作る"""
+LICENSE_FILES = ("LICENSE", "THIRD_PARTY_NOTICES.txt")
+
+
+def make_app(d, ver, exe=b"EXE", licenses=True):
+    """配布フォルダの形（exe・_internal・案内文・ライセンス）を作る。licenses=False は v1.6.0-oz 以前の形（ライセンスのファイルが無い）"""
     d.mkdir(parents=True, exist_ok=True)
     (d / au.EXE_NAME).write_bytes(exe + ver.encode())
     write(d / "_internal" / "js" / "constants.js", f"export const APP_VERSION = '{ver}';\n")
     write(d / "_internal" / "lib" / "x.dll", ver)
     write(d / "はじめにお読みください.txt", ver)
+    if licenses:
+        for n in LICENSE_FILES:
+            write(d / n, ver)
 
 
 def make_zip(ver, extra=None):
@@ -101,7 +107,7 @@ def main():
     site = Site()
     with tempfile.TemporaryDirectory() as td:
         target = Path(td) / "NLM"
-        make_app(target, "v1.3.0-oz")
+        make_app(target, "v1.3.0-oz", licenses=False)   # 今の版の配布フォルダにはライセンスのファイルが無い（差し替えで新しく入る）
         write(target / "config" / "settings.json", "{\"mine\":1}")
         write(target / "asset" / "clip.nlmclip", "mine")
         write(target / "plugins" / "rating" / "current.json", "mine")
@@ -109,6 +115,7 @@ def main():
         up = au.Updater(str(target / "_internal"), str(target), frozen=True)
 
         print("確認（check）")
+        check(all(n in au.REPLACE_ITEMS for n in LICENSE_FILES), "ライセンスのファイルも差し替えの一覧にある")
         zdata = make_zip("v1.4.0-oz")
         site.publish("v1.4.0-oz", zdata, NOTES)
         j = up.check()
@@ -150,8 +157,8 @@ def main():
         write(new_dir / "_internal" / "js" / "constants.js", "export const APP_VERSION = 'v1.4.0-oz';\n")
         real_copy2 = shutil.copy2
 
-        def bad_copy2(s, d, *a, **k):   # 最後の案内文のコピーで失敗させる（exe・_internal は入れた後）
-            if str(s).endswith(".txt"):
+        def bad_copy2(s, d, *a, **k):   # 最後の THIRD_PARTY_NOTICES.txt のコピーで失敗させる（exe・_internal・案内文・LICENSE は入れた後）
+            if str(s).endswith("THIRD_PARTY_NOTICES.txt"):
                 raise OSError("disk full")
             return real_copy2(s, d, *a, **k)
         au.shutil.copy2 = bad_copy2
@@ -163,6 +170,7 @@ def main():
         check(au.read_app_version(str(target / "_internal")) == "v1.3.0-oz"
               and (target / au.EXE_NAME).read_bytes() == b"EXEv1.3.0-oz"
               and (target / "はじめにお読みください.txt").read_text(encoding="utf-8") == "v1.3.0-oz", "元の版に戻っている")
+        check(not any((target / n).exists() for n in LICENSE_FILES), "途中まで入れた新しい物（元に無かった LICENSE）も消す")
         (target / "_previous_v0.9.0-oz").mkdir(exist_ok=True)   # 「退避は 1 世代だけ」の確認用に置き直す
 
         print("差し替え（正常）")
@@ -172,6 +180,8 @@ def main():
         check(au.read_app_version(str(target / "_internal")) == "v1.4.0-oz"
               and (target / au.EXE_NAME).read_bytes() == b"NEWv1.4.0-oz"
               and (target / "はじめにお読みください.txt").read_text(encoding="utf-8") == "v1.4.0-oz", "exe・_internal・案内文が新しい版")
+        check(all((target / n).is_file() and (target / n).read_text(encoding="utf-8") == "v1.4.0-oz" for n in LICENSE_FILES),
+              "元の版に無かったライセンスのファイルも入る")
         check((target / "config" / "settings.json").read_text() == "{\"mine\":1}"
               and (target / "asset" / "clip.nlmclip").read_text() == "mine"
               and (target / "plugins" / "rating" / "current.json").read_text() == "mine", "利用者のデータはそのまま")

@@ -28,6 +28,49 @@ def test_english_ui_no_japanese(t):
     t.no_errors()
 
 
+def test_edit_only_english_wording(t):
+    '''単独編集（Edit only）の英語の文言: スイッチのツールチップ・3Dの隅の表示・他のレーンのノーツをクリックした時の帯・早見表の行（利用者に提示して了承済みの文言）'''
+    from english_ui_helpers import edit_only_switch_xy
+    ed = start_english(t, "rich")
+    wait_until(ed, "window._dbgApp.nle().clips.length===2", label="素材の読込")
+    x, y = edit_only_switch_xy(ed, 1)
+    ed.click(x, y)
+    wait_until(ed, "window._dbgApp.nle().editOnly===1", label="Notes 2 を単独編集")
+    ed.move(x + 20, y); ed.wait(0.2)
+    t.eq(ed.js("document.getElementById('ndcv').title"),
+         "Edit only this lane — 3D editing goes to this lane only. Other lanes can't be edited.", "スイッチのツールチップ")
+    t.eq(ed.js("document.querySelector('#eoInd .eoIndMain').textContent"), "✎ Edit only: Notes 2", "3Dの隅の表示")
+    o = max((o for o in ed.js("window._dbgApp.objScreen()") if o["kind"] == "note" and o["inView"] and o["tr"] == 0), key=lambda o: o["sy"])
+    ed.move(o["sx"], o["sy"]); ed.wait(0.15); ed.click(o["sx"], o["sy"])
+    wait_until(ed, "document.getElementById('eoBand').classList.contains('on')", label="帯")
+    t.eq(ed.js("[document.querySelector('#eoBand .eoMsg').textContent,...[...document.querySelectorAll('#eoBand button')].map(b=>b.textContent)]"),
+         ["This note is in Notes 3 (Edit only: Notes 2)", "Edit only Notes 3", "Turn off Edit only", "Keep"], "帯の文言とボタン")
+    rows = ed.js("[...document.querySelectorAll('#nodeKeys .mkrow')].map(r=>r.textContent)")
+    t.ok("Edit only (note lane)E" in rows, f"NLE の早見表に E の行: {rows}")
+    t.no_errors()   # 画面全体の日本語の点検は test_english_ui_no_japanese（rich の曲名・クリップ名は素材の日本語なのでここでは見ない）
+
+
+def test_link_english_wording(t):
+    '''リンクしたクリップの英語の文言: 親を選ぶ画面・リンクしたクリップの右クリック・分割できない帯・早見表の行'''
+    from english_ui_helpers import link_tour
+    ed = start_english(t, "basic")
+    link_tour(ed)   # 親を選ぶ画面→リンク→右クリック→分割できない帯→難易度間コピーの確認（キャンセル）
+    t.eq(len([c for c in ed.js("window._dbgApp.nle().clips") if c["link"]]), 2, "リンクできた")
+    texts = [s for s, _ in found(ed)]
+    t.eq(texts, [], "日本語が出ない")
+    kid = next(c for c in ed.js("window._dbgApp.nle().clips") if c["link"] and not c["par"])
+    g = nle(ed, kid["beat"] + 1)
+    v1 = ed.js("window._dbgApp.nle().vp.n[1]")
+    ed.click(g["x"], min(g["notes"][kid["track"]] + g["laneH"] * 0.7, v1 - 3), button="right"); ed.wait(0.4)
+    items = ed.js("[...document.querySelectorAll('#ctxmenu > button')].map(b=>b.textContent)")
+    for w in ("Jump to parent", "Make this the parent", "Unlink", "🔗 Link with clips at the same position in other difficulties…"):
+        t.ok(w in items, f"子の右クリックに「{w}」: {items}")
+    ed.key("Escape")
+    rows = ed.js("[...document.querySelectorAll('#nodeKeys .mkrow')].map(r=>r.textContent)")
+    t.ok("Link / Paste linkedK ／ Ctrl + Shift + V" in rows, f"NLE の早見表の行: {rows}")
+    t.no_errors()
+
+
 def test_switch_to_english_later(t):
     '''日本語でINFO・NLEを開いて作り済みにしてから、環境設定で English に切り替える→作り済みの画面にも日本語が残らない'''
     ed = t.fresh("basic")

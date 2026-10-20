@@ -6,7 +6,7 @@ This tutorial walks you step by step through loading a song, placing notes, expo
 
 > **Switching the UI to English**
 > NLM starts in Japanese. Click **環境設定** (Preferences — the second menu at the top left, next to ファイル)
-> and set **言語 / Language** to **English** on the first tab. The screenshots in this tutorial show the English UI (v1.6.0-oz).
+> and set **言語 / Language** to **English** on the first tab. The screenshots in this tutorial show the English UI (v2.0.0-oz).
 
 This tutorial covers only the basic flow. For the details of each panel, see the original
 [reference manual](https://helba.flashhub.net/nlm/manual/) (Japanese).
@@ -65,7 +65,24 @@ Supported formats include ogg / egg / mp3 / wav / flac / m4a.
 Songs in formats other than ogg are converted to the Beat Saber format (song.egg) with ffmpeg when you export.
 If you have not installed ffmpeg, install it first as described in the "ffmpeg" section of the [README](../README.en.md).
 
-After loading, the waveform of the song appears in the **Music** row at the bottom of the NLE.
+When you load a song, you are asked "Analyze this song?".
+
+!["Analyze this song?" after loading a song](images/tutorial-en/02b-analyze-ask.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Analyze | Starts analyzing the tempo (BPM and lead-in) and the structure of the song ([Analyze the song](#analyze-the-song) below) |
+| ② | Not now | Closes without analyzing (Esc does the same). You can analyze the song at any time later |
+| ③ | Don't ask again | Check this before closing, and this question is not shown from then on |
+
+- The analysis runs on your PC; the song is never sent over the internet. You can keep editing while it runs
+- To analyze later, use **🎼 Analyze song** at the left of the spectrogram (⑧ in the image below) or **File → Analyze song (tempo & structure)…** in the menu
+- If you turned the question off with ③, turn it back on in **Preferences** → "Application" → "Song analysis" → "Ask whether to analyze when a song is loaded"
+- It is not shown when you open a project, or when the song already has analysis results
+
+Here we press **Not now** and look at the screen and the BPM first (the analysis is covered in [Analyze the song](#analyze-the-song) below).
+
+The waveform of the song appears in the **Music** row at the bottom of the NLE.
 
 ![The NLE after loading a song](images/tutorial-en/03-song-loaded.png)
 
@@ -78,6 +95,7 @@ After loading, the waveform of the song appears in the **Music** row at the bott
 | ⑤ | Difficulty | Which difficulty you are editing. Click it or press 1–5 to switch |
 | ⑥ | NJS | Note jump speed — how fast the notes fly in. Each difficulty has its own value |
 | ⑦ | Volume adjustment | The volume of the song (dB). Press **Auto** to raise a quiet song to a good level. You can also change it yourself with ‹ › |
+| ⑧ | Analyze song | Analyzes the tempo (BPM and lead-in) and the structure of the song ([Analyze the song](#analyze-the-song) below). This purple button appears when a song is loaded and has not been analyzed yet |
 
 ### Set the BPM
 
@@ -92,6 +110,51 @@ If you know the BPM, you can also type it directly into ②.
 To check by ear, turn on the metronome button to the right of the BPM and play with Space.
 If the clicks and the beat of the song drift apart little by little, the BPM is wrong.
 If they are off by the same amount from the very start, shift the start of the song with **Lead-in** (④).
+
+### Analyze the song
+
+Press **🎼 Analyze song** (⑧), or choose **File → Analyze song (tempo & structure)…** from the menu, to examine the tempo and the structure of the song.
+Pressing **Analyze** in the question shown when you load a song starts it in the same way.
+It takes longer than Detect BPM, but it suggests **the lead-in as well as the BPM**.
+It takes about 30 seconds to a minute per song. **You can keep editing while it runs.**
+
+Once the tempo is found, the following confirmation appears, but only if the analyzed BPM and lead-in differ from the current settings.
+
+![Analyze song: confirming the tempo](images/tutorial-en/04b-analyze-tempo.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Suggested | The BPM and lead-in found by the analysis. Below it you see the current settings and how reliable the suggestion is |
+| ② | Apply suggestion | Sets the BPM and lead-in to the values in ① |
+| ③ | Apply B (half-beat shift) | Sets the lead-in to the value in ① shifted by half a beat. This can fit better in songs whose strong sounds fall on the off-beat (half a beat off) |
+
+- **Nothing changes automatically.** The BPM and lead-in change only when you press ② or ③. Press **Don't apply** (or Esc) to keep the current settings
+- You can undo the change with **Ctrl + Z**. The notes and lights you have placed stay on their beats (their timing against the song changes)
+- As above, turn on the metronome and play to check by ear. If you can't decide between the suggestion and B, try both and pick the one that fits
+- If the analyzed values are the same as the current settings, this confirmation does not appear
+
+Next, the structure of the song (larger parts such as the intro and the chorus, and finer segments) is analyzed.
+While the analysis runs, the current stage (estimating the tempo, analyzing the structure) and a progress bar are shown above the spectrogram. Press **Stop** to cancel it.
+
+![The display while the song is being analyzed](images/tutorial-en/04c-analyze-running.png)
+
+When the structure analysis finishes, the structure bands appear above the spectrogram, and a guide to what to do next is shown.
+
+![The "what to do next" guide shown when the analysis finishes](images/tutorial-en/04d-analyze-guide.png)
+
+The guide describes these next steps:
+
+1. Play the song and check by ear whether the divisions of the bands match it (top row = sections: large divisions such as the intro, verse and chorus; bottom row = segments)
+2. Decide which divisions you want to map with
+3. Press **🧩 Create clips** at the left of the band and choose the divisions in the window that opens; empty clips following those divisions are created on a new lane (repeats of the same number are linked automatically)
+
+- When you close the guide with **Got it** (or Esc), **🧩 Create clips** at the left of the band glows for a moment to show where it is. This button is always there while there are analysis results (after you create clips, it turns dark purple)
+- Check "Don't show this again" before closing, and the guide is not shown from then on. Turn it back on in **Preferences** → "Application" → "Song analysis" → "Show the next steps when an analysis finishes"
+
+For how to read and use the bands (click to jump there, rename them, export them as markers, and so on),
+see chapter 6 of the advanced tutorial, [Analyzing the song (tempo and structure)](tutorial-advanced.en.md#6-analyzing-the-song-tempo-and-structure);
+for creating clips, see [Creating clips from the analysis](tutorial-advanced.en.md#creating-clips-from-the-analysis) in the advanced tutorial.
+The rest of the images in this tutorial were taken without analysis bands.
 
 ### Adjust the song volume
 
@@ -144,6 +207,11 @@ The notes you place go into these clips. Clips can be moved, copied and split la
 but you don't need to worry about them at first.
 
 ![After placing notes. Clips have been created in the NLE](images/tutorial-en/07-notes-placed.png)
+
+In a new map, the NLE starts with one note lane (row), **Notes 1**, and three light lanes, **Light 1–3**.
+When you drop a clip from MEDIA or paste a clip and no lane is free at that time, a lane is added at the top automatically.
+To start with more note lanes, change "Note lanes" in **Preferences**
+(for adding and removing lanes, see [Adding lanes, lock, solo and mute](tutorial-advanced.en.md#adding-lanes-lock-solo-and-mute) in chapter 3 of the advanced tutorial).
 
 ---
 
@@ -303,12 +371,22 @@ If you moved the files, select them again with "Reconnect output folder / cover 
 ## 10. Where to go next
 
 Once you are used to the basics, try these features too. They are explained in the [advanced tutorial](tutorial-advanced.en.md)
-(faster workflows, making the most of the NLE, the MEDIA library, building several difficulties, checks before publishing, measuring ★, and more).
+(faster workflows, making the most of the NLE, the MEDIA library, building several difficulties, analyzing the song, checks before publishing, measuring ★, and more).
 
 - **Clip editing in the NLE**: move, copy, split (C key) and join (Ctrl + G) clips to build repeated choruses and so on efficiently
+- **Linked clips**: link clips that should have the same content, such as repeated choruses, and editing the parent clip gives the other linked clips (children) the same content (children cannot be edited directly).
+  You can also link clips in other difficulties. Select two or more clips in the NLE and press **K** (or right-click → "Link")
+  (see [Linked clips](tutorial-advanced.en.md#linked-clips) in chapter 3 of the advanced tutorial)
+- **Edit only**: lets you edit just one note lane. Turn it on with the "Edit only" switch at the left of the lane (or point at the lane in the NLE and press **E**);
+  notes you place in the 3D view then go only into that lane, and notes in other lanes cannot be selected or deleted (see [Edit only](tutorial-advanced.en.md#edit-only) in chapter 3 of the advanced tutorial)
 - **Assets**: right-click a clip with a pattern you use often → "Save to assets", then drag it from MEDIA to another place or another song
-- **Copying between difficulties**: click the selected difficulty again to open a menu that sends notes or lights to another difficulty
+- **Copying between difficulties**: click the selected difficulty again to open a menu that sends notes or lights to another difficulty.
+  "Send notes" copies only the notes and "Send lighting" only the lights ("Send everything" copies both). Every transfer can be undone with a single **Ctrl + Z**.
+  By default, the copied clips are linked to the clips they were copied from ("Link to the parent difficulty"; see chapter 4 of the advanced tutorial, [Making several difficulties efficiently](tutorial-advanced.en.md#4-making-several-difficulties-efficiently))
 - **MEDIA library**: register CustomLevels or other folders with **Add folder to MEDIA…** in the File menu to sort, search and filter the list of songs (one row per difficulty in the detail view; ★, NPS, play records and more), and to drag songs into the NLE as material.
   In the exe version the folders stay registered the next time you start NLM (see [MEDIA library](tutorial-advanced.en.md#media-library-record-song-folders-then-list-and-search-them) in chapter 3 of the advanced tutorial)
 - **Tempo parts**: support for songs whose BPM changes partway through ("Auto-detect all parts" in the NLE)
+- **Analyze song (structure bands)**: **Analyze song** in chapter 2 also analyzes the structure of the song (larger parts such as the intro and the chorus) and shows it as bands above the spectrogram.
+  Click a band to jump there, or place markers at the start of each part (see chapter 6 of the advanced tutorial, [Analyzing the song (tempo and structure)](tutorial-advanced.en.md#6-analyzing-the-song-tempo-and-structure)).
+  Press **🧩 Create clips** at the left of the band to create empty NLE clips that follow the bands (repeats of the same part are linked automatically; see [Creating clips from the analysis](tutorial-advanced.en.md#creating-clips-from-the-analysis) in the advanced tutorial)
 - **Markers**: place a marker with Ctrl + E and jump between markers with Ctrl + [ / ]

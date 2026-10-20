@@ -2,7 +2,7 @@
 # ビルド: cd NLM && python -m PyInstaller nlm.spec
 # 出力:   NLM/dist/NonLinearMapper/NonLinearMapper.exe （onedir）
 import os
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 block_cipher = None
 HERE = os.path.abspath('.')
@@ -20,10 +20,12 @@ datas = [
     ('native_paths.py', '.'),    # パスの字面の判定。app.py・media_library.py が import する
     ('song_details.py', '.'),    # 全曲データ（jsDelivr）。serve.py が import する
     ('beatsaver_api.py', '.'),   # BeatSaver への1曲の問い合わせ。serve.py が import する
+    ('song_analysis/*.py', 'song_analysis'),   # 曲の解析（テンポ・構成）。serve.py が import する（librosa 等は解析を始めた時）
     ('js', 'js'),
     ('css', 'css'),
     ('fonts', 'fonts'),
     ('icons', 'icons'),
+    ('guide', 'guide'),          # 画面の中の案内の画像（解析が終わった時の案内。tools/make_guide_shots.py が撮る）
     ('lang', 'lang'),
     ('preview-v4', 'preview-v4'),
     ('config/settings.default.json', 'config'),   # 初期値のみ同梱。個人設定 settings.json はバンドルしない（配布版は初期状態で始まる）
@@ -31,7 +33,20 @@ datas = [
 ]
 
 # pywebview の Windows(WebView2) バックエンドと pythonnet を確実に取り込む
-hiddenimports = ['serve', 'rating_plugin', 'app_update', 'media_library', 'map_hash', 'native_paths', 'song_details', 'beatsaver_api']
+hiddenimports = ['serve', 'rating_plugin', 'app_update', 'media_library', 'map_hash', 'native_paths', 'song_details', 'beatsaver_api',
+                 'song_analysis', 'song_analysis.service', 'song_analysis.tempo', 'song_analysis.structure']
+# 曲の解析が使う librosa・numpy・scipy・scikit-learn・numba・llvmlite・soundfile・soxr は、song_analysis から見つかり、
+# pyinstaller-hooks-contrib のフック（librosa は lazy_loader が読む .pyi も・numba・llvmlite・sklearn・soundfile）で取り込まれる。
+# 関数の中で import している物（librosa・threadpoolctl）も PyInstaller は見つける。念のため名前でも足す
+hiddenimports += ['librosa', 'threadpoolctl', 'soxr', 'soundfile', 'sklearn.cluster']
+# 曲の解析の部品のライセンス文（各部品の dist-info の LICENSE・licenses/）を exe に入れる（THIRD_PARTY_NOTICES.txt の 9.）
+for _pkg in ('librosa', 'numpy', 'scipy', 'scikit-learn', 'numba', 'llvmlite', 'soundfile', 'soxr', 'joblib', 'threadpoolctl',
+             'lazy_loader', 'pooch', 'requests', 'certifi', 'urllib3', 'idna', 'charset-normalizer', 'platformdirs', 'decorator',
+             'msgpack', 'narwhals', 'cloudpickle', 'typing_extensions', 'cffi', 'pycparser', 'packaging'):
+    try:
+        datas += copy_metadata(_pkg)
+    except Exception:
+        pass
 binaries = []
 for pkg in ('webview', 'clr_loader', 'pythonnet'):
     try:
@@ -72,11 +87,12 @@ coll = COLLECT(
     name='NonLinearMapper',
 )
 
-# 案内文はexeと同じ階層（_internalの外）に置きたいが、COLLECT()へのTOC追加は
-# PyInstaller(6.x系)ではonedirでも_internal配下にまとめられてしまうため、
+# 案内文とライセンス（LICENSE・THIRD_PARTY_NOTICES.txt）はexeと同じ階層（_internalの外）に置きたいが、
+# COLLECT()へのTOC追加はPyInstaller(6.x系)ではonedirでも_internal配下にまとめられてしまうため、
 # ビルド後に直接コピーする（COLLECT完了後のこの位置なら毎回確実に反映される）。
+# ここに足した物は app_update.py の REPLACE_ITEMS にも足す（自動更新でも入れ替わるように）。
 import shutil
-_readme_src = os.path.join(HERE, 'はじめにお読みください.txt')
-_readme_dst = os.path.join(DISTPATH, 'NonLinearMapper', 'はじめにお読みください.txt')
-if os.path.isfile(_readme_src):
-    shutil.copy2(_readme_src, _readme_dst)
+for _name in ('はじめにお読みください.txt', 'LICENSE', 'THIRD_PARTY_NOTICES.txt'):
+    _src = os.path.join(HERE, _name)
+    if os.path.isfile(_src):
+        shutil.copy2(_src, os.path.join(DISTPATH, 'NonLinearMapper', _name))

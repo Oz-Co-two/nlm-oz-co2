@@ -233,26 +233,27 @@ def test_prefs_app_checkboxes(t):
         t.no_errors()
 
 def test_prefs_app_sliders(t):
-    '''アプリケーション設定のスライダー: 文字サイズ110%は bsnm_uiscale に1.1で保存され反映は再起動後（開き直すとメニューバー等のズームが1.1）。レーン構成を5:1にすると今のプロジェクトにすぐ反映され、bsnm_laneratio に保存されて次の新規プロジェクトの初期値にもなる'''
+    '''アプリケーション設定のスライダー: 文字サイズ110%は bsnm_uiscale に1.1で保存され反映は再起動後（開き直すとメニューバー等のズームが1.1）。ノーツのレーンの本数を5にすると今のプロジェクトにすぐ反映され（ライトは変わらない）、bsnm_noteLanes に保存されて次の新規プロジェクトの初期値にもなる'''
     with prefs_page(t) as ed:
         t.eq(ed.js("document.getElementById('menubar').style.zoom"), "1", "初期は等倍")
-        t.eq(ed.js("window._dbgApp.nle().lanes"), {"n": 3, "l": 3}, "レーンの初期は3:3")
+        t.eq(ed.js("window._dbgApp.nle().lanes"), {"n": 1, "l": 3}, "レーンの初期はノーツ1・ライト3")
+        t.eq(ed.js("document.getElementById('laneRatioVal').textContent"), "1", "設定画面の初期の表示")
         open_prefs(ed)
         prefs_set_number(ed, "uiSpd", 110)
         t.eq(ls(ed, "bsnm_uiscale"), "1.1", "文字サイズの保存")
         t.eq(ed.js("document.getElementById('menubar').style.zoom"), "1", "文字サイズの変更は再起動後に反映（ドラッグ中に実サイズを変えない）")
         prefs_set_number(ed, "laneRatio", 5)
         wait_until(ed, "window._dbgApp.nle().lanes.n===5", label="今のプロジェクトのレーン数")
-        t.eq(ed.js("window._dbgApp.nle().lanes"), {"n": 5, "l": 1}, "ノーツ5・ライト1")
-        t.eq(ed.js("document.getElementById('laneRatioVal').textContent"), "5 : 1", "表示")
-        t.eq(ls(ed, "bsnm_laneratio"), "5", "レーン構成の保存")
-        wait_mirrored(ed, "bsnm_uiscale", "bsnm_laneratio")
+        t.eq(ed.js("window._dbgApp.nle().lanes"), {"n": 5, "l": 3}, "ノーツ5・ライトは3のまま")
+        t.eq(ed.js("document.getElementById('laneRatioVal').textContent"), "5", "表示")
+        t.eq(ls(ed, "bsnm_noteLanes"), "5", "ノーツのレーンの本数の保存")
+        wait_mirrored(ed, "bsnm_uiscale", "bsnm_noteLanes")
         reload_keep(ed)
         t.eq(ed.js("document.getElementById('menubar').style.zoom"), "1.1", "開き直すと文字サイズが反映される")
-        t.eq(ed.js("window._dbgApp.nle().lanes"), {"n": 5, "l": 1}, "開き直した新しいプロジェクトのレーンの初期値")
+        t.eq(ed.js("window._dbgApp.nle().lanes"), {"n": 5, "l": 3}, "開き直した新しいプロジェクトのレーンの初期値")
         open_prefs(ed)
         t.eq((int(_val(ed, "uiSpd")), ed.js("document.getElementById('uiVal').textContent")), (110, "110"), "設定画面の文字サイズ")
-        t.eq((int(_val(ed, "laneRatio")), ed.js("document.getElementById('laneRatioVal').textContent")), (5, "5 : 1"), "設定画面のレーン構成")
+        t.eq((int(_val(ed, "laneRatio")), ed.js("document.getElementById('laneRatioVal').textContent")), (5, "5"), "設定画面のノーツのレーンの本数")
         t.no_errors()
 
 
@@ -501,11 +502,12 @@ def test_prefs_reset_all(t):
         prefs_toggle(ed, "invert3DScroll")
         prefs_tab(ed, "app")
         prefs_toggle(ed, "keysCommon")
+        ed.js("localStorage.setItem('bsnm_noteLanes','2')")   # ノーツのレーンの本数（スライダーは今のプロジェクトも変える＝未保存になり、開き直しで離れる確認が出るので値だけ）
         prefs_tab(ed, "keys")
         _remap(ed, "直前ノーツ表示 切替", "j")
         wait_until(ed, "!!localStorage.getItem('bsnm_keymap')", label="割り当ての保存")
         t.eq(ls_json(ed, "bsnm_vol")["m"], 20, "準備: 音量を変えた")
-        wait_mirrored(ed, "bsnm_vol", "bsnm_camspd", "bsnm_kc", "bsnm_keymap", "bsnm_invert3dscroll")
+        wait_mirrored(ed, "bsnm_vol", "bsnm_camspd", "bsnm_kc", "bsnm_keymap", "bsnm_invert3dscroll", "bsnm_noteLanes")
         t.eq(json.loads(mirror_json(ed)["bsnm_vol"])["m"], 20, "準備: ミラーも変わっている")
         ed.js("window.__mk=1")
         n0 = len([e for e in ed._events if e.get("method") == "Page.javascriptDialogOpening"])
@@ -513,9 +515,9 @@ def test_prefs_reset_all(t):
         _wait_reloaded(ed, "__mk")
         dialogs = [e["params"]["message"] for e in ed._events if e.get("method") == "Page.javascriptDialogOpening"]
         t.ok(len(dialogs) > n0 and "初回起動時の状態に戻します" in dialogs[-1], f"確認が出た: {dialogs[-1:]}")
-        store = {k: ls(ed, k) for k in ("bsnm_vol", "bsnm_camspd", "bsnm_kc", "bsnm_keymap", "bsnm_invert3dscroll", "bsnm_lang", "bsnm_laneratio")}
+        store = {k: ls(ed, k) for k in ("bsnm_vol", "bsnm_camspd", "bsnm_kc", "bsnm_keymap", "bsnm_invert3dscroll", "bsnm_lang", "bsnm_noteLanes")}
         t.eq(store, {"bsnm_vol": DEFAULTS["bsnm_vol"], "bsnm_camspd": None, "bsnm_kc": "1", "bsnm_keymap": None, "bsnm_invert3dscroll": None,
-                     "bsnm_lang": "ja", "bsnm_laneratio": "3"}, "初回起動時の値へ戻る（初期値の無い項目は消える）")
+                     "bsnm_lang": "ja", "bsnm_noteLanes": None}, "初回起動時の値へ戻る（初期値の無い項目は消える）")
         t.eq(mirror_json(ed), DEFAULTS, "config/settings.json も初期値と同じ内容")
         open_prefs(ed)
         t.eq((int(_val(ed, "volM")), _checked(ed, "keysCommon")), (50, True), "設定画面も初期値")

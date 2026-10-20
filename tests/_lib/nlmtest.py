@@ -109,9 +109,10 @@ class Ctx:
         if self.cov:
             self.cov.take(ed)   # 開き直すと記録が消えるので先に取り出す
         # 環境設定(bsnm_*)は一時のデータフォルダの config/settings.json にミラーされ、開き直すと読み戻される＝
-        # localStorage を消すだけでは前のテストの設定が漏れる。消して初期値（settings.default.json）から始める
+        # localStorage を消すだけでは前のテストの設定が漏れる。初期値（settings.default.json）＋テストの既定（cdp.Editor.TEST_SETTINGS＝
+        # 曲を読み込んでも「曲を解析しますか？」を出さない）に書き直してから始める
         try:
-            (Path(ed.data_dir) / "config" / "settings.json").unlink(missing_ok=True)
+            ed.seed_settings()
         except Exception:
             pass
         # MEDIA の記録したライブラリ（config/library.json）も消す＝前のテストで記録したフォルダが一覧に出ない

@@ -25,3 +25,6 @@ _backup_before_update_*/
 # テストの出力と画面の基準画像（手元だけ。tests/README.md）
 /test-out/
 /tests/visual/baseline/
+
+# GitHub のリリースに添付する物（LGPL の部品のソースなど。リリースのページに置くので履歴には入れない）
+/release-assets/

@@ -19,8 +19,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 このプロジェクトの一部（preview-v4/ 以下のプレビュー描画エンジン）は、
 GPLv3で公開されている ArcViewer (https://github.com/AllPoland/ArcViewer/)
 の移植を含むため、プロジェクト全体を GPLv3 とします。
-同梱する第三者コンポーネント（three.js等、MIT/BSD/Apache系）は GPLv3 と
-互換性があり、組み込んで問題ありません。詳細は THIRD_PARTY_NOTICES.txt を参照。
+同梱する第三者コンポーネント（three.js・pywebview・曲の解析の部品 librosa ほか。
+MIT/BSD/ISC/Apache-2.0/PSF/LGPL 等）は、いずれも GPLv3 のプログラムと組み合わせて
+配布できるライセンスです。各部品のライセンス文・著作権表示と、LGPL 等の部品のソースの
+入手先は THIRD_PARTY_NOTICES.txt を参照。
 
 =====================================================================
 

@@ -7,6 +7,7 @@ from app_update import Updater, UpdateError
 from media_library import MediaLibrary, LibError, RatingCache
 from song_details import SongDetails
 from beatsaver_api import BeatSaverLookup
+from song_analysis.service import AnalysisService, AnalysisError, MAX_UPLOAD as ANALYSIS_MAX_UPLOAD
 
 # BASE_DIR = Webコンテンツの置き場（読み取り専用でよい）。exe化(PyInstaller)ではバンドル展開先を渡す。
 # DATA_DIR = 書き込み対象（config/settings.json と asset/*.nlmclip）。exe化では exe と同居のユーザー書込み可フォルダを渡す。
@@ -38,6 +39,9 @@ LIBRARY = MediaLibrary(DATA_DIR, default_playdata=os.environ.get('NLM_PLAYDATA')
 SONG_DETAILS = SongDetails(DATA_DIR, app_root=BASE_DIR, opener=_NET)
 BEATSAVER = BeatSaverLookup(DATA_DIR, app_root=BASE_DIR, opener=_NET)
 RATING_CACHE = RatingCache(DATA_DIR)
+# 曲の解析（song_analysis/。2026-10-19）。音源は OS の一時フォルダの下の専用フォルダに置く（exe 隣の config/ ではない）。
+# NLM_ANALYSIS_DIR はその置き場の差し替え（テスト用）
+ANALYSIS = AnalysisService(os.environ.get('NLM_ANALYSIS_DIR') or None)
 
 def _safe(name):
     # ファイル名を安全化（パストラバーサル・不正文字の除去）。ディレクトリ部は捨てる
@@ -67,7 +71,7 @@ ALLOWED_HOSTS = {'127.0.0.1', 'localhost', '::1'} | {
 #    守る場所を列挙すると取りこぼす（asset/ 内のジャンクションで抜けられた）ので、返してよい物だけを列挙する。
 SESSION_TOKEN = secrets.token_urlsafe(32)
 PUBLIC_FILES = {'editor.html'}
-PUBLIC_DIRS = {'js', 'css', 'icons', 'fonts', 'preview-v4'}
+PUBLIC_DIRS = {'js', 'css', 'icons', 'fonts', 'preview-v4', 'guide'}   # guide＝画面の中の案内の画像（<img>。2026-10-20）
 
 
 def access_url(port, host='127.0.0.1'):
@@ -510,11 +514,63 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             return self._reply(200, {'ok': False, 'error': e.code, 'detail': e.detail})
         return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
 
+    _JSON_MAX = 16 * 1024 * 1024   # 解析の JSON の本体の上限（目盛り at は1曲で数百KB）
+
+    def _discard(self, n, cap=4 * 1024 ** 3):
+        """使わない本体を読み捨てる（合言葉を確かめた後の要求だけ。大きすぎる音源を断る時も応答が届くように。_drain の説明）"""
+        self._raw = b''
+        if not 0 < n <= cap:
+            return
+        try:
+            while n > 0:
+                d = self.rfile.read(min(n, 1 << 20))
+                if not d:
+                    break
+                n -= len(d)
+        except OSError:
+            pass
+
+    def _analysis(self):
+        # 曲の解析（song_analysis/service.py）。JS から受け取るのは音源のバイト列と拡張子・音源の id・目盛り・仕事の id だけ。
+        # 音源は中身のハッシュの名前で一時フォルダに置く（パスは受け取らない・返さない）。エラーは種類で返す（JS が訳す）
+        act = self.path.split('?', 1)[0][len('/__analysis/'):]
+        n = self._content_length()
+        try:
+            if act == 'upload':   # 本体＝音源のバイト列・?ext=mp3 等 → {audioId}
+                if n > ANALYSIS_MAX_UPLOAD:
+                    self._discard(n)
+                    raise AnalysisError('too-large')
+                ext = parse_qs(urlsplit(self.path).query).get('ext', [''])[0]
+                self._raw = b''   # 本体は store が最後まで読む（_reply の _drain に読ませない）
+                return self._reply(200, {'ok': True, 'audioId': ANALYSIS.store(self.rfile.read, n, ext)})
+            if n > self._JSON_MAX:
+                self._discard(n)
+                raise AnalysisError('too-large')
+            try:
+                b = self._body()
+            except ValueError:
+                raise AnalysisError('bad-request')
+            if not isinstance(b, dict):
+                raise AnalysisError('bad-request')
+            if act == 'tempo':
+                return self._reply(200, {'ok': True, 'job': ANALYSIS.start_tempo(b.get('audioId'))})
+            if act == 'structure':
+                return self._reply(200, {'ok': True, 'job': ANALYSIS.start_structure(b.get('audioId'), b.get('grid'))})
+            if act == 'status':
+                return self._reply(200, ANALYSIS.status(b.get('job')))
+            if act == 'cancel':
+                return self._reply(200, ANALYSIS.cancel(b.get('job')))
+        except AnalysisError as e:
+            return self._reply(200, {'ok': False, 'error': e.code})
+        return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
+
     def do_POST(self):
         self._raw = None   # 本体の読み込みは要求ごと（_raw_body）
         if not self._access_ok(write=True):
             return self._deny()
         try:
+            if self.path.split('?', 1)[0].startswith('/__analysis/'):   # 曲の解析（テンポ・構成）。詳細は _analysis
+                return self._analysis()
             if self.path == '/__settings/save':   # 環境設定(bsnm_*)を config/settings.json へ保存
                 b = self._body()
                 os.makedirs(CONFIG_DIR, exist_ok=True)

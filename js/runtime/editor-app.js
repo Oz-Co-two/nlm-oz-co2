@@ -33,11 +33,15 @@ import { installUpdater } from '../update/update-dialog.js';
 import { generateAutoLights, showAutoLightDialog } from '../lighting/auto-light.js';
 import { fitCoverImage, measureCoverFit, coverNeedsFix, coverFitSize, showCoverFitDialog } from '../media/cover-fit.js';
 import { measureLoudness, autoGain, AUTO_TARGET_LUFS, GAIN_MIN_DB, GAIN_MAX_DB } from '../audio/loudness.js';   // 曲の音量補正の「自動調整」（LUFS・トゥルーピークの測定）
+import { specLevelMags, specLevelFor, specColorLUT, specBuildTiles, drawSpecLevel, specMusicSpans, waveLevels, WAVE_MIN_PX } from '../audio/spectro-levels.js';   // スペクトログラム・Musicの波形の段の絵（縮小した時のちらつき対策・Musicの配置どおりに貼る・2026-10-20）
 import { libPost, libFileHandle, libDirHandle, dirOf as libDirOf, infoToV2, quickInfo, entryFromInfo, runScan, makeCoverLoader, nativeFilePath } from '../media/lib-native.js';   // MEDIAの記録したフォルダ（serve.py の /__lib/*）
 import { installLibTable, charName as libCharName } from '../media/lib-table.js';   // MEDIAの詳細表示（1行＝1難易度）・並べ替え・選択
 import { installLibFilter } from '../media/lib-filter.js';   // MEDIAの検索・絞り込み・件数
 import { installLibLayout } from '../media/lib-layout.js';   // MEDIAの見出しの行（帯の右へ並べる）・カタログの幅のドラッグ
 import { installLibOnline } from '../media/lib-online.js';   // MEDIAの全曲データ・🔍（BeatSaver）・★のまとめての計算・環境設定の MEDIA タブ
+import { linkDialog, linkBand, hideLinkBand } from '../nle/clip-link.js';   // リンクしたクリップの確認の画面と帯（2026-10-19）
+import { installSongAnalysis } from '../analysis/song-analysis.js';   // 曲の解析（テンポの推定・構成の解析）の画面側。解析は serve.py の /__analysis/*
+import { anaClipsDialog } from '../analysis/ana-clips.js';            // 解析からクリップを作る確認の画面（作るのは anaMakeClips）
 
 /**
  * Editor runtime — original closure (behavior-preserving).
@@ -304,6 +308,8 @@ const KEYS_NLE=[   // 右列（NLE）
   ['分割モード（クリックで分割）','R'],
   ['マージ','{nleMerge}'],
   ['ロック/ソロ/ミュート','{nleLock} / {nleSolo} / {nleMute}'],
+  ['単独編集（ノーツのレーン）','{nleEditOnly}'],
+  ['リンク / リンクして貼り付け','{nleLink} ／ {nleLinkPaste}'],
 ];
 const KEYS_NODE=[['新規ノード','🖱️ 右クリック'],['全ノードの中央へ','{jumpHead}']];   // 右列（INFO）
 // ================= ショートカット リマップ基盤（データ駆動・ヘルバ様指定 2026-07-15）=================
@@ -355,6 +361,9 @@ const ACTIONS=[
   {id:'nleLock',     cat:'nle',    label:'レーン ロック',         def:{k:'l'}},
   {id:'nleSolo',     cat:'nle',    label:'レーン ソロ',           def:{k:'s'}},
   {id:'nleMute',     cat:'nle',    label:'レーン ミュート',       def:{k:'m'}},
+  {id:'nleEditOnly', cat:'nle',    label:'レーン 単独編集',       def:{k:'e'}},   // マウスの下のノーツのレーンの単独編集を入/切（Ctrl+E はマーカー挿入＝別物）
+  {id:'nleLink',     cat:'nle',    label:'クリップをリンク',      def:{k:'k'}},   // 選んだクリップをリンクする（2026-10-19。L/S/M/E と同じ並びの空きキー）
+  {id:'nleLinkPaste',cat:'nle',    label:'リンクして貼り付け',    def:{k:'v', c:true, s:true}},
 ];
 const ACT_BY_ID={}; for(const a of ACTIONS) ACT_BY_ID[a.id]=a;
 function actLabel(a){ return a&&a.id?t('act.'+a.id,a.label):((a&&a.label)||''); }   // ショートカット編集に出す操作名（言語に合わせる）
@@ -605,7 +614,7 @@ numStrip.raycast=()=>{};   // クリックでの拍ジャンプ/ドラッグス�
 // スペクトログラム表示帯: 拍番号帯(-NUMX)とは反対側＝ノーツ床の外側に、ノーツ配置空間(2*NOTE_EDGE)の
 // 約70%の幅で表示する（拍番号帯は奥で見づらい・帯自体も細すぎるとのヘルバ様指摘 2026-09-21）。
 // 帯とレーン床の隙間は拍番号帯と同じNUM_GAPを踏襲して見た目を揃える。
-let specForBuf=null, specMag=null, specBins=56, specHop=0, specCols=0, specSrcCanvas=null;   // 解析結果本体はbuildSpectroData（波形データ節）で埋める
+let specForBuf=null, specMag=null, specBins=56, specHop=0, specCols=0, specTiles=null;   // 解析結果本体はbuildSpectroData（波形データ節）で埋める。specTiles=[段][タイル]（2D の帯の絵）
 const SPEC_W=0.7*(2*NOTE_EDGE);
 const SPEC_X=NOTE_DX-NOTE_EDGE-NUM_GAP-SPEC_W/2;
 const specGeo=new THREE.PlaneGeometry(SPEC_W,40*ZPB); specGeo.rotateX(-Math.PI/2);
@@ -613,14 +622,16 @@ const specBand=new THREE.Mesh(specGeo,new THREE.MeshBasicMaterial({color:0x2a2a3
 specBand.renderOrder=5; specBand.position.set(SPEC_X,0.018,0); scene.add(specBand);
 specBand.raycast=()=>{};   // 表示専用（拍ジャンプ等の当たり判定は持たせない。numStripと同じ流儀）
 // ウィンドウ切り出し用の小さなcanvas。specMag(生の解析結果)から直接、周波数=横軸(u)・時間=縦軸(v)で書き込む
-// （specSrcCanvasは2D側の横長表示用に周波数=縦・時間=横で持っているため、そのままdrawImageすると軸が入れ替わってしまう＝
+// （specTilesは2D側の横長表示用に周波数=縦・時間=横で持っているため、そのままdrawImageすると軸が入れ替わってしまう＝
 //   曲頭の解析時点で気付けなかった不具合。ここではspecMagから直接、正しい軸でピクセルを書く）
 const _specWinCanvas=document.createElement('canvas'); _specWinCanvas.width=specBins; _specWinCanvas.height=2400;   // 2D側に見劣りしないよう表示解像度を確保（解析自体の細かさはspecHopのまま変えない＝表示だけを上げる）
 const _specWinCtx=_specWinCanvas.getContext('2d');
 const _specWinTex=new THREE.CanvasTexture(_specWinCanvas); _specWinTex.anisotropy=MAXANISO;
 _specWinTex.generateMipmaps=false; _specWinTex.minFilter=THREE.LinearFilter;   // ミップマップ(縮小時に複数解像度を混ぜる)が帯を斜めに見た時の色をぼかして薄く見せていた原因。
                                                                                 // 生成をやめて等倍サンプリングにする＝2Dタイムラインと同じ鮮やかさで見えるように（ヘルバ様指摘 2026-09-21）
-let _specWinKey=null;
+let _specWinKey=null, _specWinMag=null, _specWinCols=null;   // _specWinCols=行ごとの元の刻みのコマ（-1=音の無い所。開発用窓口 _dbgApp.spec() のテスト用）
+/** 拍→元の音源の秒の対応が変わったかの印（BPM・テンポパート・Musicの配置・無音追加）。3D の帯は止まっている間にこれが変わった時も描き直す */
+function specMapSig(){ return BPM+'|'+tempoParts.map(p=>p.beat+':'+p.bpm).join()+'|'+musicPieces().map(p=>p.join(':')).join(); }
 // centerB=テクスチャの中心にする拍（再生ヘッド）/ viewB=3Dワールドの座標基準（拍番号・ノーツのzと同じ）。
 // テクスチャは「量子化した中心拍(cB)±20拍」を焼き、帯自体は (cB-viewB)*ZPB に置く＝画像は拍と同じワールド座標に固定され、
 // 再生中は拍番号・ノーツと一緒に流れる（旧: 帯を再生ヘッドのzへ動かしていたため画像が赤ラインと共に動き、実際の音の位置とズレた）。
@@ -630,22 +641,21 @@ function updateSpecBand(centerB,viewB){
     specBand.position.z=(centerB-viewB)*ZPB;
     return;
   }
-  const key=Math.round(centerB*4);   // 1/4拍単位で変化した時だけ書き直す（毎フレームのputImageData/テクスチャアップロードを間引く）
-  const cB=key/4;
+  const qb=Math.round(centerB*4);   // 1/4拍単位で変化した時だけ書き直す（毎フレームのputImageData/テクスチャアップロードを間引く）
+  const cB=qb/4, key=qb+'|'+specMapSig();   // 止まっている間に Musicを動かす・切る・無音追加・BPM を変えた時も描き直す
   specBand.position.z=(cB-viewB)*ZPB;
-  if(key!==_specWinKey){
-    _specWinKey=key;
-    const off=getSongOff();
+  if(key!==_specWinKey||specMag!==_specWinMag){
+    _specWinKey=key; _specWinMag=specMag;
     const winW=_specWinCanvas.width, winH=_specWinCanvas.height;
-    const imgd=_specWinCtx.createImageData(winW,winH);
+    const imgd=_specWinCtx.createImageData(winW,winH), cols=_specWinCols=new Int32Array(winH);
     for(let j=0;j<winH;j++){   // j=拍位置を等間隔に割ったサンプル（0=cB-20側…winH-1=cB+20側）。v軸(canvas縦)→world Z(帯の長さ方向)
-      const beat=(cB-20)+40*(j+0.5)/winH,   // 画素の中心が指す拍（端の画素を端の拍そのものにすると全体が半画素ずれる）
- tt=off+beatToTimeTM(beat);   // 拍→時間は区分的（テンポパート境界を跨ぐと非線形）なので、
-                                                                          // 窓の両端だけで時間を線形補間すると境界付近でズレる＝1行ごとに正しく変換する
-      const inRange=(tt>=0&&tt<=songDur);
-      const col=Math.max(0,Math.min(specCols-1,Math.round(tt/specHop)));
+      const beat=(cB-20)+40*(j+0.5)/winH;   // 画素の中心が指す拍（端の画素を端の拍そのものにすると全体が半画素ずれる）
+      // その拍に鳴る元の音源の秒＝再生と同じ（Musicの配置・分割・トリム・無音追加・テンポパートを考慮。拍→秒は区分的なので1行ごとに変換する）。
+      // 音の無い所（クリップの無い所・無音追加・音源の外）は null
+      const p=audioPosAtBeat(beat,true);
+      const col=cols[j]=p==null?-1:Math.max(0,Math.min(specCols-1,Math.round(p/specHop)));
       for(let f=0;f<winW;f++){   // f=周波数ビン。u軸(canvas横)→world X(帯の幅方向)
-        const v=inRange?specMag[col*specBins+f]:0;   // 無音追加などで曲の範囲外になった部分は真っ黒（無音）にする
+        const v=col>=0?specMag[col*specBins+f]:0;   // 音の無い所は真っ黒（無音）にする
         const [r,g,b]=specColor(v);
         const fx=winW-1-f;   // 左右反転（ノーツ側の端と外側の端を入れ替え。ヘルバ様指定 2026-09-21）
         const idx=(j*winW+fx)*4; imgd.data[idx]=r; imgd.data[idx+1]=g; imgd.data[idx+2]=b; imgd.data[idx+3]=255;
@@ -988,6 +998,7 @@ function placeLight(){
   const i=lightValue(kind), f=kind==='color'?lightBrush.f:1;
   const chroma=(chromaMode&&kind==='color'&&i>0)?hexToRgb01(brushChromaHex()):null;   // クロマ色を付与（バニラモードOFF時はnull＝customData.colorを書かない＝バニラ配色・ヘルバ様指定 2026-07-13）
   const ex=lightEvents.find(ev=>ev.et===ln.t&&Math.abs(ev.beat-b)<1e-4);
+  { const kid=ex?(linkRoL(ex)?linkKidAt('l',ex._tr,ex.beat):null):linkPlaceBlock(b,'l'); if(kid){ linkBandKid(kid); return; } }   // リンクの子のライト・子の範囲＝置かずに帯
   if(ex){ snapshot('light'); ex.i=i; ex.f=f; setLightChroma(ex,chroma); }
   else { const {tr,made}=placeTrackHist(b,'l','light');   // EDIT配置ルールでライトクリップを決定（無→作成／選択優先／一番下／全ロック→上）。自動で作る時はクリップ・レーンごと1つの履歴（placeAtと同じ）
     if(tr<0){ stat('⚠ ライトを置けません（ライトレーンが全てロック/最大です）'); return; }   // 置けない時は履歴も積まない（以前は先に積んでいて Undo が空振りした）
@@ -1039,7 +1050,8 @@ function applyLightMove(){
   const dl=lightHover.lane-lightMove.l0;
   let db=lightHover.beat-lightMove.b0;
   const fits=k=>lightMove.orig.every(o=>{ const nb=o.beat+k;   // 全員が元のボックス範囲内に収まる移動量までクランプ（相対間隔は維持）
-    return nb>=-1e-9&&(!o.rng||(nb>=o.rng.b0-1e-6&&nb<o.rng.b1-1e-6)); });
+    return nb>=-1e-9&&(!o.rng||(nb>=o.rng.b0-1e-6&&nb<o.rng.b1-1e-6))
+      &&!(k&&linkKidsCur().length&&linkMoveBlocked('l',o.ev._tr||0,o.beat,nb)); });   // リンクの子の中へは入れない・飛び越えない
   while(db!==0&&!fits(db)){ db-=Math.sign(db)*Math.min(Math.abs(db),Math.max(snap,1e-3)); if(Math.abs(db)<1e-9) db=0; }
   for(const o of lightMove.orig){
     o.ev.beat=Math.max(0,o.beat+db);
@@ -1215,7 +1227,7 @@ function buildWaveData(){
 }
 
 // ---- スペクトログラム（拍番号帯に重ねる周波数解析。BPMグリッドと実際の音のズレ確認・オンセット視認用） ----
-// 生波形の絶対時間軸で1回だけ解析し、オフスクリーンcanvasへ焼き込む（specSrcCanvas）。
+// 生波形の絶対時間軸で1回だけ解析し、オフスクリーンcanvasへ焼き込む（specTiles。縮小用の段の絵も一緒に・js/audio/spectro-levels.js）。
 // 表示側（3D specBand / 2D specPane）は、現在のウィンドウ分だけこの画像を切り出すだけ＝毎フレームのコストは軽い。
 // ※ specBins等の状態変数は3D初期化ブロック（specBandの定義）より前で参照されるため、そちらの直前で宣言する
 //   （このモジュールはconst/letのTDZに引っかかると起動直後に画面が真っ暗になる＝2026-09-21に実際に踏んだ不具合）。
@@ -1261,8 +1273,9 @@ function specColor(v){
   const s0=SPEC_STOPS[i], s1=SPEC_STOPS[i+1], f=(v-s0[0])/((s1[0]-s0[0])||1);
   return [Math.round(s0[1]+(s1[1]-s0[1])*f), Math.round(s0[2]+(s1[2]-s0[2])*f), Math.round(s0[3]+(s1[3]-s0[3])*f)];
 }
+let _specLUT=null;   // specColor の表（タイルを焼く時だけ使う）
 function buildSpectroData(){
-  specMag=null; specSrcCanvas=null;
+  specMag=null; specTiles=null;
   if(!audioBuf) return;
   try{
     const sr=audioBuf.sampleRate, ch=audioBuf.getChannelData(0);
@@ -1293,26 +1306,17 @@ function buildSpectroData(){
       const db=20*Math.log10((mag[i]/maxV)+1e-6);
       mag[i]=Math.max(0,Math.min(1,(db+60)/60));
     }
-    const cv=document.createElement('canvas'); cv.width=cols; cv.height=specBins;
-    const cg=cv.getContext('2d'); const imgd=cg.createImageData(cols,specBins);
-    for(let c=0;c<cols;c++){
-      for(let b=0;b<specBins;b++){
-        const [r,g,bch]=specColor(mag[c*specBins+b]);
-        const py=specBins-1-b, idx=(py*cols+c)*4;   // b=0(低域)を画像の下端に=スペクトログラムの慣習通り
-        imgd.data[idx]=r; imgd.data[idx+1]=g; imgd.data[idx+2]=bch; imgd.data[idx+3]=255;
-      }
-    }
-    cg.putImageData(imgd,0,0);
-    specMag=mag; specSrcCanvas=cv;   // specMagは正規化済み(0〜1)。3D側(updateSpecBand)はこれを直接specColorに渡せる
-  }catch(e){ console.warn('スペクトログラム解析に失敗',e); specMag=null; specSrcCanvas=null; }
-}
-function specTimeRange(b0,b1){   // 拍区間[b0,b1)→生音声の時間軸での列範囲（オフセット/無音追加を含めた実時間）
-  const off=getSongOff();
-  return [off+beatToTimeTM(b0), off+beatToTimeTM(b1)];
+    // 2D の帯の絵: 元の刻みと、時間方向に2コマずつまとめた段（2倍・4倍…）を、横幅を区切ったタイルに焼く（b=0=低域が下端）。
+    // 段は縮小した時のちらつき対策（drawSpecPane）。絵は生の音源の秒に固定＝BPM・無音追加・テンポパート・Musicの配置・窓の大きさが変わっても作り直さない
+    if(!_specLUT) _specLUT=specColorLUT(specColor);
+    specTiles=specBuildTiles(specLevelMags(mag,cols,specBins),specBins,_specLUT);
+    specMag=mag;   // specMagは正規化済み(0〜1)。3D側(updateSpecBand)はこれを直接specColorに渡せる
+  }catch(e){ console.warn('スペクトログラム解析に失敗',e); specMag=null; specTiles=null; }
 }
 
 // ---- 全体タイムライン + セクションタグ ----
 let ovWave=null, ovWaveLen=0, ovBeats=0;
+let _ovWaveLv=null, _ovWaveLvFor=null;   // ovWave の段（waveLevels）と、作った時の ovWave（作り直しの判定。ovWave が作り直されたら次の描画で作る）
 let sections=[];            // {beat,label} 昇順管理
 const SEC_COLORS=['#56ffc1','#ffd82d','#ff2d55','#6cf06c','#8160e3','#ff9d3d','#4dc8ff','#ff6da8'];
 const ovcv=document.getElementById('ovcv'), ovg=ovcv.getContext('2d');
@@ -1329,29 +1333,27 @@ let specPaneW=0, specPaneH=0;
 function specResize(){ const r=speccv.getBoundingClientRect();
   specPaneW=r.width; specPaneH=r.height; speccv.width=specPaneW*devicePixelRatio; speccv.height=specPaneH*devicePixelRatio;
   specg.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0); }
+let _specLast=null;   // 最後の描画で貼った区間（開発用窓口 _dbgApp.spec() のテスト用）
 function drawSpecPane(curV){   // ovcvと同じ窓(TLGUT基準)で、切り出したスペクトログラムを表示する
   if(!specPaneW) return;
   specg.clearRect(0,0,specPaneW,specPaneH);
   specg.fillStyle='#0c0c0e'; specg.fillRect(0,0,specPaneW,specPaneH);
   const win=tlWindow(curV);
   const x=b=>TLGUT+(b-win.b0)/win.span*(specPaneW-TLGUT);
-  if(specSrcCanvas){
-    // drawImageは1回につき直線的な拡縮しかできないため、窓内にテンポパートの境界があるとその区間だけ実際の
-    // 時間とズレて描画されてしまう（拍→時間が区分的にしか変換できないため）。境界ごとに区切って個別に描く。
-    const bEnd=win.b0+win.span;
-    const bps=[win.b0,...tempoParts.map(p=>p.beat).filter(b=>b>win.b0+1e-6&&b<bEnd-1e-6).sort((a,b)=>a-b),bEnd];
-    for(let i=0;i<bps.length-1;i++){
-      const [t0,t1]=specTimeRange(bps[i],bps[i+1]);
-      const u0=t0/specHop, u1=t1/specHop;   // クランプ前の列位置（音源の範囲外を含む）
-      const cc0=Math.max(0,Math.min(specCols,u0)), cc1=Math.max(0,Math.min(specCols,u1));
-      if(cc1<=cc0||u1<=u0) continue;
-      const fx0=x(bps[i]), fx1=x(bps[i+1]);
-      if(fx1<=fx0) continue;
-      // 音源の端を越えた分は描かない。切り詰めた列範囲に比例して描画先も切り詰める（しないと残りが窓幅いっぱいに引き伸ばされる）
-      const k=(fx1-fx0)/(u1-u0);
-      const dx0=fx0+(cc0-u0)*k, dx1=fx0+(cc1-u0)*k;
-      specg.drawImage(specSrcCanvas,cc0,0,cc1-cc0,specBins,dx0,0,dx1-dx0,specPaneH);
+  _specLast=null;
+  if(specTiles){
+    // 実際に鳴る音（再生 play・書き出す song.egg と同じ切り貼り表 musicPieces）どおりに貼る: Musicの開始位置・分割・トリム・並べ替え・無音追加を反映し、
+    // 音の無い所（クリップの無い所・無音追加）は描かない。drawImageは1回につき直線的な拡縮しかできないので、Musicの区間とテンポパートの境界ごとに
+    // 区切って個別に描く（specMusicSpans。区間の端は実画素に揃える＝継ぎ目に線が出ない）。
+    // 区間ごとに、1コマが画面で1画素以上になる段を選んで拡大して貼る（縮小して貼ると、表示が少しずれるたびに拾うコマが変わってちらつく）
+    const dpr=devicePixelRatio;
+    const spans=specMusicSpans(win.b0,win.b0+win.span,TLGUT,specPaneW,musicPieces(),beatToTimeTM,timeToBeatTM,tempoParts.map(p=>p.beat),specHop,specCols,dpr);
+    for(const sp of spans){
+      const k=(sp.dx1-sp.dx0)/(sp.u1-sp.u0);   // 元の1コマの画面の幅（CSS px）
+      const L=specLevelFor(k*dpr,specTiles.length), s=2**L; sp.L=L;
+      drawSpecLevel(specg,specTiles[L],sp.u0/s,sp.u1/s,sp.dx0,sp.dx1,0,specPaneH);
     }
+    _specLast=spans;
   }
   drawMetroLines(specg,speccv,win,x);   // メトロノームON時の拍頭ライン
 }
@@ -1495,12 +1497,23 @@ function drawOverview(curV){
       ovg.fillStyle='rgba(46,143,143,.08)'; ovg.fillRect(px0,0,px1-px0,ovH);            // 透明ティールの地（テーマaudio_strip #2e8f8f）
       const mid=(ovH+hdr)/2, amp=(ovH-hdr)/2*0.82;                                        // 波形（グレー・ヘッダー下、音源内オフセット対応）
       ovg.fillStyle='rgba(150,160,175,.55)';
-      for(let x=Math.max(TLGUT,Math.ceil(bx0));x<cx1;x++){ const rb=xToBeat(x)-sg.beat;
-        if(rb<0||rb>=segBeats) continue;
-        const p=(sg.off+(beatToTimeTM(sg.beat+rb)-beatToTimeTM(sg.beat)))/effD;
-        if(p<0||p>=1) continue;   // 音源の範囲外=無音（トリムで伸ばした部分は波形なし）
-        const v=ovWave[Math.min(ovWaveLen-1,(p*ovWaveLen)|0)];
-        const h=Math.max(1,Math.pow(v,0.8)*amp); ovg.fillRect(x,mid-h,1,h*2); }
+      // 波形はビン（音源の秒に固定）の境目で段になる形を1つの図形で塗る。縮小して1画素に何ビンも入る時は、ビンを最大値でまとめた段
+      // （1ビンが1画素以上になる段）を使う。以前は1画素ごとにビンを1つ拾っていたため、再生中のスクロールで拾うビンが変わってちらついた
+      if(_ovWaveLvFor!==ovWave){ _ovWaveLvFor=ovWave; _ovWaveLv=waveLevels(ovWave); }
+      const tS0=beatToTimeTM(sg.beat), xL=Math.max(TLGUT,bx0);
+      const eAt=x=>sg.off+beatToTimeTM(xToBeat(x))-tS0;              // 画面のx → 波形の秒（ovWave の時間軸）
+      const xAtE=e=>beatToX(timeToBeatTM(tS0+e-sg.off));
+      const eL=eAt(xL), eR=eAt(cx1), e0=Math.max(0,sg.off,eL), e1=Math.min(effD,sg.off+sg.dur,eR);   // 音源の範囲外=無音（トリムで伸ばした部分は波形なし）
+      if(e1>e0&&eR>eL){
+        const bd0=effD/ovWaveLen, L=specLevelFor((cx1-xL)/((eR-eL)/bd0)*devicePixelRatio,_ovWaveLv.length,WAVE_MIN_PX,WAVE_MIN_PX), lv=_ovWaveLv[L], bd=bd0*2**L;
+        const j0=Math.max(0,Math.floor(e0/bd)), j1=Math.min(lv.length,Math.ceil(e1/bd));
+        const xs=new Float64Array(j1-j0+1); for(let j=j0;j<=j1;j++) xs[j-j0]=xAtE(j*bd);
+        const hOf=j=>Math.max(1,Math.pow(lv[j],0.8)*amp);
+        ovg.beginPath(); ovg.moveTo(xs[0],mid);
+        for(let j=j0;j<j1;j++){ const h=hOf(j); ovg.lineTo(xs[j-j0],mid-h); ovg.lineTo(xs[j-j0+1],mid-h); }
+        for(let j=j1-1;j>=j0;j--){ const h=hOf(j); ovg.lineTo(xs[j-j0+1],mid+h); ovg.lineTo(xs[j-j0],mid+h); }
+        ovg.closePath(); ovg.fill();
+      }
       ovg.fillStyle=seld?'rgba(46,143,143,.60)':'rgba(46,143,143,.32)'; ovg.fillRect(px0,0,px1-px0,hdr);   // ラベルヘッダー
       ovg.fillStyle='#d8f0f0'; ovg.font='bold 10px '+FONT; ovg.textAlign='left'; ovg.textBaseline='middle';
       ovg.fillText('♪ '+((songNode&&songNode.name)||'Music'),bx0+7,hdr/2+0.5);
@@ -1706,7 +1719,7 @@ function deleteMusic(){
   graphEdges=graphEdges.filter(e2=>e2.sig!=='audio');   // 音源配線も掃除（あれば）
   songNode=null; songDeleted=true;                       // ensureGraphIOの自動復活を止める
   audioBuf=null; ovWave=null; ovWaveLen=0; ovBeats=0; cur=0; offset=0; musicSegs=null; musicSelSet=new Set(); musicBeat=0;
-  specMag=null; specSrcCanvas=null; specForBuf=null;
+  specMag=null; specTiles=null; specForBuf=null;
   metaDirty=true; stat('Music（音源）を削除しました（Musicレーンをクリックで再読み込み）');
 }
 function createFullSongClip(lk){   // 曲の全幅クリップを lk レーンの「一番下(Layer1)の空きトラック」に作成→section。空き無しならnull
@@ -2180,10 +2193,7 @@ async function loadCoverPreview(n){
   if(c&&c.key===key) return;
   _coverImgs.set(n.id,{key,bmp:(c&&c.bmp)||null});   // 先にkeyを立てて多重ロード防止
   let file=null;
-  try{
-    if(n.handle) file=await n.handle.getFile();
-    else if(n.name&&files[(n.name||'').toLowerCase()]) file=files[n.name.toLowerCase()];
-  }catch(e){}
+  try{ if(n.handle) file=await n.handle.getFile(); }catch(e){}
   let bmp=null;
   if(file){ try{ bmp=await createImageBitmap(file); }catch(e){} }
   const now=_coverImgs.get(n.id); if(now&&now.key!==key) return;   // 読込中に別の画像へ替わった＝古い結果で上書きしない
@@ -2348,7 +2358,7 @@ function ensureGraphIO(){
     songNode={nx:(graphIO.in.nx+graphIO.out.nx)/2, ny:Math.max(graphIO.in.ny,graphIO.out.ny)+170, name:''};
   }
 }
-// 曲フォルダからの新規読込時の基本構成（INPUT / Song / MUSIC / INFO / COVER / OUTPUT）
+// プロジェクト無し（applyProject(null)。今は画面からは通らず、テストが新規の代わりに使う）の基本構成（INPUT / Song / MUSIC / INFO / COVER / OUTPUT）
 function buildDefaultGraph(){
   const ordered=[...sections].sort((a,b)=>a.beat-b.beat);
   ordered.forEach((s2,i)=>{ s2.nx=300+i*(ND_W+60); s2.ny=90; });
@@ -2358,11 +2368,7 @@ function buildDefaultGraph(){
   extraNodes=[]; graphEdges=[]; edgesInited=false;
   const inf=createExtra('info',outX-ENW-120,10);       // info.datの内容はcreateExtraが取り込む
   const cov=createExtra('cover',outX-ENW-120,350);
-  if(infoBase&&infoBase._coverImageFilename){
-    cov.name=infoBase._coverImageFilename;
-    const h=handles[(cov.name||'').toLowerCase()];
-    if(h&&h.getFile) cov.handle=h;
-  }
+  if(infoBase&&infoBase._coverImageFilename) cov.name=infoBase._coverImageFilename;
   graphEdges.push({fromId:inf.id,toId:'out',sig:'info'},{fromId:cov.id,toId:'out',sig:'cover'});
 }
 // 音源ファイルを開く（主要な音楽形式に対応）
@@ -2378,6 +2384,13 @@ async function applyLoadedSong(buf,name,keep=false){
   if(!keep){ cur=0; offset=0; musicSegs=null; musicSelSet=new Set(); }
   songDeleted=false; ensureGraphIO(); if(songNode) songNode.name=name; metaDirty=true;
 }
+// 曲を取り込んだ時の「曲を解析しますか？」（2026-10-20・画面と出す条件は js/analysis/song-analysis.js の songLoaded）。
+// 呼ぶのは利用者の操作で新しく曲を取り込んだ時だけ: 音楽ファイルを読み込む（openSongFile/openSongFileNative）・MEDIA から Music へ（loadSongFromItem）・
+// 曲データを読み込む（bulkLoadSongData の最後）。プロジェクトを開いた時の自動読込（keep=true）・
+// 再接続（restoreLineAssets・下の songReconnect）・ドラッグ中の波形の先読み（prepareMediaWave）では呼ばない
+function anaAfterLoad(){ if(songAna) songAna.songLoaded(); }
+/** 取り込む前に: 音源が読めていないプロジェクトへ、保存してある曲と同じ名前の音源を選び直した＝再接続（解析するかは聞かない） */
+function songReconnect(name){ return !audioBuf&&!songDeleted&&!!(songNode&&songNode.name)&&songNode.name===name; }
 // pywebviewのネイティブダイアログ経由: 実パスをsongNode.nativePathへ保存＝次回はダイアログ無しで自動読込できる
 async function openSongFileNative(){
   let path; try{ path=await window.pywebview.api.pick_song_file(); }catch(e){ path=null; }
@@ -2385,9 +2398,11 @@ async function openSongFileNative(){
   try{
     const j=await window.pywebview.api.read_song_file(path);
     if(!j||!j.ok) throw new Error((j&&j.error)||'read failed');
+    const re=songReconnect(j.name);
     await applyLoadedSong(b64ToBuf(j.data),j.name);
     if(songNode){ songNode.nativePath=path; songNode.handle=null; }
     showOk(tf('msg.loadedAudio','音源を読み込みました: {name}（{dur}秒）',{name:j.name,dur:songDur.toFixed(1)}));
+    if(!re) anaAfterLoad();
   }catch(err){ showErr(tf('msg.loadAudioFail','音源の読込に失敗: {err}',{err})); }
 }
 async function openSongFile(){
@@ -2400,12 +2415,14 @@ async function openSongFile(){
   _pickOpen=null;
   try{
     const f=await fh.getFile();
+    const re=songReconnect(f.name);
     await applyLoadedSong(await f.arrayBuffer(),f.name);
     if(songNode){ songNode.handle=fh; songNode.nativePath=''; }
     showOk(tf('msg.loadedAudio','音源を読み込みました: {name}（{dur}秒）',{name:f.name,dur:songDur.toFixed(1)}));
+    if(!re) anaAfterLoad();
   }catch(err){ showErr(tf('msg.loadAudioFail','音源の読込に失敗: {err}',{err})); }
 }
-// 右下表示用のジャケット（COVERノードのhandle優先、無ければ曲フォルダ内のカバーファイル）
+// 右下表示用のジャケット（OUTPUTへ配線中のCOVERノードのhandle。無ければ出さない）
 let _coverURL=null, _coverKey='';
 async function updateCoverThumb(){
   const img=document.getElementById('siCover');
@@ -2416,10 +2433,7 @@ async function updateCoverThumb(){
   if(key===_coverKey) return;
   _coverKey=key;
   let file=null;
-  try{
-    if(covN&&covN.handle) file=await covN.handle.getFile();
-    else if(fname&&files[fname.toLowerCase()]) file=files[fname.toLowerCase()];
-  }catch(e){}
+  try{ if(covN&&covN.handle) file=await covN.handle.getFile(); }catch(e){}
   if(_coverURL){ URL.revokeObjectURL(_coverURL); _coverURL=null; }
   if(file){ _coverURL=URL.createObjectURL(file); img.src=_coverURL; img.style.display=''; }
   else { img.removeAttribute('src'); img.style.display='none'; }
@@ -2463,7 +2477,7 @@ ndcv.addEventListener('contextmenu',e=>{ e.preventDefault();
       ...markerMenuTop(),
       [tf('ctx.laneAdd','＋ {grp}レーンを追加（一番上に）',{grp:grpName}),()=>{
         if(laneCountOf(la.lk)>=LANE_MAX){ showErr(tf('msg.laneMax','{grp}レーンは最大{max}本です',{grp:grpName,max:LANE_MAX})); return; }
-        snapshot('node'); if(la.lk==='n') notesLanes++; else lightLanes++;
+        flushFlatEdits(); snapshot('diffs'); if(la.lk==='n') notesLanes++; else lightLanes++;   // 全難易度のクリップがずれる＝全難易度の履歴（'node' だと Undo で他の難易度のクリップが1段ずれたまま残った）
         laneShiftAll(la.lk,1);   // 既存クリップは番号維持のまま1段下がる（=下1固定・上に空きレーン）
         metaDirty=true; stat(tf('msg.laneAdded','{grp}レーンを追加しました（{n}本）',{grp:grpName,n:laneCountOf(la.lk)})); }],
       [tf('ctx.laneDel','－ {grp}レーンを削除（一番上・空のみ）',{grp:grpName}),()=>{
@@ -2473,7 +2487,7 @@ ndcv.addEventListener('contextmenu',e=>{ e.preventDefault();
           for(const k in projDiffs){ if(k===curK) continue; const st=projDiffs[k];
             if(st&&(st.sections||[]).some(s2=>secLk(s2)===la.lk&&(s2.track||0)===0)){ hit=st.name||k; break; } }
           if(hit){ showErr(tf('msg.laneTopOtherDiff','一番上のレーンに他の難易度（{diff}）のクリップがあるため削除できません',{diff:dispDiff(String(hit).replace(/Standard\.dat$/i,''))})); return; } }
-        snapshot('node'); if(la.lk==='n') notesLanes--; else lightLanes--;
+        flushFlatEdits(); snapshot('diffs'); if(la.lk==='n') notesLanes--; else lightLanes--;   // 追加と同じく全難易度の履歴
         laneShiftAll(la.lk,-1);
         setScr(la.lk,scrOf(la.lk)); metaDirty=true;
         stat(tf('msg.laneDeleted','{grp}レーンを削除しました（{n}本）',{grp:grpName,n:laneCountOf(la.lk)})); }],
@@ -2485,17 +2499,18 @@ ndcv.addEventListener('contextmenu',e=>{ e.preventDefault();
       [t('ctx.editLabel','ラベルを変更…'),()=>{ const x=lBeatToX(s.beat||0), w=(s.len||4)*lPPB(), y=laneY(secLk(s),s.track||0)+4;   // ダブルクリックの改名と同じ位置（以前はノーツのレーン前提の計算で、ライトのクリップだとノーツのレーンに出ていた）
         const gx=Math.max(LGUT,x);
         ndInlineEdit({x:gx+2,y,w:Math.min(x+w,ndW)-gx-4,h:16},s.label||'',nm=>{
-          if(nm.trim()){ snapshot('node'); if(!s.gid) s.gid='g'+(++_nid); const r0=clipRef(s);
-            s.label=nm.trim(); metaDirty=true; } }); }],
-      [t('ctx.editColor','色を変更…'),()=>{ ndColorEdit(stripColOf(s),hex=>{ snapshot('node'); if(!s.gid) s.gid='g'+(++_nid);
-          s.colHex=hex; metaDirty=true; },{x:sx,y:sy,h:0}); }],   // ヘッダーの色スウォッチと同じピッカー
+          if(nm.trim()){ clipHist(s); if(!s.gid) s.gid='g'+(++_nid); const r0=clipRef(s);
+            s.label=nm.trim(); linkCopyProps(s); metaDirty=true; } }); }],
+      [t('ctx.editColor','色を変更…'),()=>{ ndColorEdit(stripColOf(s),hex=>{ clipHist(s); if(!s.gid) s.gid='g'+(++_nid);
+          s.colHex=hex; linkCopyProps(s); metaDirty=true; },{x:sx,y:sy,h:0}); }],   // ヘッダーの色スウォッチと同じピッカー
       ['---'],
+      ...linkClipMenu(s),   // リンク（リンクする・解除・親へジャンプ・これを親にする・他の難易度とリンク）
       [t('ctx.mirrorClip','左右反転'),()=>mirrorClip(s)],   // クリップの中身を左右ミラー＋色反転
       ['---'],
       [t('ctx.cutByMarkers','マーカーでカット'),()=>cutClipAtMarkers(s)],   // クリップ内の全マーカー拍で分割
       ['---'],
       [tf('ctx.saveAsset','📦 アセットへ保存（{type}）',{type:secLk(s)==='l'?'LIGHT':'NOTES'}),()=>saveClipToAsset(s)],   // クリップを .nlmclip 部品として保存
-      [t('ctx.delClip','クリップを削除'),()=>{ layerSel=new Set([s.id]); deleteLayerSel(); }],
+      [t('ctx.delClip','クリップを削除'),()=>{ const tx=linkTxBegin(); layerSel=new Set([s.id]); deleteLayerSel(tx); }],   // tx: 次の親の画面のキャンセルで、選択も右クリックの前へ戻す
     ]);
   } else {                                                 // 空き: その位置に空のシートを作成（レーン種のクリップになる）
     const beat=Math.max(0,snapV(lXToBeat(sx))), la=laneAtY(sy);
@@ -2508,14 +2523,32 @@ ndcv.addEventListener('contextmenu',e=>{ e.preventDefault();
         sections.push(sec);
         relinkDiffEdges(); layerSel=new Set([sec.id]);
         compileLayersToFlat(); metaDirty=true; stat('空のクリップを作成しました'); }],
+      ...(layerClipboard&&layerClipboard.items.length?[[tf('ctx.linkPaste','🔗 リンクして貼り付け（{key}）',{key:comboStr(effBind('nleLinkPaste'))}),()=>startLayerPaste(true)]]:[]),
     ]);
   }
 });
+/** クリップの右クリックのリンクの項目（最後に区切り線） */
+function linkClipMenu(s){
+  const sel=layerSel.has(s.id)?sections.filter(x=>layerSel.has(x.id)&&x.kind!=='null'):[s];
+  const its=[];
+  if(sel.length>=2) its.push([tf('ctx.link','🔗 リンクする（{key}）',{key:comboStr(effBind('nleLink'))}),()=>linkSelected()]);
+  if(s.link){
+    if(linkIsKid(s)){ its.push([t('ctx.linkJump','親へジャンプ'),()=>linkJumpParent(s)]);
+      its.push([t('ctx.linkMakeParent','これを親にする'),()=>linkMakeParent(s)]); }
+    const lst=sel.filter(x=>x.link);
+    its.push([lst.length>1?tf('ctx.unlinkN','リンクを解除（{n}個）',{n:lst.length}):t('ctx.unlink','リンクを解除'),()=>linkUnlink(lst.includes(s)?lst:[s])]); }
+  its.push([t('ctx.linkDiffs','🔗 他の難易度の同じ位置のクリップとリンク…'),()=>linkOtherDiffs(s)]);
+  its.push(['---']);
+  return its; }
 
 // ============ フェーズ1: レイヤービュー（NLEタイムライン・表示/ナビのみ・非破壊） ============
 const LGUT=TLGUT, MKRH=16, TPRH=14, LRULER=22+MKRH+TPRH, LANE_MAX=10, LDIV=3;   // MKRH=マーカー帯・TPRH=テンポパート帯。LDIV=グループ間の継ぎ目(Notes/Light・Light/Music共通)
-function laneDefN(){ try{ const n=parseInt(localStorage.getItem('bsnm_laneratio')); if(n>=1&&n<=5) return n; }catch(e){} return 4; }   // 個人の初期設定（ノーツ本数1〜5・計6）。無ければ4（＝4:2。ライトは縦軸が無くトラック少なめで足りる・ヘルバ様指定）
-let notesLanes=laneDefN(), lightLanes=6-notesLanes;   // 上=NOTESグループ／下=LIGHTグループ（各1〜LANE_MAX本・プロジェクト保存）。既定=個人設定(bsnm_laneratio)、無ければ3:3
+// レーンの既定の本数（新規作成・プロジェクト無しで開いた時。2026-10-20）: ノーツ1本・ライト3本。ノーツは解析からクリップを作る・自動で足す時に
+// 一番上へ増えるので少なく始める（以前は環境設定のレーン構成＝計6の 3:3 で、増やすと初期の高さでは見えなくなった）。
+// ノーツの本数だけ環境設定「ノーツのレーンの本数」(bsnm_noteLanes)で変えられる。旧設定の bsnm_laneratio（計6の比率）は読まない＝初期値の3が残る人も1本から
+const LANE_DEF_L=3, LANE_OLD_N=3, LANE_OLD_L=3;   // LANE_OLD_*＝レーン数の記録が無い古いファイル（当時の既定）
+function laneDefN(){ try{ const n=parseInt(localStorage.getItem('bsnm_noteLanes')); if(n>=1&&n<=5) return n; }catch(e){} return 1; }
+let notesLanes=laneDefN(), lightLanes=LANE_DEF_L;   // 上=NOTESグループ／下=LIGHTグループ（各1〜LANE_MAX本・全難易度で共通・プロジェクト保存）
 let laneScrN=0, laneScrL=0;       // グループごとの縦スクロール（Notes/Lightは別もの・Musicはスクロールなし）
 function laneCount(){ return notesLanes+lightLanes; }
 function secLk(s){ return s&&s.lk==='l'?'l':'n'; }
@@ -2536,16 +2569,39 @@ function shiftLocks(lk,d){   // ロック（'n2' 等＝グループ＋レーン�
   const next=new Set();
   for(const key of layerLockS){ if(key[0]!==lk){ next.add(key); continue; } const tr=+key.slice(1)+d; if(tr>=0) next.add(lk+tr); }
   layerLockS.clear(); for(const k of next) layerLockS.add(k);
+  if(lk==='n'&&editOnlyTr!=null){ const tr=editOnlyTr+d; editOnlyTr=tr>=0?tr:null; }   // 単独編集もロックと同じく同じレーン（中身）に付いたままずらす
 }
-function laneHt(){ const total=Math.max(1,notesLanes+lightLanes);   // 合計6本以下: 隙間なくぴったり埋める（レーンを太く）／7本以上: 6本ぶんの固定厚でスクロール
-  return Math.max(34,(ndH-LRULER-2*LDIV)/Math.min(6,total)); }   // 継ぎ目はNotes/Light間と最下部(Light/Music間)の2本ぶん確保
-function laneVP(lk){ const avail=ndH-LRULER-2*LDIV, total=Math.max(1,notesLanes+lightLanes);
-  return Math.max(34, avail*laneCountOf(lk)/total); }   // 各グループの表示窓=レーン数に比例（合計avail）→区切り線が比率で動く。計6ならぴったり埋まる
+// レーンの高さと各グループの表示窓（2026-10-20〜ノーツとライトで最低の高さが違う）。
+// 最低の高さ: ライト＝34px（溝は1段＝名前・L/S/M）、ノーツ＝45px（溝の2段目に単独編集の帯が入る高さ＝EO_GUT の y+h+pb）。
+// 合計6本以下は隙間なく埋める（同じ高さ）。ノーツがその高さでは最低に届かない時は、ライトを最低（34px）まで縮めた分をノーツへ回して埋める
+// （既定の画面 1600×980・ノーツ1本・ライト3本ならノーツ 45px・ライト 42.7px でスクロール無し）。
+// それでも入りきらない時・7本以上（6本ぶんの高さ）は各グループの最低の高さでスクロール。表示窓は各グループの全部の高さ（本数×高さ）に比例
+// （高さが同じなら以前と同じ＝レーン数に比例。ノーツ3本・ライト3本の 1600×980 ならノーツ 98.5px＝上の2本が見える・ライト 74.5px）。
+// 窓は最低でも1本ぶん。継ぎ目は Notes/Light 間と最下部（Light/Music 間）の2本ぶん確保
+const LANE_MIN_L=34;
+function laneMinOf(lk){ return lk==='l'?LANE_MIN_L:EO_GUT.y+EO_GUT.h+EO_GUT.pb; }
+let _laneG=null;   // laneGeom の結果（キャンバスの高さ・レーンの数が同じ間は使い回す＝毎フレーム何度も呼ばれるため）
+function laneGeom(){
+  const nN=notesLanes, nL=lightLanes;
+  if(_laneG&&_laneG.H===ndH&&_laneG.nN===nN&&_laneG.nL===nL) return _laneG;
+  const avail=ndH-LRULER-2*LDIV, total=Math.max(1,nN+nL), h0=avail/Math.min(6,total);
+  const hN=Math.max(laneMinOf('n'),h0);
+  const hL=(total<=6&&hN>h0)?Math.max(LANE_MIN_L,(avail-nN*hN)/Math.max(1,nL)):Math.max(LANE_MIN_L,h0);
+  const needN=nN*hN, needL=nL*hL;
+  let vN, vL;
+  if(needN+needL<=avail+1e-6){ vN=needN; vL=avail-needN; }   // 全部入る（スクロール無し）
+  else { vN=avail*needN/(needN+needL); vL=avail-vN;          // 入りきらない: 全部の高さに比例
+    if(vN<hN){ vN=hN; vL=Math.max(hL,avail-hN); }            // 窓は最低でも1本ぶん（狭すぎる時は下へはみ出す＝以前と同じ）
+    else if(vL<hL){ vL=hL; vN=Math.max(hN,avail-hL); } }
+  _laneG={H:ndH,nN,nL,hN,hL,vN,vL};
+  return _laneG; }
+function laneHt(lk){ const g=laneGeom(); return lk==='l'?g.hL:g.hN; }   // そのグループのレーンの高さ
+function laneVP(lk){ const g=laneGeom(); return lk==='l'?g.vL:g.vN; }   // 各グループの表示窓の高さ
 function laneTopOf(lk){ return LRULER+(lk==='l'?laneVP('n')+LDIV:0); }
 function scrOf(lk){ return lk==='l'?laneScrL:laneScrN; }
 function setScr(lk,v){ v=Math.max(0,Math.min(laneMaxScroll(lk),Math.round(v)));
   if(lk==='l') laneScrL=v; else laneScrN=v; }
-function laneMaxScroll(lk){ return Math.max(0,Math.ceil(laneCountOf(lk)*laneHt()-laneVP(lk))); }
+function laneMaxScroll(lk){ return Math.max(0,Math.ceil(laneCountOf(lk)*laneHt(lk)-laneVP(lk)-1e-6)); }   // 1e-6＝小数の誤差で1pxのスクロールが出ないように
 // レーン増減ヘルパー（溝右クリックメニューと設定スライダーで共用）。一番上に追加/一番上の空を削除。
 function laneAdd(lk){ if(laneCountOf(lk)>=LANE_MAX) return false;
   if(lk==='n') notesLanes++; else lightLanes++; laneShiftAll(lk,1); return true; }
@@ -2555,25 +2611,35 @@ function laneRemove(lk){ if(laneCountOf(lk)<=1) return false;   // 一番上=空
   for(const k in projDiffs){ if(k===curK) continue; const st=projDiffs[k];
     if(st&&(st.sections||[]).some(s2=>secLk(s2)===lk&&(s2.track||0)===0)) return false; }
   if(lk==='n') notesLanes--; else lightLanes--; laneShiftAll(lk,-1); setScr(lk,scrOf(lk)); return true; }
-function setLaneRatio(n){   // 設定スライダー: ノーツn本 : ライト(6-n)本（計6固定）
-  n=Math.max(1,Math.min(5,n)); const l=6-n;
-  if(notesLanes===n&&lightLanes===l) return;
-  snapshot('node'); let ok=true;
+function setNoteLanes(n){   // 環境設定「ノーツのレーンの本数」: 今のプロジェクトのノーツのレーンを n 本に（一番上で足す／空の一番上を消す）。ライトは変えない
+  n=Math.max(1,Math.min(5,n));
+  if(notesLanes===n) return;
+  flushFlatEdits(); snapshot('diffs');   // レーンの増減は全難易度のクリップがずれる＝全難易度の履歴（'node' だと Undo で他の難易度のクリップが1段ずれたまま残った）
+  let ok=true;
   while(ok&&notesLanes<n) ok=laneAdd('n');
   while(ok&&notesLanes>n) ok=laneRemove('n');
-  while(ok&&lightLanes<l) ok=laneAdd('l');
-  while(ok&&lightLanes>l) ok=laneRemove('l');
   metaDirty=true;
   { const el=document.getElementById('laneRatio'), lv=document.getElementById('laneRatioVal');
-    if(el) el.value=notesLanes; if(lv) lv.textContent=notesLanes+' : '+lightLanes; }
-  if(!ok) showErr('一番上のレーンにクリップがあるため、その比率にできません（空にしてから再度）');
-  else showOk(tf('msg.laneLayout','レーン構成: ノーツ{notes} : ライト{lights}',{notes:notesLanes,lights:lightLanes})); }
-function laneY(lk,gi){ return laneTopOf(lk)-scrOf(lk)+gi*laneHt(); }
-function laneAtY(y){ const H=laneHt();
+    if(el) el.value=notesLanes; if(lv) lv.textContent=String(notesLanes); }
+  if(!ok) showErr(t('msg.noteLanesTop','一番上のレーンにクリップがあるため、その本数にできません（空にしてから再度）'));
+  else showOk(tf('msg.noteLanes','ノーツのレーン: {n}本',{n:notesLanes})); }
+/** 新規作成・ファイル無しで始める時のレーンの数（前のプロジェクトの数・スクロールを持ち越さない） */
+function resetLanes(){ notesLanes=laneDefN(); lightLanes=LANE_DEF_L; laneScrN=0; laneScrL=0; }
+/** 開く時のレーンの数: 保存した数（古い版で作った3本のプロジェクトも3本）。記録の無いさらに古いファイルは当時の既定（3:3）。
+ *  どちらも、使っている段（クリップの track）が全部見える数より少なくはしない。pj=null（プロジェクト無し）は既定。projDiffs は読み込み済みのこと */
+function laneCountsOpen(pj){
+  if(!pj) return {n:laneDefN(),l:LANE_DEF_L};
+  const used={n:0,l:0};
+  for(const k in projDiffs){ for(const s of ((projDiffs[k]&&projDiffs[k].sections)||[])){ if(!s||s.kind==='null') continue;
+    const tr=+s.track||0; if(tr>=0&&tr<LANE_MAX){ const lk=secLk(s); used[lk]=Math.max(used[lk],Math.floor(tr)+1); } } }
+  const fit=(v,old,u)=>{ v=+v; return Math.max(1,Math.min(LANE_MAX,Math.max(u,(Number.isInteger(v)&&v>=1)?v:old))); };
+  return {n:fit(pj.notesLanes,LANE_OLD_N,used.n), l:fit(pj.lightLanes,LANE_OLD_L,used.l)}; }
+function laneY(lk,gi){ return laneTopOf(lk)-scrOf(lk)+gi*laneHt(lk); }
+function laneAtY(y){
   if(y<laneTopOf('l')-LDIV/2){ const yy=y-laneTopOf('n')+laneScrN;
-    return {lk:'n',gi:Math.max(0,Math.min(notesLanes-1,Math.floor(yy/H)))}; }
+    return {lk:'n',gi:Math.max(0,Math.min(notesLanes-1,Math.floor(yy/laneHt('n'))))}; }
   const yy=y-laneTopOf('l')+laneScrL;
-  return {lk:'l',gi:Math.max(0,Math.min(lightLanes-1,Math.floor(yy/H)))}; }
+  return {lk:'l',gi:Math.max(0,Math.min(lightLanes-1,Math.floor(yy/laneHt('l'))))}; }
 function laneLabel(lk,gi){ return (lk==='l'?'Light ':'Notes ')+(laneCountOf(lk)-gi); }   // 番号は下が1（旧Layer表記と同じ・ヘルバ様指定）
 function hueOf(id){ let h=0; const s=String(id); for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h%360; }
 // クリップ色はBlenderテーマ(DarkPurpleGreen)のstrip_colorパレット。作成時に「最も使われていない色」を割当（s.colに保存）
@@ -2609,9 +2675,9 @@ function drawLayers(curV){
   if(!ndW) return;
   flushFlatEdits();   // 3D(NOTES/LIGHT)の編集をクリップcontentへ確定してから描画＝ミニロールが即追従・他操作でrevertしない
   ndg.clearRect(0,0,ndW,ndH);
-  const laneH=laneHt();
-  for(const g of ['n','l']){ ndg.save(); ndg.beginPath(); ndg.rect(0,laneTopOf(g),ndW,laneVP(g)); ndg.clip();
-    for(let i=0;i<laneCountOf(g);i++){ ndg.fillStyle=i%2?'#191919':'#1d1d1d'; ndg.fillRect(0,laneY(g,i),ndW,laneH); }
+  for(const g of ['n','l']){ const laneH=laneHt(g); ndg.save(); ndg.beginPath(); ndg.rect(0,laneTopOf(g),ndW,laneVP(g)); ndg.clip();
+    for(let i=0;i<laneCountOf(g);i++){ ndg.fillStyle=i%2?'#191919':'#1d1d1d'; ndg.fillRect(0,laneY(g,i),ndW,laneH);
+      if(g==='n'&&i===editOnlyTr){ ndg.fillStyle=EO_TINT; ndg.fillRect(0,laneY(g,i),ndW,laneH); } }   // 単独編集のレーンはうっすら色を付ける
     ndg.restore(); }
   ndg.fillStyle='#1d1d1d'; ndg.fillRect(0,0,ndW,LRULER);   // ルーラー帯（テーマscrubbing back相当。レーンはスクロールでこの下に潜る）
   const _W=tlWindow(curV), PPB=(ndW-LGUT)/_W.span; const b0=Math.floor(_W.b0), b1=Math.ceil(_W.b0+_W.span);
@@ -2641,15 +2707,19 @@ function drawLayers(curV){
     ndg.beginPath(); ndg.moveTo(x,LRULER); ndg.lineTo(x,ndH); ndg.stroke();
     if(b%numStep===0){ ndg.fillStyle=bar?'#8a8a8a':'#6f6f6f'; ndg.font='10px '+FONT; ndg.textAlign='center'; ndg.textBaseline='top'; ndg.fillText(String(b),x,2); } }
   _clipSw.length=0;
+  const _lkInfo=linkDrawInfo();   // リンクの 🔗 と数・子の点線・親より長い所の斜線（リンクが無ければ null）
   for(const s of sections){ const lk=secLk(s), t=s.track||0; if(t>=laneCountOf(lk)) continue;   // 同レーンは重ならない設計＝描画順ソート不要（毎フレームの確保+sortを撤廃）
     ndg.save(); ndg.beginPath(); ndg.rect(LGUT,laneTopOf(lk),ndW-LGUT,laneVP(lk)); ndg.clip();   // 自グループの窓の外（スクロールで隠れた分）＋溝(トラックヘッド)には描かない
     ndg.globalAlpha=layerVisible(lk,t)?1:0.22;   // ミュート/ソロ非対象は薄く表示（3D側は非表示のまま）
-    const x=bx(s.beat||0), w=(s.len||4)*PPB, y=laneY(lk,t)+4, h=laneH-8;
+    const x=bx(s.beat||0), w=(s.len||4)*PPB, y=laneY(lk,t)+4, h=laneHt(lk)-8;
     if(x+w<LGUT||x>ndW){ ndg.restore(); continue; }
     const isNull=s.kind==='null', scol=stripColOf(s), sel=layerSel.has(s.id);
+    const lkI=_lkInfo&&s.link?_lkInfo.get(s.link):null, isKid=!!lkI&&linkIsKid(s);
     // Musicボックスと同じインセット描画（+0.5/幅-1）: 枠線が箱の外へはみ出さない=隣接クリップと1pxも重ならない
     ndg.fillStyle=isNull?'#242424':hexA(scol,.14); roundRectND(x+0.5,y+0.5,w-1,h-1,6); ndg.fill();
-    ndg.lineWidth=sel?2.4:1.2; ndg.strokeStyle=sel?'#ff8f0d':(isNull?'#4a4a4a':hexA(scol,.8)); ndg.stroke();
+    ndg.lineWidth=sel?2.4:1.2; ndg.strokeStyle=sel?'#ff8f0d':(isNull?'#4a4a4a':hexA(scol,.8));
+    if(isKid) ndg.setLineDash([5,3]);   // リンクの子は点線の枠（打てない）
+    ndg.stroke(); ndg.setLineDash([]);
     ndg.fillStyle=isNull?'#333338':hexA(scol,.5); roundRectND(x+0.5,y+0.5,w-1,16,[6,6,0,0]); ndg.fill();
     ndg.save(); roundRectND(x+0.5,y+0.5,w-1,h-1,6); ndg.clip();   // 角丸パスでクリップ（四隅から中身がはみ出さない）
     if(!isNull){                                       // ラベル左の色スウォッチ（クリックでカラーピッカー）
@@ -2658,6 +2728,9 @@ function drawLayers(curV){
       _clipSw.push({id:s.id,x:x+3,y:y+3,w:20,h:11}); }
     ndg.fillStyle='#eafff5'; ndg.font='bold 10.5px '+FONT; ndg.textAlign='left'; ndg.textBaseline='middle';
     ndg.fillText(s.label||'Sheet',x+26,y+8);
+    if(lkI){ const lw=ndg.measureText(s.label||'Sheet').width;   // ラベルの右: 🔗と数（親で他の難易度に子がいれば「他の難易度にも n」）
+      const txt='🔗'+lkI.n+(!isKid&&lkI.other?' '+TL('nle.linkOther','他の難易度にも {n}').split('{n}').join(String(lkI.other)):'');
+      ndg.font='9.5px '+FONT; ndg.fillStyle=isKid?'#c9bcff':'#e2d9ff'; ndg.fillText(txt,x+26+lw+6,y+8.5); }
     const cc=s.content||{}, nN=(cc.notes||[]).length+(cc.chains||[]).length+(cc.arcs||[]).length, nL=(cc.lights||[]).length, L=(s.len||4);   // カウントにチェーン/アークも含める
     // ヘッダー右: そのクリップ種別のカウントのみ（NOTESクリップ=ノーツ数／LIGHTクリップ=ライト数）＋種別アイコン
     if(!isNull&&w>96){ const isL=lk==='l', cnt=isL?nL:nN;
@@ -2731,6 +2804,13 @@ function drawLayers(curV){
       if(isL) drawLightIco(ndg,ix,iy,8); else drawNoteIco(ndg,ix,iy,8);
       ndg.fillText(String(isL?nL:nN),ix+10,y+24);
     }
+    if(isKid&&lkI.parLen!=null&&lkI.parLen<L-1e-6){   // 子が親より長い: 親の長さより後ろは空白（斜線）
+      const hx0=Math.max(x+1,x+lkI.parLen*PPB), hy0=y+17, hy1=y+h;
+      ndg.save(); ndg.beginPath(); ndg.rect(hx0,hy0,x+w-hx0,hy1-hy0); ndg.clip();
+      ndg.fillStyle='rgba(20,20,24,.35)'; ndg.fillRect(hx0,hy0,x+w-hx0,hy1-hy0);
+      ndg.strokeStyle='rgba(200,190,255,.22)'; ndg.lineWidth=1; ndg.beginPath();
+      for(let gx=hx0-(hy1-hy0);gx<x+w;gx+=7){ ndg.moveTo(gx,hy1); ndg.lineTo(gx+(hy1-hy0),hy0); }
+      ndg.stroke(); ndg.restore(); }
     ndg.restore(); ndg.restore(); }
   ndg.globalAlpha=1;
   // マーカー（白・全難易度共通）: 帯に◆+名前、細い白ラインをペイン下端まで（Musicレーン側はdrawOverviewが続きを描く）
@@ -2756,7 +2836,7 @@ function drawLayers(curV){
     const invalid=_dragMedia._noDiff||laneBad;                                     // 不一致/難易度なし/音楽/画像＝画像1の赤ゴースト（ヘルバ様指定 2026-07-14）
     ndg.save(); ndg.beginPath(); ndg.rect(0,laneTopOf(glk),ndW,laneVP(glk)); ndg.clip();
     const gb=Math.max(0,snapV(lXToBeat(_mediaGhostNd.sx)));
-    const gl=invalid?16:(_dragMedia._len||32), gx=bx(gb), gw=gl*PPB, gy=laneY(glk,gla.gi)+4, gh=laneH-8;
+    const gl=invalid?16:(_dragMedia._len||32), gx=bx(gb), gw=gl*PPB, gy=laneY(glk,gla.gi)+4, gh=laneHt(glk)-8;
     // 枠色: 不可=赤／ライトレーン=黄／ノーツレーン=紫（ヘルバ様指示: Lightは黄色フレーム）
     const ghostAccent=invalid?'#e2605b':(glk==='l'?'#ffd82d':'#8160e3');
     const ghostFill=invalid?'rgba(226,96,91,.10)':(glk==='l'?'rgba(255,216,45,.12)':'rgba(129,96,227,.13)');
@@ -2807,16 +2887,32 @@ function drawLayers(curV){
     ndg.restore(); ndg.restore();
   }
   ndg.fillStyle='#212121'; ndg.fillRect(0,0,LGUT,ndH);
-  _lgBtns.length=0;
-  for(const row of [['n',notesLanes],['l',lightLanes]]){ const lk=row[0];
+  _lgBtns.length=0; _eoBtns.length=0;
+  for(const row of [['n',notesLanes],['l',lightLanes]]){ const lk=row[0], laneH=laneHt(lk);
     ndg.save(); ndg.beginPath(); ndg.rect(0,laneTopOf(lk),LGUT,laneVP(lk)); ndg.clip();
     for(let t=0;t<row[1];t++){
       const vy=laneY(lk,t);
       ndg.fillStyle=t%2?'#1f1f1f':'#242424'; ndg.fillRect(0,vy,LGUT,laneH);   // レーンと同じ交互の色分け
+      if(lk==='n'){ const eo=editOnlyTr===t;   // 2段目: 単独編集の帯（スイッチ＋文字を角の丸い帯でひとまとめ・帯全体が押せる）。ノーツのレーンだけ（ライトには持たせない）
+        if(eo){ ndg.fillStyle=EO_TINT; ndg.fillRect(0,vy,LGUT,laneH); }
+        const B=EO_GUT, by=vy+B.y, bw=LGUT-B.x-B.r;   // 帯の大きさ・色は EO_GUT（ノーツのレーンの最低の高さ＝1段目＋帯＋下の余白）
+        ndg.fillStyle=eo?B.onFill:B.offFill; ndg.beginPath(); ndg.roundRect(B.x,by,bw,B.h,B.rad); ndg.fill();
+        ndg.strokeStyle=eo?B.onLine:B.offLine; ndg.lineWidth=1; ndg.beginPath(); ndg.roundRect(B.x+0.5,by+0.5,bw-1,B.h-1,B.rad-0.5); ndg.stroke();
+        const sx0=B.x+B.padL, sw=B.sw, sh=B.sh, sy0=by+(B.h-sh)/2;   // スイッチ（スライダー型）
+        ndg.fillStyle=eo?'#2e8f6e':'#1d1d1d'; ndg.beginPath(); ndg.roundRect(sx0,sy0,sw,sh,sh/2); ndg.fill();
+        ndg.fillStyle=eo?'#eafff5':'#8a8a8a'; ndg.beginPath(); ndg.arc(eo?sx0+sw-sh/2:sx0+sh/2,sy0+sh/2,sh/2-1.5,0,Math.PI*2); ndg.fill();
+        const lbl=TL('nle.editOnly','単独編集'), tx=sx0+sw+B.gap, room=LGUT-B.r-B.padR-tx;   // ループ変数 t が翻訳の t() を隠すので別名 TL
+        let fs=B.font; ndg.font=B.weight+' '+fs+'px '+FONT; ndg.letterSpacing=B.ls+'px';
+        while(fs>8&&ndg.measureText(lbl).width>room){ fs-=0.5; ndg.font=B.weight+' '+fs+'px '+FONT; }   // 長い訳でも帯からはみ出さない（今の訳は日英とも 12px のまま入る）
+        ndg.textAlign='left'; ndg.textBaseline='middle'; ndg.fillStyle=eo?B.onText:B.offText;
+        ndg.fillText(lbl,tx,by+B.h/2+0.5); ndg.letterSpacing='0px';
+        // 当たり判定＝帯全体。グループの表示窓の中に見えている所だけ（スクロールで半分隠れていれば見えている半分）
+        const vt=laneTopOf('n'), vb=vt+laneVP('n'), y0=Math.max(by,vt), y1=Math.min(by+B.h,vb);
+        if(y1-y0>=4) _eoBtns.push({t,x:B.x,y:y0,w:bw,h:y1-y0}); }
       const vis=layerVisible(lk,t);
       ndg.fillStyle=vis?'#9a9a9a':'#5f5f5f'; ndg.font='bold 10px '+FONT; ndg.textAlign='left'; ndg.textBaseline='middle';
-      ndg.fillText(laneLabel(lk,t),8,vy+12);
-      const bw2=16, bh2=14, by2=vy+5;   // L(ロック)/S(ソロ)/M(ミュート)ボタン
+      ndg.fillText(laneLabel(lk,t),LANE_LBL_X,vy+10);
+      const bw2=16, bh2=14, by2=vy+3;   // L(ロック)/S(ソロ)/M(ミュート)ボタン（2段目の単独編集の帯が入るよう上へ詰めている）
       const lb={lk,t,kind:'l',x:LGUT-3*bw2-14,y:by2,w:bw2,h:bh2}, sb={lk,t,kind:'s',x:LGUT-2*bw2-10,y:by2,w:bw2,h:bh2}, mb={lk,t,kind:'m',x:LGUT-bw2-6,y:by2,w:bw2,h:bh2};
       for(const b of [lb,sb,mb]){
         const on=b.kind==='s'?layerSoloS.has(lk+t):b.kind==='m'?layerMuteS.has(lk+t):layerLockS.has(lk+t);
@@ -2849,10 +2945,10 @@ function drawLayers(curV){
     ndg.strokeRect(bx+0.5,by+0.5,bw,bh); ndg.setLineDash([]); }
   if(layerPaste){   // ペーストのゴースト（マウス追従・クリックで確定 / Esc取消）。空きが無いレーンは赤で警告
     const {items,at,dtBy}=layerPaste;
-    for(const it of items){ const kind=it.lk||'n', sh=dtBy[kind], fits=(sh!=null);
-      const gtr=fits?it.track+sh:it.track;
-      if(gtr>=laneCountOf(kind)) continue;
-      const gx=bx(at+it.rel), gw=(it.len||4)*PPB, gy=laneY(kind,gtr)+4, gh=laneH-8;
+    for(const it of items){ const kind=it.lk||'n', sh=dtBy[kind], fits=(sh!=null), add=(fits&&dtBy.add&&dtBy.add[kind])||0;
+      const gtr0=fits?it.track+sh-add:it.track, newLane=gtr0<0;   // 今の段の番号。0未満＝貼る時に一番上へ足すレーン（一番上の段に「＋」を付けて描く）
+      const gtr=Math.max(0,Math.min(laneCountOf(kind)-1,gtr0));   // 前に別の数のレーンでコピーした物も見えるように今のレーンの中へ
+      const gx=bx(at+it.rel), gw=(it.len||4)*PPB, gy=laneY(kind,gtr)+4, gh=laneHt(kind)-8;
       if(gx+gw<LGUT||gx>ndW) continue;
       ndg.save(); ndg.beginPath(); ndg.rect(LGUT,laneTopOf(kind),ndW-LGUT,laneVP(kind)); ndg.clip();
       ndg.globalAlpha=0.6;
@@ -2860,7 +2956,7 @@ function drawLayers(curV){
       roundRectND(gx+0.5,gy+0.5,gw-1,gh-1,6); ndg.fill();
       ndg.lineWidth=1.6; ndg.setLineDash([5,3]); ndg.strokeStyle=fits?'#8160e3':'#d03060'; ndg.stroke(); ndg.setLineDash([]);
       ndg.globalAlpha=0.9; ndg.fillStyle='#eafff5'; ndg.font='bold 10.5px '+FONT; ndg.textAlign='left'; ndg.textBaseline='middle';
-      ndg.fillText(it.label||'Sheet', Math.max(LGUT+4,gx+6), gy+9);
+      ndg.fillText((newLane?'＋ ':'')+(layerPaste.link?'🔗 ':'')+(it.label||'Sheet'), Math.max(LGUT+4,gx+6), gy+9);
       // ゴースト内にもミニロール（ピアノロール）を薄く表示＝何を貼るか見える
       const cc=it.content||{}, L=it.len||4, byTop=gy+18, byH=gh-21;
       if(byH>=10){
@@ -2894,7 +2990,7 @@ function drawLayers(curV){
   const _phx=bx(curV);
   if(_phx>=LGUT){ phRect(ndg,ndcv,_phx);   // 本体=デバイスピクセルスナップでクッキリ
     ndg.fillStyle='#ff3344'; ndg.beginPath(); ndg.moveTo(_phx-5,0); ndg.lineTo(_phx+5,0); ndg.lineTo(_phx,7); ndg.closePath(); ndg.fill(); }
-  ndcv.style.cursor=layerRazor?'crosshair':_ndEdgeHover?'ew-resize':layerDrag?'grabbing':_ndClipHover?'grab':'';   // クリップ=掌／ドラッグ中=グー
+  ndcv.style.cursor=layerRazor?'crosshair':_ndEdgeHover?'ew-resize':layerDrag?'grabbing':_ndClipHover?'grab':_ndEoHover?'pointer':'';   // クリップ=掌／ドラッグ中=グー／単独編集の帯=指
 }
 // フェーズ2: レイヤービューの編集（選択・移動・分割・結合・削除）。位置=真実で合成
 let layerPan=null, layerDrag=null, layerRazor=false, layerSeek=false, layerBand=null, layerSel=new Set();
@@ -2903,12 +2999,28 @@ let layerResize=null;   // クリップ端トリム {s,side,origBeat,origLen,ref
 let layerClipboard=null; // クリップのコピー内容 {items:[{rel,track,len,label,col,colHex,content,byDiff}]}（全難易度の中身ごと保持）
 let _ndEdgeHover=false; // クリップ端ホバー（ew-resizeカーソル用）
 let _ndClipHover=false; // クリップ本体ホバー（掌カーソル用。ドラッグ中はグー）
+let _ndEoHover=false;   // 溝の単独編集の帯の上（指のカーソル用）
 let tlHoverBeat=null;   // NLE/Musicのマウス拍（3Dの黄ラインと同じ・スナップ済み。両パネルを貫く一本線で描画）
 // レイヤーのソロ/ミュート（表示のみのフィルタ。保存・書き出しデータは削らない）
 let layerMuteS=new Set(), layerSoloS=new Set(), layerLockS=new Set();   // L=ロック（暗く＋触れない）
-const objLockedN=o=>layerLockS.has('n'+(o._tr||0));   // ノーツ系（'n'グループ）のロック判定
-const objLockedL=o=>layerLockS.has('l'+(o._tr||0));   // ライト（'l'グループ）のロック判定
+// 単独編集（英語 Edit only・2026-10-19）: ノーツのレーンを1つだけ編集できるようにする。値は内部の段（gi・0=一番上）、null=オフ。
+// オンの間は他のレーンをロック中と同じ扱い（選択・移動・削除できない・減光）にし、3Dの配置・貼り付けはこのレーンだけに入れる。
+// ロックの状態そのものは書き換えない（判定 objLockedN に足すだけ）。保存はするが projSig には入れない（view と同じ）
+let editOnlyTr=null;
+const objOffEditN=o=>editOnlyTr!=null&&(o._tr||0)!==editOnlyTr;   // 単独編集のレーンの外の物か
+const objLockedN=o=>layerLockS.has('n'+(o._tr||0))||objOffEditN(o)||linkRoN(o);   // ノーツ系（'n'グループ）のロック判定（単独編集の外・リンクの子も触れない）
+const objLockedL=o=>layerLockS.has('l'+(o._tr||0))||linkRoL(o);   // ライト（'l'グループ）のロック判定（リンクの子も触れない）
 const _lgBtns=[];   // 溝内S/Mボタンの当たり判定（drawLayersで毎フレーム更新）
+const _eoBtns=[];   // 溝の2段目の単独編集の帯の当たり判定（drawLayersで毎フレーム更新）
+const EO_TINT='rgba(86,255,193,.05)';   // 単独編集のレーンの色（NLEのレーンと溝にうっすら重ねる）
+// 溝の2段目の単独編集の帯（2026-10-20・利用者の要望で文字を大きく・帯でひとまとめに。同日「詰まって見えて字が読みづらい」で高さと余白を足した）。
+// レーンの上端から y・高さ h・角の丸み rad、左端 x・右は溝の右端から r 空ける（右端は M ボタンの右端に揃う。左は溝の左端の細いスクロールバー #sbNL（2〜11px）の右）。
+// 1段目（名前・L/S/M＝上端+3〜17）との間 4px・帯の下 pb=4px。ノーツのレーンの最低の高さ＝y+h+pb（45px・laneMinOf）。
+// 中: 左の余白 padL・スイッチ sw×sh・スイッチと文字の間 gap・文字の右の余白 padR。文字は太字をやめ中くらいの太さ（500）＋字間 ls で、少し明るい灰色（詰まって見えないように）。
+// 色は既存の物だけ: オフ＝L/S/M のオフと同じ灰色の帯、オン＝3Dの帯の［…を単独編集にする］ボタン（#eoBand .eoSw）と同じ深緑＋緑の枠
+const EO_GUT={x:13,r:6,y:21,h:20,pb:4,rad:6,padL:5,sw:22,sh:12,gap:7,padR:4,font:12,weight:500,ls:0.5,
+  offFill:'#2d2d2d',offLine:'#3a3a3a',offText:'#b4b4b4',onFill:'#1f5544',onLine:'#56ffc1',onText:'#e8fff6'};
+const LANE_LBL_X=15;   // 溝のレーン名の左端（左端の細いスクロールバーの右。以前は 8）
 const _clipSw=[];   // クリップヘッダー左の色スウォッチの当たり判定（drawLayersで毎フレーム更新）
 // ソロはグループ（ノーツ/ライト）内で完結＝ライトのソロでノーツが消えない（逆も同様・ヘルバ様指定）。
 // 自グループにソロが1つも無ければ、そのグループは従来どおりミュート判定のみで表示。
@@ -2929,14 +3041,18 @@ function packLanes(){   // 接続に関係なく各グループ(notes/light)の�
       s.track=Math.max(0,N-1-d); }   // 詰め深さd（0=Notes1）→ 内部track(gi)。表示番号は下が1
   }
 }
-function clipAtLayer(mx,my){ if(mx<LGUT) return null; const lh=laneHt();   // 溝(トラックヘッド/S・M・Lボタン)はクリップ対象外
+// クリップの縦の範囲のうち、自分のグループの表示窓に見えている所（スクロールで窓の外に隠れた所は押せない。以前は隠れた所が
+// 隣のグループの上でも当たり、ライトのレーンを押すと下に隠れたノーツのクリップが選ばれた）
+function clipVisY(s){ const lk=secLk(s), y=laneY(lk,s.track||0)+4, vt=laneTopOf(lk);
+  return [Math.max(y,vt),Math.min(y+laneHt(lk)-8,vt+laneVP(lk))]; }
+function clipAtLayer(mx,my){ if(mx<LGUT) return null;   // 溝(トラックヘッド/S・M・Lボタン)はクリップ対象外
   for(let i=sections.length-1;i>=0;i--){ const s=sections[i];
-    const x=lBeatToX(s.beat||0), w=(s.len||4)*lPPB(), y=laneY(secLk(s),s.track||0)+4, h=lh-8;
-    if(mx>=x&&mx<=x+w&&my>=y&&my<=y+h) return s; } return null; }
-function clipEdgeAt(mx,my){ if(mx<LGUT) return null; const lh=laneHt();   // クリップの左右端±4px=トリムハンドル（溝は除外）
+    const x=lBeatToX(s.beat||0), w=(s.len||4)*lPPB(), [y0,y1]=clipVisY(s);
+    if(mx>=x&&mx<=x+w&&my>=y0&&my<=y1) return s; } return null; }
+function clipEdgeAt(mx,my){ if(mx<LGUT) return null;   // クリップの左右端±4px=トリムハンドル（溝は除外）
   for(let i=sections.length-1;i>=0;i--){ const s=sections[i];
-    const x=lBeatToX(s.beat||0), w=(s.len||4)*lPPB(), y=laneY(secLk(s),s.track||0)+4, h=lh-8;
-    if(my<y||my>y+h) continue;
+    const x=lBeatToX(s.beat||0), w=(s.len||4)*lPPB(), [y0,y1]=clipVisY(s);
+    if(my<y0||my>y1) continue;
     if(x>=LGUT&&Math.abs(mx-x)<=4) return {s,side:'l'};   // 左端は溝より右に見えている時だけ（溝下に隠れた左端はトリム不可）
     if(Math.abs(mx-(x+w))<=4) return {s,side:'r'}; }
   return null; }
@@ -2969,6 +3085,7 @@ function flatFromSections(secs){
 }
 function compileLayersToFlat(){   // 各セクションの内容を、そのセクションのbeat位置に合成（チェーン順でなく位置が真実）
   if(_flatDirty) flushFlatEdits();   // 未同期の3D編集を消さない（compile前にcontentへ確定）
+  linkSync({flat:false});            // リンクの子を親から作り直してから合成（NLEの操作・Undo・難易度の切り替えの後）
   ({notes,bombs,walls,arcs,chains,lightEvents}=flatFromSections(sections));
   applyInfoChain(); selection.clear(); lightSelection.clear(); gizmoMode=null; rebuild(); }
 // 逆同期: 3D編集で変わったフラット(notes[]等)を各クリップのcontentへ書き戻す。範囲外(トリムで隠れた分=負の拍/はみ出し)は保持
@@ -2976,7 +3093,7 @@ let _flatDirty=false;   // 3D(NOTES/LIGHT)でフラットを編集した→conte
 function syncFlatToSections(){
   const FA={notes,bombs,walls,arcs,chains,lights:lightEvents};   // content-key → フラット配列
   const GK={notes:'n',bombs:'n',walls:'n',arcs:'n',chains:'n',lights:'l'};
-  for(const s of sections){ if(s.kind==='null') continue;
+  for(const s of sections){ if(s.kind==='null'||linkIsKid(s)) continue;   // リンクの子の中身は親から作る（3Dからは書き戻さない）
     const off=s.beat||0, L=s.len||4, tr=s.track||0, slk=secLk(s);
     if(!s.content) s.content={};
     for(const key in _LCT){ if(GK[key]!==slk) continue;   // そのクリップのグループ種別のみ処理
@@ -2986,14 +3103,393 @@ function syncFlatToSections(){
       const inside=(FA[key]||[]).filter(o=>(o._tr||0)===tr&&(o[bf]??0)>=off-1e-6&&(o[bf]??0)<off+L-1e-6)
         .map(o=>{ const c={...o}; delete c._tr; for(const f of _LCT[key]) c[f]=(c[f]??0)-off; return c; });   // 絶対拍→クリップ相対拍
       s.content[key]=[...kept,...inside]; } }
+  linkSync();   // 親の編集をリンクの子へ（全難易度）
 }
 function flushFlatEdits(){ if(_flatDirty){ _flatDirty=false; syncFlatToSections(); } }   // 未反映の3D編集をcontentへ確定（ミニロール更新＋revert防止）
+// ============ リンクしたクリップ（2026-10-19） ============
+// データ: クリップに link（リンクのid・全難易度で共通）と、親だけ linkParent:true。親は1つ（ある難易度のあるクリップ）・子はどの難易度にも置ける。
+// 子の中身は「親の中身のうち親の長さまで」の写しを実体で持つ（保存・書き出しは無改修＝古い版で開いてもノーツは消えない）。
+// 親だけが編集でき、子は打てない・選べない（objLockedN/L に linkRoN/L を足している）。syncFlatToSections は子を飛ばし、
+// 親の編集・トリム・Undo・難易度の切り替えの後は linkSync が子の中身と名前・色を親から作り直す（今の難易度はフラットの子の範囲も、
+// 他の難易度は退避データのフラットも）。リンクの付け外しで他の難易度が変わる操作の履歴は 'diffs'（linkHist）。
+const LK_KEYS={n:['notes','bombs','walls','arcs','chains'],l:['lights']};
+let _linkVer=0;          // リンクの付け外しで上げる（子の一覧の控えを作り直す合図）
+let _lkSyncing=false, _lkHold=false, _lkQuiet=false;   // _lkHold=開く途中（読み込み時の点検の前に子を作り直さない）・_lkQuiet=Undo/Redo の直後（親の編集の帯を出さない）
+const _lkKidC={ref:null,len:-1,ver:-1,list:[]};
+const _lkParSig=new Map(), _lkWarned=new Set();   // リンクごとの親の中身の控え（編集を見分ける）・帯で知らせたリンク（作業中1回）
+function linkIsKid(s){ return !!(s&&s.link&&!s.linkParent); }
+function linkNewId(){ return 'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function linkClear(s){ if(s){ delete s.link; delete s.linkParent; } }
+function linkKidsCur(){   // 今の難易度のリンクの子（控え。sections の入れ替え・数の変化・リンクの付け外しで作り直す）
+  if(_lkKidC.ref!==sections||_lkKidC.len!==sections.length||_lkKidC.ver!==_linkVer){
+    _lkKidC.ref=sections; _lkKidC.len=sections.length; _lkKidC.ver=_linkVer;
+    _lkKidC.list=sections.filter(s=>s.kind!=='null'&&linkIsKid(s)); }
+  return _lkKidC.list; }
+function linkKidAt(lk,tr,b){ for(const s of linkKidsCur()){ if(secLk(s)!==lk||(s.track||0)!==(tr||0)) continue;
+    const b0=s.beat||0; if(b>=b0-1e-6&&b<b0+(s.len||4)-1e-6) return s; } return null; }
+function linkRoN(o){ return linkKidsCur().length>0&&!!linkKidAt('n',o._tr,o.beat??o.b??0); }   // リンクの子の中の物（触れない）
+function linkRoL(ev){ return linkKidsCur().length>0&&!!linkKidAt('l',ev._tr,ev.beat||0); }
+/** from→to へ動かす途中にリンクの子がある（拍の範囲が重なる）か＝ギズモ・貼り付けの追従で子の中へ入れない */
+function linkMoveBlocked(lk,tr,from,to){ const lo=Math.min(from,to), hi=Math.max(from,to);
+  for(const s of linkKidsCur()){ if(secLk(s)!==lk||(s.track||0)!==(tr||0)) continue;
+    const b0=s.beat||0, b1=b0+(s.len||4); if(b0<=hi+1e-6&&b1>lo+1e-6) return true; }
+  return false; }
+function linkDiffName(dk){ const curK=(currentDiffName||'').toLowerCase();
+  const nm=dk===curK?currentDiffName:((projDiffs[dk]&&projDiffs[dk].name)||dk);
+  return dispDiff(String(nm||'').replace(/Standard\.dat$/i,'')); }
+function linkDiffOrder(dk){ const i=OUT_DIFFS.findIndex(d=>(d+'Standard.dat').toLowerCase()===dk); return i<0?99:i; }
+/** 全難易度のクリップを1つずつ fn(s,dk,cur)。今の難易度は sections（projDiffs の写しは古い）・他は退避データ */
+function linkEachSec(fn){ const curK=(currentDiffName||'').toLowerCase();
+  for(const s of sections) fn(s,curK,true);
+  for(const k in projDiffs){ if(k===curK||!projDiffs[k]) continue; for(const s of (projDiffs[k].sections||[])) fn(s,k,false); } }
+function linkAnyAll(){ if(sections.some(s=>s.link)) return true; const curK=(currentDiffName||'').toLowerCase();
+  for(const k in projDiffs){ if(k!==curK&&projDiffs[k]&&(projDiffs[k].sections||[]).some(s=>s.link)) return true; } return false; }
+/** リンクごとの {id, par:{s,dk,cur}|null, all:[{s,dk,cur}]}（all は難易度の順・拍の順） */
+function linkGroups(){ const m=new Map();
+  linkEachSec((s,dk,cur)=>{ if(!s.link||s.kind==='null') return;
+    let g=m.get(s.link); if(!g){ g={id:s.link,par:null,all:[]}; m.set(s.link,g); }
+    const e={s,dk,cur}; g.all.push(e); if(s.linkParent&&!g.par) g.par=e; });
+  for(const g of m.values()) g.all.sort((a,b)=>linkDiffOrder(a.dk)-linkDiffOrder(b.dk)||(a.s.beat||0)-(b.s.beat||0)||(a.s.track||0)-(b.s.track||0));
+  return m; }
+function linkGroupOf(s){ return s&&s.link?(linkGroups().get(s.link)||null):null; }
+/** NLE の描画用（毎フレーム）: リンクごとの {n:メンバー数, other:他の難易度のメンバー数, parLen:親の長さ}。今の難易度にリンクが無ければ null */
+function linkDrawInfo(){ if(!sections.some(s=>s.link)) return null; const m=new Map();
+  for(const g of linkGroups().values()) m.set(g.id,{n:g.all.length,other:g.all.filter(e=>!e.cur).length,parLen:g.par?(g.par.s.len||4):null});
+  return m; }
+/** 他の難易度にメンバーがいるリンクか（そのリンクを付け外す操作の履歴は全難易度 'diffs'） */
+function linkSpans(ids){ if(!ids||!ids.size) return false; const curK=(currentDiffName||'').toLowerCase();
+  for(const k in projDiffs){ if(k===curK||!projDiffs[k]) continue; for(const s of (projDiffs[k].sections||[])) if(s.link&&ids.has(s.link)) return true; }
+  return false; }
+function linkHist(ids){ flushFlatEdits(); const d=linkSpans(ids)?'diffs':'node'; snapshot(d); return d; }
+function clipHist(s){ return linkHist(s&&s.link?new Set([s.link]):null); }   // クリップの名前・色の変更の履歴（リンクなら全メンバーへ写すので他の難易度も）
+/** リンクのクリップの名前・色を全メンバー（全難易度）へ写す（子で変えても親に揃う） */
+function linkCopyProps(s){ if(!s||!s.link) return;
+  linkEachSec(x=>{ if(x.link!==s.link||x===s) return; x.label=s.label; x.col=s.col; x.colHex=s.colHex||null; }); }
+/** 親から子の中身を作る: 親の中身のうち親の長さまで（隠れた分は落とす）。他の種類の配列は空 */
+function linkDerived(par){ const lk=secLk(par), L=par.len||4, c=par.content||{}, out={notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:[]};
+  for(const k of LK_KEYS[lk]){ const bf=_LCT[k][0];
+    out[k]=(c[k]||[]).filter(it=>{ const rb=it[bf]??0; return rb>=-1e-6&&rb<L-1e-6; })
+      .map(it=>{ const o={}; for(const f in it) if(f[0]!=='_') o[f]=it[f]; return structuredClone(o); }); }
+  return out; }
+function linkItemKey(k,it){ const a=_ENC[k].f.map(f=>{ const v=it[f]; return typeof v==='number'?Math.round(v*1e6)/1e6:(v??null); });
+  const x=_rawX(it.raw,k); if(x) a.push(x); return JSON.stringify(a); }
+/** 中身の比較用の文字列（並び順は問わない。保存と同じ項目＝_ENC と raw の標準外の項目） */
+function linkSig(content,lk){ const c=content||{}; return LK_KEYS[lk].map(k=>(c[k]||[]).map(it=>linkItemKey(k,it)).sort().join('\n')).join('\u0001'); }
+/** K の中身を der で置き換えた時に消える物の数（der に無い物。隠れた分も数える） */
+function linkLoss(K,der,lk){ const have=new Map();
+  for(const k of LK_KEYS[lk]) for(const it of (der[k]||[])){ const key=k+linkItemKey(k,it); have.set(key,(have.get(key)||0)+1); }
+  let n=0; for(const k of LK_KEYS[lk]) for(const it of ((K.content||{})[k]||[])){ const key=k+linkItemKey(k,it), c=have.get(key)||0;
+    if(c>0) have.set(key,c-1); else n++; }
+  return n; }
+/** 子 K の範囲のフラットを中身から作り直す。st=他の難易度の退避データ／null=今の難易度（3Dの表示も直す） */
+function linkFlatReplace(K,st){ const lk=secLk(K), tr=K.track||0, b0=K.beat||0, L=K.len||4, c=K.content||{}, cur=!st;
+  const inR=o=>{ const b=o.beat??o.b??0; return (o._tr||0)===tr&&b>=b0-1e-6&&b<b0+L-1e-6; };
+  const arrs=lk==='n'?[['notes',cur?notes:st.notes],['bombs',cur?bombs:st.bombs],['walls',cur?walls:st.walls],['arcs',cur?arcs:st.arcs],['chains',cur?chains:st.chains]]
+    :[['lights',cur?lightEvents:st.lightEvents]];
+  for(const [k,arr] of arrs){ if(!arr) continue;
+    for(let i=arr.length-1;i>=0;i--){ const o=arr[i]; if(!inR(o)) continue; arr.splice(i,1);
+      if(cur){ if(lk==='n'){ removeObjMesh(o); selection.delete(o); } else lightSelection.delete(o); } }
+    const bf=_LCT[k][0];
+    for(const it of (c[k]||[])){ const rb=it[bf]??0; if(!(rb>=0&&rb<L)) continue;   // flatFromSections と同じ範囲
+      const o={...structuredClone(it),_tr:tr}; for(const f of _LCT[k]) o[f]=(o[f]??0)+b0; arr.push(o);
+      if(cur&&lk==='n'&&layerVisible('n',tr)) addObj(o); }
+    if(k==='lights') arr.sort((a,b)=>a.beat-b.beat); } }
+/** 今の難易度のフラットで、子 K の範囲に中身より多く物がある数（紛れ込んだ物） */
+function linkFlatExtra(K){ const lk=secLk(K), tr=K.track||0, b0=K.beat||0, L=K.len||4, c=K.content||{};
+  const FA={notes,bombs,walls,arcs,chains,lights:lightEvents};
+  let have=0, want=0;
+  for(const k of LK_KEYS[lk]){ const bf=_LCT[k][0];
+    for(const it of (c[k]||[])){ const rb=it[bf]??0; if(rb>=0&&rb<L) want++; }
+    for(const o of (FA[k]||[])){ const b=o.beat??o.b??0; if((o._tr||0)===tr&&b>=b0-1e-6&&b<b0+L-1e-6) have++; } }
+  return have-want; }
+/** 親の中身・名前・色を子へ写す（全難易度）。opt.flat=false: 今の難易度のフラットは呼ぶ側が作り直す（compileLayersToFlat） */
+function linkSync(opt){
+  if(_lkSyncing||_lkHold) return;
+  if(!linkAnyAll()){ _lkQuiet=false; return; }
+  const flat=!(opt&&opt.flat===false);
+  _lkSyncing=true;
+  try{
+    const curKids=[], other=[], warn=[];
+    for(const g of linkGroups().values()){ if(!g.par) continue;   // 親の無いリンク（次の親を選ぶ前）は触らない
+      const P=g.par.s, lk=secLk(P);
+      let der=null, dsig=null; const psig=()=>{ if(!der){ der=linkDerived(P); dsig=linkSig(der,lk); } return dsig; };
+      const otherKids=[];
+      for(const e of g.all){ if(e===g.par||secLk(e.s)!==lk) continue; const K=e.s;
+        if(K.label!==P.label) K.label=P.label;
+        if((K.col??null)!==(P.col??null)) K.col=P.col;
+        if((K.colHex||null)!==(P.colHex||null)) K.colHex=P.colHex||null;
+        if(!e.cur) otherKids.push(e);
+        if(linkSig(K.content,lk)===psig()){ if(e.cur&&flat) curKids.push([K,false]); continue; }
+        K.content=structuredClone(der);
+        if(e.cur){ if(flat) curKids.push([K,true]); } else other.push([K,projDiffs[e.dk]]); }
+      // 親の中身が前と変わった＝親を編集した（作った直後・Undo/Redo・読み込みは除く）。他の難易度に子がいれば、そのリンクごとに1回だけ帯で知らせる
+      const prev=_lkParSig.get(g.id), now=psig(); _lkParSig.set(g.id,now);
+      if(prev!=null&&prev!==now&&!_lkQuiet&&otherKids.length&&!_lkWarned.has(g.id)){ _lkWarned.add(g.id); warn.push({P,otherKids}); } }
+    let stray=0;
+    for(const [K,ch] of curKids){ if(ch) linkFlatReplace(K,null);
+      else { const n=linkFlatExtra(K); if(n){ if(n>0) stray+=n; linkFlatReplace(K,null); } } }   // 子の範囲に紛れ込んだ物は取り除く（子は親と同じ中身だけ）
+    for(const [K,st] of other) if(st) linkFlatReplace(K,st);
+    if(stray) showErr(tf('lk.strayRemoved','リンクの子のクリップには置けません（{n}個を取り除きました）',{n:stray}));
+    if(warn.length){ const w=warn[0];
+      linkBandMsg(tf('lk.warnEdit','「{name}」は他の難易度（{diffs}）にも繋がっています。親の編集は繋いだ全部に反映されます',
+        {name:w.P.label||'Sheet',diffs:[...new Set(w.otherKids.map(e=>linkDiffName(e.dk)))].join('・')}),'warn'); }
+  } finally{ _lkSyncing=false; _lkQuiet=false; }
+}
+/** 1つしか残っていないリンクを外し、親の無いリンク（2つ以上）を返す（呼ぶ側が次の親を選んでもらう） */
+function linkTidy(){ const orphan=[];
+  for(const g of linkGroups().values()){
+    if(g.all.length<2){ for(const e of g.all) linkClear(e.s); continue; }
+    if(!g.par) orphan.push(g); }
+  _linkVer++; return orphan; }
+/** リンクの付け外しの後: 子を作り直して合成し直す */
+function linkDone(msg){ _linkVer++; compileLayersToFlat(); relinkDiffEdges(); metaDirty=true; renderDiffBar(); if(msg) stat(msg); }
+/** 開いた時の点検: 親と中身の違う子（古い版で子を編集した等）・親の無いリンク・種類の混ざったリンクは外す。外した数を返す */
+function linkSanitize(){
+  if(!linkAnyAll()) return 0;
+  let n=0;
+  for(const g of linkGroups().values()){
+    for(const e of g.all) if(e!==g.par&&e.s.linkParent) delete e.s.linkParent;   // 親が2つ以上（古い版で親を分割した等）は最初の1つだけ
+    if(!g.par){ if(g.all.length>=2) n+=g.all.length; for(const e of g.all) linkClear(e.s); continue; }
+    const P=g.par.s, lk=secLk(P), sig=linkSig(linkDerived(P),lk);
+    for(const e of g.all){ if(e===g.par) continue;
+      if(secLk(e.s)!==lk||linkSig(e.s.content,lk)!==sig){ linkClear(e.s); n++; } } }
+  linkTidy();
+  for(const g of linkGroups().values()) if(g.par) _lkParSig.set(g.id,linkSig(linkDerived(g.par.s),secLk(g.par.s)));
+  return n; }
+// ---- リンクの帯（子を触った・分割できない・親の編集の知らせ）と確認の画面（js/nle/clip-link.js） ----
+function linkBandAnchor(){ return document.getElementById(hoverPane==='node'?'nodecol':'main')||document.body; }
+function linkBandMsg(msg,kind){ hideEditOnlyBand(); linkBand({msg,kind:kind||'msg',anchor:linkBandAnchor(),ms:9000,top:hoverPane==='node'?8:50,
+  buttons:[{label:t('lk.ok','OK'),cls:'pri'}]}); stat(msg); }
+/** 子を触った時の帯: ［親へジャンプ］［リンクを解除］［そのまま］ */
+function linkBandKid(K,why){ if(!K) return; hideEditOnlyBand();
+  const g=linkGroupOf(K), P=g&&g.par;
+  const msg=why||(P?tf('lk.bandKid','このクリップ「{name}」はリンクの子です（親: {diff}・{lane}・拍 {beat}）。編集は親で行います',
+      {name:K.label||'Sheet',diff:linkDiffName(P.dk),lane:laneLabel(secLk(P.s),P.s.track||0),beat:linkFmtB(P.s.beat||0)})
+    :tf('lk.bandKidNoPar','このクリップ「{name}」はリンクの子です',{name:K.label||'Sheet'}));
+  const live=()=>sections.find(x=>x.id===K.id)||K;   // 帯を押すまでに Undo 等でクリップが作り直されていても、今のクリップに効かせる
+  linkBand({msg,kind:'kid',anchor:linkBandAnchor(),ms:7000,top:hoverPane==='node'?8:50,buttons:[
+    ...(P?[{label:t('lk.jump','親へジャンプ'),cls:'pri',fn:()=>linkJumpParent(live())}]:[]),
+    {label:t('lk.unlink','リンクを解除'),fn:()=>linkUnlink([live()])},
+    {label:t('lk.keep','そのまま')}]});
+  stat(msg); }
+/** 子の物（ノーツ系）がマウスの下にあれば帯を出して true（objUnder は子を拾わない＝その時だけ使う） */
+function linkClickKid(e){
+  if(lightMode||!linkKidsCur().length||objUnder(e)) return false;
+  if(e) setPtr(e); else raycaster.setFromCamera(pointer,camera);
+  const hits=raycaster.intersectObjects(meshes.filter(m=>m.group.visible&&linkRoN(m.obj)).map(m=>m.group),true);
+  for(const h of hits){ let o=h.object; while(o&&!o.userData.obj)o=o.parent; const ob=o&&o.userData.obj; if(!ob) continue;
+    linkBandKid(linkKidAt('n',ob._tr,ob.beat??ob.b??0)); return true; }
+  return false; }
+/** マウスの下の子のライト（ライトの編集） */
+function linkKidLightUnder(e){
+  if(!lightMode||!linkKidsCur().length) return null;
+  if(e) setPtr(e); else raycaster.setFromCamera(pointer,camera);
+  for(const h of raycaster.intersectObjects(chipPool.filter(c=>c.visible),true)){ if(h.object.isSprite) continue;
+    let o=h.object; while(o&&!o.userData.ev) o=o.parent; const ev=o&&o.userData.ev;
+    if(ev&&linkRoL(ev)) return ev; }
+  if(lightHover){ const tt=LIGHT_LANES[lightHover.lane].t, tol=Math.min(0.15,(snap||0.5)/2), hb=lightHover.raw??lightHover.beat;
+    const ev=lightEvents.find(v=>v.et===tt&&Math.abs(v.beat-hb)<=tol&&linkRoL(v)); if(ev) return ev; }
+  return null; }
+/** 3Dで b に置こうとした時、行き先がリンクの子ならその子（置けない）。cell=ノーツのマス（そのマスにある子の物も見る） */
+function linkPlaceBlock(b,lk,cell){
+  if(!linkKidsCur().length) return null;
+  if(cell&&lk==='n'){ const o=[...notes,...bombs].find(n=>Math.abs(n.beat-b)<1e-4&&n.x===cell.x&&n.y===cell.y&&!objOffEditN(n)&&linkRoN(n));
+    if(o) return linkKidAt('n',o._tr,o.beat); }
+  const p=clipTrackPlan(b,lk); if(!p||p.slot) return null;
+  return linkKidAt(lk,p.tr,b); }
+const linkFmtB=b=>String(Math.round(b*1000)/1000);
+const linkFmtT=sec=>{ sec=Math.max(0,sec||0); const m=Math.floor(sec/60); return m+':'+(sec-m*60).toFixed(1).padStart(4,'0'); };
+function linkKindWord(lk){ return lk==='l'?t('word.light','ライト'):t('word.notes','ノーツ'); }
+function linkOptSub(e){ const s=e.s, lk=secLk(s), b0=s.beat||0, b1=b0+(s.len||4), c=s.content||{};
+  const n=lk==='l'?(c.lights||[]).length:(c.notes||[]).length+(c.chains||[]).length+(c.arcs||[]).length;
+  return tf('lk.optSub','{diff} ・ {lane} ・ 拍 {b0}〜{b1}（{t0}〜{t1}）・ {kind} {n}',{diff:linkDiffName(e.dk),lane:laneLabel(lk,s.track||0),
+    b0:linkFmtB(b0),b1:linkFmtB(b1),t0:linkFmtT(beatToTimeTM(b0)),t1:linkFmtT(beatToTimeTM(b1)),kind:linkKindWord(lk),n}); }
+function linkLossText(loss,lk){ const ks=Object.keys(loss).filter(k=>loss[k]>0).sort((a,b)=>linkDiffOrder(a)-linkDiffOrder(b));
+  if(!ks.length) return '';
+  return tf('lk.loss','消える{kind}: {list}',{kind:linkKindWord(lk),list:ks.map(k=>linkDiffName(k)+' '+tf('lk.nItems','{n}個',{n:loss[k]})).join('・')}); }
+/** 小節の頭からの位置（拍÷4の余り）が違う物があれば1行 */
+function linkBarNote(secs){ const r=secs.map(s=>{ const v=((s.beat||0)%4+4)%4; return Math.round(v*1000)/1000; });
+  return new Set(r).size>1?tf('lk.barDiff','※小節の頭からの位置が違います（拍 {list}）',{list:secs.map(s=>linkFmtB(s.beat||0)).join('・')}):''; }
+/** 親を選ぶ画面。kind='link'(2つ)/'merge'(2つのリンク)/'next'(親が無くなった)。lossFor(i)= i を親にした時に消える数 {dk:n}。
+ *  canCancel=次の親の画面に［キャンセル］を出す（きっかけの操作を取り消せる時）。戻り値=選んだ番号/null（キャンセル） */
+async function linkParentDialog(kind,cands,lossFor,canCancel){
+  const lk=secLk(cands[0].s);
+  const radios=cands.map((e,i)=>{ const loss=lossFor?lossFor(i):{}, lt=linkLossText(loss,lk);
+    return {main:tf('lk.optMain','「{name}」',{name:e.s.label||'Sheet'}),sub:linkOptSub(e),   // 消える物がある時だけ赤い注意・無ければ灰色の1行
+      warn:kind!=='next'&&lt?tf('lk.lossIf','これを親にすると、{loss}',{loss:lt}):'',
+      sub2:kind!=='next'&&!lt?tf('lk.noLoss','これを親にしても、消える{kind}はありません',{kind:linkKindWord(lk)}):''}; });
+  const lines=kind==='next'
+    ?[t('lk.nextBody','リンクの親が無くなりました。残りのクリップから次の親を選んでください（どれを選んでも中身は同じです）。')]
+    :[kind==='merge'?t('lk.mergeBody','2つのリンクを1つにまとめます。選ばなかった方のリンクのクリップは全部、選んだ親の子になります。')
+       :t('lk.parentBody','親だけを編集でき、子は親と同じ中身になります（子の今の中身は親の中身で置き換わります）。'),
+     t('lk.parentHint','親を編集すると、繋いだ全部（他の難易度も）に反映されます。')];
+  const r=await linkDialog({kind:'parent-'+kind,title:kind==='next'?t('lk.nextTitle','次の親を選んでください'):t('lk.parentTitle','リンクする — 親を選んでください'),
+    lines,radios,radio:0,note:linkBarNote(cands.map(e=>e.s)),
+    buttons:[{label:kind==='next'?t('lk.decide','決定'):kind==='merge'?t('lk.merge','まとめる'):t('lk.link','リンクする'),value:'ok',pri:true},
+      ...(kind!=='next'||canCancel?[{label:t('word.cancel','キャンセル'),value:null}]:[])],   // 並びは他の確認の画面と同じ（主のボタン・キャンセルの順で右寄せ）
+    cancel:kind==='next'&&!canCancel?'ok':null});   // Esc＝キャンセル（取り消せない時だけ、今までどおり決定）
+  return r.value==='ok'?r.radio:null; }
+/** 既にあるリンクに加える時など: 消える物がある時だけ確認。true=続ける */
+async function linkConfirmLoss(title,loss,lk,note){
+  const lt=linkLossText(loss,lk); if(!lt&&!note) return true;
+  const r=await linkDialog({kind:'confirm',title,lines:[lt?tf('lk.lossBody','子になるクリップの今の中身は親の中身で置き換わります。{loss}',{loss:lt}):''],note,
+    buttons:[{label:t('lk.continue','続ける'),value:'ok',pri:true},{label:t('word.cancel','キャンセル'),value:null}]});
+  return r.value==='ok'; }
+// ---- 次の親の画面の［キャンセル］（2026-10-20・利用者の要望）: きっかけの操作（親の削除・カット・解除・難易度間コピー）をまるごと取り消す ----
+// きっかけの操作は変更の前に履歴を1つ積んでいる（linkHist／snapshot）。キャンセルはその項目で操作の前へ戻し、項目を履歴から外す。
+// Undo と違ってやり直しの列にも積まない（Ctrl+Shift+Z で復活しない）。やり直しの列・クリップボード（カット）も操作の前の物に戻す。
+/** 控えを取る（きっかけの操作が履歴を積む直前に呼ぶ） */
+function linkTxBegin(){ return {redo:redoStack.slice(),u0:undoStack[0]||null,top:undoStack[undoStack.length-1]||null,clip:layerClipboard,sel:[...layerSel],e:null}; }   // sel=右クリックの「クリップを削除」が選択を変える前の選択
+/** 履歴を積んだ直後に呼ぶ: 積んだ項目を覚える（積まれていなければ覚えない＝キャンセルは出さない） */
+function linkTxMark(tx){ if(tx){ const e=undoStack[undoStack.length-1]||null; tx.e=e&&e!==tx.top?e:null; } return tx; }
+function linkTxOk(tx){ return !!(tx&&tx.e&&undoStack.lastIndexOf(tx.e)>=0); }
+/** キャンセル: 覚えた項目（とその後に積まれた物）を新しい順に戻し、履歴から外す。戻せたら true */
+function linkTxCancel(tx){
+  const i=linkTxOk(tx)?undoStack.lastIndexOf(tx.e):-1; if(i<0) return false;
+  for(let j=undoStack.length-1;j>=i;j--){ const e=undoStack[j];
+    gotoHistDiff(e); syncHistView(e.d);
+    _lkQuiet=true;   // 戻した親の中身で子を作り直す時、「親を編集した」の帯は出さない（undo と同じ）
+    restoreDomain(e.d,e.s);
+    if(e.d==='note'||e.d==='light') _flatDirty=true; }
+  undoStack.length=i;
+  if(tx.u0&&undoStack[0]!==tx.u0&&undoStack.length<HIST_MAX) undoStack.unshift(tx.u0);   // 積んだ時に深さの上限で押し出された一番古い項目も戻す
+  redoStack.length=0; for(const e of tx.redo) redoStack.push(e);
+  layerClipboard=tx.clip;
+  layerSel=new Set(tx.sel.filter(id=>sections.some(s=>s.id===id)));
+  _linkVer++; renderDiffBar();
+  const msg=t('lk.txCancelled','操作を取り消しました');
+  stat(msg);
+  { const el=document.getElementById('errToast'); if(el&&el.style.display==='block') showOk(msg); }   // 取り消した操作の知らせ（「コピーしました」等）が出ていれば置き換える
+  return true; }
+/** 親の無いリンクごとに次の親を選んでもらう（親を消した・解除した後）。tx=きっかけの操作の控え（linkTxBegin）。
+ *  取り消せる時は［キャンセル］（Esc）を出し、どの画面で押しても（続けて出る2つ目以降でも）きっかけの操作をまるごと取り消す */
+async function linkAskNextParents(orphans,tx){
+  const canCancel=linkTxOk(tx);
+  for(const g0 of orphans){ const g=linkGroups().get(g0.id); if(!g||g.par||g.all.length<2) continue;
+    const i=await linkParentDialog('next',g.all,null,canCancel);
+    if(i==null&&canCancel&&linkTxCancel(tx)) return;
+    g.all[Math.max(0,i||0)].s.linkParent=true; _linkVer++; }
+  linkDone(); }
+/** NLEで選んだクリップをリンクする（右クリック「リンクする」・K）。決まりは CLAUDE.md の「リンクしたクリップ」 */
+async function linkSelected(){
+  const sel=sections.filter(s=>layerSel.has(s.id)&&s.kind!=='null');
+  if(sel.length<2){ stat(t('lk.needTwo','リンクするクリップを2つ以上選んでください')); return; }
+  if(new Set(sel.map(secLk)).size>1){ showErr(t('lk.mixKind','ノーツとライトのクリップはリンクできません')); return; }
+  const lk=secLk(sel[0]), curK=(currentDiffName||'').toLowerCase();
+  const ids=[...new Set(sel.filter(s=>s.link).map(s=>s.link))], free=sel.filter(s=>!s.link), groups=linkGroups();
+  if(!ids.length){   // リンクしていない物だけ: 2つなら親を選ぶ・3つ以上は断る
+    if(sel.length>2){ showErr(t('lk.pickTwo','どれを親にするか決めるため、2つに絞ってください（既にある親と一緒に選べば、その子に加えます）')); return; }
+    const cands=sel.map(s=>({s,dk:curK,cur:true})).sort((a,b)=>(a.s.beat||0)-(b.s.beat||0)||(a.s.track||0)-(b.s.track||0));
+    const r=await linkParentDialog('link',cands,i=>({[curK]:linkLoss(cands[1-i].s,linkDerived(cands[i].s),lk)}));
+    if(r==null) return;
+    const P=cands[r].s, K=cands[1-r].s;
+    if(!sections.includes(P)||!sections.includes(K)) return;   // 画面を出している間に消えた
+    linkHist(null);
+    const id=linkNewId(); P.link=id; P.linkParent=true; K.link=id; delete K.linkParent;
+    linkDone(tf('lk.linked','リンクしました（親: 「{name}」）',{name:P.label||'Sheet'})); return; }
+  if(ids.length>2){ showErr(t('lk.tooMany','3つ以上のリンクは一度にまとめられません（2つずつまとめてください）')); return; }
+  if(ids.some(id=>{ const g=groups.get(id); return !g||!g.par||g.all.some(e=>secLk(e.s)!==lk); })){ showErr(t('lk.noParent','親の無いリンクには加えられません')); return; }
+  if(ids.length===1){   // 既にあるリンクに加える（親は選ばない）。消える物がある時だけ確認
+    const g=groups.get(ids[0]);
+    if(!free.length){ stat(t('lk.already','既に同じリンクです')); return; }
+    const der=linkDerived(g.par.s), n=free.reduce((a,s)=>a+linkLoss(s,der,lk),0);
+    const note=linkBarNote([g.par.s,...free]);
+    if(n&&!await linkConfirmLoss(tf('lk.addTitle','リンク（親: {diff}「{name}」）に加えます',{diff:linkDiffName(g.par.dk),name:g.par.s.label||'Sheet'}),{[curK]:n},lk,note)) return;
+    if(free.some(s=>!sections.includes(s))) return;
+    linkHist(null);   // 今の難易度のクリップが子に加わるだけ（他の難易度は変わらない）
+    for(const s of free){ s.link=g.id; delete s.linkParent; }
+    linkDone(tf('lk.added','リンクに加えました（{n}個・親: {diff}「{name}」）',{n:free.length,diff:linkDiffName(g.par.dk),name:g.par.s.label||'Sheet'})); return; }
+  // 別々の2つのリンク: 親を選んでまとめる（選ばなかった方は親も子も全部、選んだ親の子になる）
+  const cands=ids.map(id=>groups.get(id).par).sort((a,b)=>linkDiffOrder(a.dk)-linkDiffOrder(b.dk)||(a.s.beat||0)-(b.s.beat||0));
+  const lossFor=i=>{ const der=linkDerived(cands[i].s), loss={};
+    for(const e of groups.get(cands[1-i].s.link).all){ const n=linkLoss(e.s,der,lk); if(n) loss[e.dk]=(loss[e.dk]||0)+n; }
+    for(const s of free){ const n=linkLoss(s,der,lk); if(n) loss[curK]=(loss[curK]||0)+n; }
+    return loss; };
+  const r=await linkParentDialog('merge',cands,lossFor);
+  if(r==null) return;
+  const win=cands[r].s.link, lose=linkGroups().get(cands[1-r].s.link);
+  if(!lose) return;
+  linkHist(new Set(ids));
+  for(const e of lose.all){ e.s.link=win; delete e.s.linkParent; }
+  for(const s of free){ s.link=win; delete s.linkParent; }
+  linkDone(tf('lk.merged','2つのリンクをまとめました（親: 「{name}」）',{name:cands[r].s.label||'Sheet'})); }
+/** リンクを解除（list=今の難易度のクリップ）。親を外して2つ以上残れば次の親を選んでもらう */
+async function linkUnlink(list){
+  list=(list||[]).filter(s=>s&&s.link); if(!list.length) return;
+  const tx=linkTxBegin();   // 次の親の画面のキャンセルで、解除をまるごと取り消す
+  linkHist(new Set(list.map(s=>s.link))); linkTxMark(tx);
+  for(const s of list) linkClear(s);
+  const orphans=linkTidy();
+  linkDone(tf('lk.unlinked','リンクを解除しました（{n}個）',{n:list.length}));
+  if(orphans.length) await linkAskNextParents(orphans,tx); }
+/** 子を親にする（右クリック「これを親にする」）。前の親を含む他のメンバーで消える物がある時だけ確認 */
+async function linkMakeParent(s){
+  const g=linkGroupOf(s); if(!g||!linkIsKid(s)) return;
+  const lk=secLk(s), der=linkDerived(s), loss={};
+  for(const e of g.all){ if(e.s===s) continue; const n=linkLoss(e.s,der,lk); if(n) loss[e.dk]=(loss[e.dk]||0)+n; }
+  if(!await linkConfirmLoss(tf('lk.makeParentTitle','「{name}」をリンクの親にします',{name:s.label||'Sheet'}),loss,lk,'')) return;
+  linkHist(new Set([g.id]));
+  for(const e of g.all) delete e.s.linkParent;
+  s.linkParent=true;
+  linkDone(tf('lk.madeParent','「{name}」（{diff}）をリンクの親にしました',{name:s.label||'Sheet',diff:linkDiffName((currentDiffName||'').toLowerCase())})); }
+/** 親へジャンプ（親が他の難易度ならその難易度へ切り替える）: 親を選び、再生ヘッドを親の頭へ */
+function linkJumpParent(s){
+  const g=linkGroupOf(s); if(!g||!g.par){ showErr(t('lk.noParentJump','このリンクには親がありません')); return; }
+  const pid=g.par.s.id, lk=secLk(g.par.s);
+  if(!g.par.cur){ const i=linkDiffOrder(g.par.dk); if(i>=OUT_DIFFS.length) return; switchDiffByIndex(i); }
+  const P=sections.find(x=>x.id===pid); if(!P) return;
+  layerSel=new Set([P.id]); musicSelSet=new Set();
+  const tr=P.track||0, y=laneY(lk,tr);
+  if(y<laneTopOf(lk)||y+laneHt(lk)>laneTopOf(lk)+laneVP(lk)) setScr(lk,tr*laneHt(lk));   // 親のレーンが表示窓の外ならスクロール
+  seekEase(P.beat||0);
+  stat(tf('lk.jumped','リンクの親「{name}」（{diff}・{lane}）へ移動しました',{name:P.label||'Sheet',diff:linkDiffName((currentDiffName||'').toLowerCase()),lane:laneLabel(lk,tr)})); }
+/** 他の難易度の同じ位置（拍・レーン・長さが同じ）のクリップとリンク。s がリンクしていなければ s を親にする */
+async function linkOtherDiffs(s){
+  if(!s||s.kind==='null') return;
+  const lk=secLk(s), curK=(currentDiffName||'').toLowerCase(), b0=s.beat||0, L=s.len||4, tr=s.track||0;
+  const g=linkGroupOf(s);
+  if(g&&!g.par){ showErr(t('lk.noParent','親の無いリンクには加えられません')); return; }
+  const par=g?g.par:{s,dk:curK,cur:true}, der=linkDerived(par.s), rows=[];
+  for(const dn of OUT_DIFFS){ const dk=(dn+'Standard.dat').toLowerCase(); if(dk===curK||!projDiffs[dk]) continue;
+    const c=(projDiffs[dk].sections||[]).find(x=>x.kind!=='null'&&secLk(x)===lk&&(x.track||0)===tr&&Math.abs((x.beat||0)-b0)<1e-6&&Math.abs((x.len||4)-L)<1e-6);
+    if(!c) continue;
+    const same=!!(s.link&&c.link===s.link), other=!!(c.link&&!same);
+    rows.push({dk,c,same,other,loss:(same||other)?0:linkLoss(c,der,lk)}); }
+  if(!rows.length){ stat(t('lk.noSamePos','他の難易度の同じ位置（拍・レーン・長さが同じ）にクリップがありません')); return; }
+  const checks=rows.map(r=>({main:tf('lk.diffRow','{diff}「{name}」',{diff:linkDiffName(r.dk),name:r.c.label||'Sheet'}),sub:linkOptSub({s:r.c,dk:r.dk}),
+    warn:r.same?t('lk.rowSame','既に同じリンクです'):r.other?t('lk.rowOther','別のリンクに入っています（解除してから）'):(r.loss?linkLossText({[r.dk]:r.loss},lk):''),
+    checked:!r.same&&!r.other,disabled:r.same||r.other}));
+  if(!rows.some(r=>!r.same&&!r.other)){ stat(t('lk.already','既に同じリンクです')); return; }
+  const res=await linkDialog({kind:'diffs',title:t('lk.diffsTitle','他の難易度の同じ位置のクリップとリンク'),
+    lines:[g?tf('lk.diffsBodyIn','チェックした難易度のクリップを、このリンク（親: {diff}「{name}」）の子にします。子の今の中身は親の中身で置き換わります。',{diff:linkDiffName(par.dk),name:par.s.label||'Sheet'})
+      :tf('lk.diffsBody','このクリップ「{name}」を親にして、チェックした難易度の同じ位置（拍・レーン・長さが同じ）のクリップを子にします。子の今の中身は親の中身で置き換わります。',{name:s.label||'Sheet'})],
+    checks,note:t('lk.parentHint','親を編集すると、繋いだ全部（他の難易度も）に反映されます。'),
+    buttons:[{label:t('lk.link','リンクする'),value:'ok',pri:true},{label:t('word.cancel','キャンセル'),value:null}]});
+  if(res.value!=='ok') return;
+  const pick=rows.filter((r,i)=>res.checks[i]&&!r.same&&!r.other); if(!pick.length) return;
+  if(!sections.includes(s)) return;
+  flushFlatEdits(); snapshot('diffs');
+  let id=s.link; if(!id){ id=linkNewId(); s.link=id; s.linkParent=true; }
+  for(const r of pick){ r.c.link=id; delete r.c.linkParent; }
+  linkDone(tf('lk.linkedDiffs','{n}つの難易度のクリップとリンクしました（{list}）',{n:pick.length,list:pick.map(r=>linkDiffName(r.dk)).join('・')})); }
+/** 分割できない時の帯（リンク中は分割不可・解除してから） */
+function linkSplitBlocked(s){ hideEditOnlyBand();
+  const msg=tf('lk.noSplit','リンク中のクリップ「{name}」は分割できません（リンクを解除してから分割してください）',{name:s.label||'Sheet'});
+  linkBand({msg,kind:'split',anchor:linkBandAnchor(),ms:7000,top:hoverPane==='node'?8:50,
+    buttons:[{label:t('lk.unlink','リンクを解除'),fn:()=>linkUnlink([sections.find(x=>x.id===s.id)||s])},{label:t('lk.keep','そのまま')}]});
+  stat(msg); }
+/** 難易度の中身を全部消す前の確認: 他の難易度とリンクしているクリップがあれば断る（消すと親の写しが崩れる・親なら他の難易度まで消える） */
+function linkBlocksClear(dk,lk){
+  for(const g of linkGroups().values()){ const inD=g.all.some(e=>e.dk===dk&&secLk(e.s)===lk), out=g.all.some(e=>e.dk!==dk);
+    if(inD&&out) return true; }
+  return false; }
 // ============ ボックス構造の全難易度同期（構造=一体、中身=難易度ごと） ============
 // クリップは共通ID(gid)で全難易度の対応物と結ばれる。gid無しの旧データは（名前+拍+レーン+長さ）で照合
 function clipRef(s){ return {gid:s.gid,label:s.label,beat:s.beat||0,track:s.track||0,len:s.len||4}; }
 // 伝播ヘルパ群(eachOtherDiff/propagateLights/propSplit〜propCreate)は撤去（2026-07-05ヘルバ様確定「箱ごと難易度別」）
 function splitSectionAt(s,atAbsBeat,quiet){ if(s.kind==='null') return;   // quiet=履歴/通知を抑止（一括分割で外側が1回だけ積む）
   const local=atAbsBeat-(s.beat||0), L=s.len||4; if(local<=1e-6||local>=L-1e-6) return;
+  if(s.link){ linkSplitBlocked(s); return; }   // リンク中は分割できない（解除してから）
   if(!quiet) snapshot('node');
   if(!s.gid) s.gid='g'+(++_nid);
   const ref0=clipRef(s);
@@ -3011,6 +3507,7 @@ function cutClipAtMarkers(s){   // クリップ範囲内の全マーカー拍で
   const b0=s.beat||0, b1=b0+(s.len||4);
   const ms=[...new Set(markers.map(m=>m.beat).filter(b=>b>b0+1e-6&&b<b1-1e-6))].sort((a,b)=>a-b);
   if(!ms.length){ stat('このクリップ内にマーカーがありません'); return; }
+  if(s.link){ linkSplitBlocked(s); return; }   // リンク中は分割できない（履歴も積まない）
   snapshot('node');
   for(let i=ms.length-1;i>=0;i--) splitSectionAt(s,ms[i],true);   // 大きい拍から分割＝左側sは常にb0始点のまま有効に切れる
   layerSel=new Set(); musicSelSet=new Set();
@@ -3025,6 +3522,7 @@ function mergeLayerSel(){ const sel=sections.filter(x=>layerSel.has(x.id)&&x.kin
     arr.sort((a,b)=>(a.beat||0)-(b.beat||0));
     merges.push(arr); }
   if(!merges.length){ stat('結合できるクリップがありません（同じ種別を2つ以上選択）'); return; }
+  if(merges.some(run=>run.some(c=>c.link))){ showErr(t('lk.noMerge','リンク中のクリップは結合できません（リンクを解除してから結合してください）')); return; }
   snapshot('node');
   const newSel=new Set([...layerSel]);
   for(const run of merges){
@@ -3043,11 +3541,15 @@ function mergeLayerSel(){ const sel=sections.filter(x=>layerSel.has(x.id)&&x.kin
     for(const id of ids) newSel.delete(id);
     newSel.add(merged.id); }
   layerSel=newSel; relinkDiffEdges(); compileLayersToFlat(); metaDirty=true; stat('クリップを結合しました'); }
-function deleteLayerSel(){ if(!layerSel.size) return; snapshot('node');
+function deleteLayerSel(tx){ if(!layerSel.size) return;   // tx=呼ぶ側で先に取った控え（カット＝クリップボードを入れる前・右クリックの削除＝選択を変える前。次の親の画面のキャンセルで戻す）
+  const lkIds=new Set(sections.filter(x=>layerSel.has(x.id)&&x.link).map(x=>x.link));   // リンクのメンバーを消す＝他の難易度の親・子の付け外しも変わり得る
+  if(lkIds.size){ tx=tx||linkTxBegin(); linkHist(lkIds); linkTxMark(tx); } else snapshot('node');
   const _refs=sections.filter(x=>layerSel.has(x.id)).map(s=>{ if(!s.gid) s.gid='g'+(++_nid); return clipRef(s); });
   sections=sections.filter(x=>!layerSel.has(x.id)); layerSel=new Set();
   relinkDiffEdges();   // 消えたIDへの配線を残さない（配置ガードの誤爆防止）
-  compileLayersToFlat(); metaDirty=true; stat('クリップを削除しました'); }
+  const orphans=lkIds.size?linkTidy():[];   // 1つだけ残ったリンクは外す・親を消して2つ以上残れば次の親を選んでもらう
+  compileLayersToFlat(); metaDirty=true; stat('クリップを削除しました');
+  if(orphans.length) linkAskNextParents(orphans,tx); }
 // ---- song(Music)とレイヤークリップの同時移動（同じ拍だけ連動） ----
 function shiftMusicSelBeat(d){   // 選択中のMusicセグメント（分割/未分割）を拍dだけ相対移動
   if(!musicSelSet.size||!d) return;
@@ -3090,35 +3592,125 @@ function toggleLaneState(kind, lk, tr){   // レーンのロック(l)/ミュー�
   rebuild();
   stat(tf('msg.laneState','{lane} を{state}',{lane:laneLabel(lk,tr),state:kind==='s'?(layerSoloS.has(key)?t('word.solo','ソロ'):t('word.unsolo','ソロ解除')):kind==='m'?(layerMuteS.has(key)?t('word.mute','ミュート'):t('word.unmute','ミュート解除')):(layerLockS.has(key)?t('word.lock','ロック'):t('word.unlock','ロック解除'))}));
 }
+// ---- 単独編集（Edit only・2026-10-19）: 溝の2段目のスイッチ・Eキー・3Dの帯のボタンで切り替える ----
+// ノーツのレーンだけ。1つだけオン（排他）・オンのレーンをもう一度押すと全部オフ（今までどおり自由に置ける）。
+// 切り替えは履歴に積まず、未保存にもしない（projSig に入れない＝view と同じ扱い）。ロック中のレーンを単独編集にした時だけロックを外す（ロックは未保存の対象）
+function setEditOnly(tr){
+  if(tr!=null&&!(Number.isInteger(tr)&&tr>=0&&tr<notesLanes)) return;
+  if(tr===editOnlyTr){ hideEditOnlyBand(); return; }
+  if(pasteFollow) confirmPasteFollow();   // 貼り付けの追従中は確定してから（追従中の物が触れないレーンに残らないように）
+  editOnlyTr=tr;
+  let unlocked=false;
+  if(tr!=null){
+    unlocked=layerLockS.delete('n'+tr);   // 単独編集にしたレーンがロック中ならロックを外す
+    for(const o of [...selection]) if(objLockedN(o)) selection.delete(o);   // 他のレーンの選択は外す（ロックした時と同じ）
+    if(!selection.size) gizmoMode=null; }
+  hideEditOnlyBand(); syncEditOnlyUI();
+  stat(tr==null?t('eo.off','単独編集をオフにしました')
+    :unlocked?tf('eo.onUnlocked','{lane} を単独編集にしました（ロックを外しました）',{lane:laneLabel('n',tr)})
+    :tf('eo.on','{lane} を単独編集にしました',{lane:laneLabel('n',tr)}));
+}
+function toggleEditOnly(tr){ setEditOnly(editOnlyTr===tr?null:tr); }
+/** 単独編集のレーンに置けない理由（置ける時は ''）: ロック中・ミュート中・他のレーンのソロで見えない */
+function editOnlyBlockMsg(){
+  if(editOnlyTr==null) return '';
+  const lane=laneLabel('n',editOnlyTr);
+  if(layerLockS.has('n'+editOnlyTr)) return tf('eo.blkLock','単独編集の {lane} はロック中のため置けません',{lane});
+  if(layerMuteS.has('n'+editOnlyTr)) return tf('eo.blkMute','単独編集の {lane} はミュート中のため置けません',{lane});
+  if(!layerVisible('n',editOnlyTr)) return tf('eo.blkSolo','単独編集の {lane} は他のレーンのソロで見えないため置けません',{lane});
+  return ''; }
+function editOnlyRefuse(){ const m=editOnlyBlockMsg(); if(!m) return false; showErr(m); return true; }   // 置けなければ知らせて true
+// 他のレーンの物をクリックした時の小さな帯（3Dの上・画面を塞がない・少しで消える）。クリック自体は何もしない
+const EO_BAND_MS=6000;
+let _eoBandT=null, _eoBandTr=null;
+function showEditOnlyBand(o){
+  const el=document.getElementById('eoBand'); if(!el||editOnlyTr==null||!o) return;
+  hideLinkBand();   // リンクの帯と同じ場所なので重ねない
+  const tr=o._tr||0, lane=laneLabel('n',tr); _eoBandTr=tr;
+  el.querySelector('.eoMsg').textContent=tf('eo.band','このノーツは {lane} にあります（単独編集: {cur}）',{lane,cur:laneLabel('n',editOnlyTr)});
+  el.querySelector('.eoSw').textContent=tf('eo.bandSw','{lane} を単独編集にする',{lane});
+  el.querySelector('.eoOff').textContent=t('eo.bandOff','単独編集をオフ');
+  el.querySelector('.eoKeep').textContent=t('eo.bandKeep','そのまま');
+  el.classList.add('on'); armEditOnlyBand(EO_BAND_MS);
+  stat(el.querySelector('.eoMsg').textContent); }
+function armEditOnlyBand(ms){ clearTimeout(_eoBandT); _eoBandT=setTimeout(hideEditOnlyBand,ms); }
+function hideEditOnlyBand(){ clearTimeout(_eoBandT); _eoBandT=null; const el=document.getElementById('eoBand'); if(el) el.classList.remove('on'); }
+{ const el=document.getElementById('eoBand'); if(el){
+    el.querySelector('.eoSw').addEventListener('click',()=>{ if(_eoBandTr!=null) setEditOnly(_eoBandTr); else hideEditOnlyBand(); });
+    el.querySelector('.eoOff').addEventListener('click',()=>setEditOnly(null));
+    el.querySelector('.eoKeep').addEventListener('click',hideEditOnlyBand);
+    el.addEventListener('pointerenter',()=>clearTimeout(_eoBandT));   // 帯の上にマウスがある間は消さない
+    el.addEventListener('pointerleave',()=>{ if(el.classList.contains('on')) armEditOnlyBand(2500); });
+    el.addEventListener('pointerdown',e=>e.stopPropagation()); } }   // 下の3Dビューの操作（中ドラッグの回転など）を始めない
+// 3Dの隅の「✎ 単独編集: Notes n」（毎フレーム。変わった時だけ書き換える）。範囲選択で他のレーンの物を外した時は、その数を少しの間だけ添える
+let _eoNote=null, _eoIndKey=null;
+function noteEditOnly(msg){ _eoNote={msg,until:performance.now()+3500}; syncEditOnlyUI(); }
+function syncEditOnlyUI(){
+  const on=editOnlyTr!=null&&!lightMode;   // LIGHTINGでは出さない（ライトには効かないため）
+  if(_eoNote&&performance.now()>_eoNote.until) _eoNote=null;
+  const main=on?'✎ '+tf('eo.ind','単独編集: {lane}',{lane:laneLabel('n',editOnlyTr)}):'', note=on&&_eoNote?_eoNote.msg:'';
+  const key=main+'|'+note; if(key===_eoIndKey) return; _eoIndKey=key;
+  if(!on) hideEditOnlyBand();
+  const el=document.getElementById('eoInd'); if(!el) return;
+  el.classList.toggle('on',on);
+  el.querySelector('.eoIndMain').textContent=main;
+  const ne=el.querySelector('.eoIndNote'); ne.textContent=note; ne.style.display=note?'':'none'; }
 let layerPaste=null;   // NLEクリップのペースト・ゴースト（マウス追従→クリックで確定 / Esc・右クリックで取消）
 function layerPasteFit(items, at){   // グループごとに重ならない空きレーンシフトを求める（見つからなければnull）
-  const dtBy={};
+  // 今のレーンに空きが無ければ、一番上に足すレーンの数 add[kind] も求める（3Dで置く時・MEDIAのドロップと同じく足して入れる・2026-10-20。
+  // レーンの既定が1本になり、重なる位置へ貼るたびに断らないため）。dtBy[kind] は足した後の段の番号でのずらし（足すと今のクリップは add 段下がる）
+  const dtBy={add:{n:0,l:0}};
   for(const kind of ['n','l']){ const its=items.filter(i2=>(i2.lk||'n')===kind);
     if(!its.length){ dtBy[kind]=0; continue; }
-    const N=laneCountOf(kind), minT=Math.min(...its.map(i2=>i2.track)), maxT=Math.max(...its.map(i2=>i2.track));
-    const cand=[0]; for(let a=1;a<N;a++){ cand.push(a,-a); }
+    const N0=laneCountOf(kind), minT=Math.min(...its.map(i2=>i2.track)), maxT=Math.max(...its.map(i2=>i2.track));
     dtBy[kind]=null;
-    for(const sh of cand){ if(minT+sh<0||maxT+sh>N-1) continue;
-      let ok2=true; for(const it of its){ if(laneOverlaps(at+it.rel,it.len,kind,it.track+sh)){ ok2=false; break; } }
-      if(ok2){ dtBy[kind]=sh; break; } } }
+    for(let k=0;k<=LANE_MAX-N0&&dtBy[kind]==null;k++){ const N=N0+k;
+      const cand=[0]; for(let a=1;a<N;a++){ cand.push(a,-a); }
+      for(const sh of cand){ if(minT+sh<0||maxT+sh>N-1) continue;
+        let ok2=true; for(const it of its){ const t0=it.track+sh-k; if(t0>=0&&laneOverlaps(at+it.rel,it.len,kind,t0)){ ok2=false; break; } }   // t0<0＝足すレーン（空き）
+        if(ok2){ dtBy[kind]=sh; dtBy.add[kind]=k; break; } } } }
   return dtBy;
 }
-function startLayerPaste(){ if(!layerClipboard||!layerClipboard.items.length){ stat('クリップボードが空です'); return; }
+/** クリップボードの各項目のコピー元（今もあるもの）: [{s,dk,cur}|null]（消した・種類が違う物は null） */
+function linkClipSrcs(cb){ cb=cb||layerClipboard; if(!cb) return []; const curK=(currentDiffName||'').toLowerCase();
+  return cb.items.map(it=>{ if(!it.src||!cb.dk) return null;
+    const secs=cb.dk===curK?sections:((projDiffs[cb.dk]&&projDiffs[cb.dk].sections)||[]);
+    const s=secs.find(x=>x.id===it.src&&x.kind!=='null');
+    return s&&secLk(s)===(it.lk||'n')?{s,dk:cb.dk,cur:cb.dk===curK}:null; }); }
+/** 貼り付けの追従を始める。link=true: リンクして貼り付け（Ctrl+Shift+V）／未指定: 別の難易度でコピーした物なら「繋ぐ／切る」を毎回選ぶ */
+async function startLayerPaste(link){ if(!layerClipboard||!layerClipboard.items.length){ stat('クリップボードが空です'); return; }
+  const cb=layerClipboard, curK=(currentDiffName||'').toLowerCase(), have=linkClipSrcs(cb).some(Boolean);
+  if(link&&!have){ showErr(t('lk.pasteNoSrc','コピー元のクリップが見つからないため、リンクして貼り付けできません（普通の貼り付けは Ctrl+V）')); return; }
+  if(link==null&&cb.dk&&cb.dk!==curK&&have){
+    const r=await linkDialog({kind:'paste',title:tf('lk.pasteTitle','{diff} でコピーしたクリップを貼り付けます',{diff:linkDiffName(cb.dk)}),
+      lines:[t('lk.pasteBody','コピー元のクリップと繋ぎますか？ 繋ぐと、貼り付けたクリップはコピー元（コピー元が子ならその親）の子になり、親の編集が反映されます。')],
+      buttons:[{label:t('lk.pasteLink','繋ぐ（リンク）'),value:'link',pri:true},{label:t('lk.pastePlain','切る（普通に貼り付け）'),value:'plain'},{label:t('word.cancel','キャンセル'),value:null}]});
+    if(r.value==null) return;
+    link=r.value==='link'; }
   const at=Math.max(0,snapV(tlHoverBeat??cur));
-  layerPaste={items:layerClipboard.items, at, dtBy:layerPasteFit(layerClipboard.items, at)};
-  metaDirty=true; stat('クリップを貼り付け — マウスで位置決め → クリックで確定 / Esc取消'); }
+  layerPaste={items:cb.items, at, dtBy:layerPasteFit(cb.items, at), link:!!link, cb};
+  metaDirty=true; stat(link?t('lk.pasteStart','リンクして貼り付け — マウスで位置決め → クリックで確定 / Esc取消'):'クリップを貼り付け — マウスで位置決め → クリックで確定 / Esc取消'); }
 function updateLayerPaste(beat){ if(!layerPaste) return; layerPaste.at=Math.max(0,snapV(beat)); layerPaste.dtBy=layerPasteFit(layerPaste.items, layerPaste.at); metaDirty=true; }
 function commitLayerPaste(){ if(!layerPaste) return;
   const {items,at,dtBy}=layerPaste;
   if(dtBy.n==null||dtBy.l==null){ stat('⚠ ここは空きレーンがありません（別の位置へ / Escで取消）'); return; }   // 置けない位置ではゴーストを残す
-  snapshot('node');
-  const newSel=new Set();
-  for(const it of items){ const kind=it.lk||'n';
+  // リンクして貼り付け: 貼った物をコピー元（コピー元が子ならその親）の子にする。コピー元がリンクしていなければ親にする
+  //（コピー元が他の難易度にあって親になる時は、その難易度も変わる＝全難易度の履歴）
+  const lkSrc=layerPaste.link?linkClipSrcs(layerPaste.cb):[];
+  const addN=(dtBy.add&&dtBy.add.n)||0, addL=(dtBy.add&&dtBy.add.l)||0;   // 空きが無い時は一番上にレーンを足して貼る（layerPasteFit）
+  if(addN||addL){ flushFlatEdits(); snapshot('diffs'); }   // レーンを足すと全難易度のクリップがずれる＝全難易度の履歴
+  else if(layerPaste.link){ flushFlatEdits(); snapshot(lkSrc.some(e=>e&&!e.cur&&!e.s.link)?'diffs':'node'); } else snapshot('node');
+  for(let i=0;i<addN;i++) laneAdd('n');
+  for(let i=0;i<addL;i++) laneAdd('l');
+  const newSel=new Set(); let nLinked=0;
+  items.forEach((it,i)=>{ const kind=it.lk||'n';
     const sec={id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat:at+it.rel,track:it.track+dtBy[kind],lk:kind,len:it.len,
       label:it.label,col:pickStripCol(),colHex:null,kind:'sheet',content:structuredClone(it.content)};
-    sections.push(sec); newSel.add(sec.id); }
-  layerSel=newSel; layerPaste=null; relinkDiffEdges(); compileLayersToFlat(); metaDirty=true;
-  stat(tf('msg.clipPaste','クリップを貼り付け ×{n}（拍 {at}）',{n:items.length,at})); }
+    const e=lkSrc[i]; if(e){ if(!e.s.link){ e.s.link=linkNewId(); e.s.linkParent=true; } sec.link=e.s.link; nLinked++; }
+    sections.push(sec); newSel.add(sec.id); });
+  const wasLink=layerPaste.link;
+  layerSel=newSel; layerPaste=null; if(nLinked) _linkVer++; relinkDiffEdges(); compileLayersToFlat(); metaDirty=true;
+  stat(wasLink?tf('lk.pasted','リンクして貼り付けました ×{n}（拍 {at}）',{n:nLinked,at}):tf('msg.clipPaste','クリップを貼り付け ×{n}（拍 {at}）',{n:items.length,at})); }
 function cancelLayerPaste(){ if(!layerPaste) return; layerPaste=null; metaDirty=true; stat('貼り付けを取り消しました'); }
 ndcv.addEventListener('pointerdown', e=>{
   if(layerPaste){ if(e.button===0){ e.preventDefault(); commitLayerPaste(); } return; }   // ゴースト追従中: 左クリックで確定（他ボタンは無視＝右クリックはcontextmenuで取消）
@@ -3128,9 +3720,10 @@ ndcv.addEventListener('pointerdown', e=>{
     const la0=(sy>=LRULER)?laneAtY(sy):null;
     layerPan={sx,sy,startB0:tlWindow(cur).b0,lk:la0?la0.lk:null,sc0:la0?scrOf(la0.lk):0};
     try{ndcv.setPointerCapture(e.pointerId);}catch(_){} return; }
-  if(sx<LGUT){                                   // 溝内: L(ロック)/S(ソロ)/M(ミュート)ボタン
+  if(sx<LGUT){                                   // 溝内: L(ロック)/S(ソロ)/M(ミュート)ボタン・2段目の単独編集のスイッチ
     if(e.button===0){ const b=_lgBtns.find(r2=>sx>=r2.x&&sx<=r2.x+r2.w&&sy>=r2.y&&sy<=r2.y+r2.h);
-      if(b) toggleLaneState(b.kind, b.lk, b.t); }
+      if(b) toggleLaneState(b.kind, b.lk, b.t);
+      else { const eb=_eoBtns.find(r2=>sx>=r2.x&&sx<=r2.x+r2.w&&sy>=r2.y&&sy<=r2.y+r2.h); if(eb) toggleEditOnly(eb.t); } }
     return; }
   if(sy>=LRULER-MKRH&&sy<LRULER){   // マーカー帯: マーカーのドラッグのみ。ここでは再生ヘッドをジャンプさせない（シークは上の数字ルーラーだけ）
     if(e.button===0){ const hit=_mkRects.find(r2=>sx>=r2.x&&sx<=r2.x+r2.w&&sy>=r2.y&&sy<=r2.y+r2.h)
@@ -3150,10 +3743,12 @@ ndcv.addEventListener('pointerdown', e=>{
   if(e.button!==0) return;
   { const sw=_clipSw.find(r2=>sx>=r2.x&&sx<=r2.x+r2.w&&sy>=r2.y&&sy<=r2.y+r2.h);   // 色スウォッチ=既存ピッカーで色変更
     if(sw){ const sec=sections.find(x2=>x2.id===sw.id);
-      if(sec) ndColorEdit(stripColOf(sec),hex=>{ snapshot('node'); if(!sec.gid) sec.gid='g'+(++_nid);
-        sec.colHex=hex; metaDirty=true; },{x:sw.x,y:sw.y+14,h:0});
+      if(sec) ndColorEdit(stripColOf(sec),hex=>{ clipHist(sec); if(!sec.gid) sec.gid='g'+(++_nid);
+        sec.colHex=hex; linkCopyProps(sec); metaDirty=true; },{x:sw.x,y:sw.y+14,h:0});
       return; } }
   { const eh=clipEdgeAt(sx,sy);                            // 端ドラッグ=トリム（左右端±4px）
+    if(eh&&eh.s.kind!=='null'&&eh.side==='l'&&linkIsKid(eh.s)){   // リンクの子は右端のトリムだけ（中身の頭＝親の頭を動かさない）
+      linkBandKid(eh.s,tf('lk.noLeftTrim','リンクの子「{name}」は右端だけトリムできます（左端は親で）',{name:eh.s.label||'Sheet'})); return; }
     if(eh&&eh.s.kind!=='null'){ if(!eh.s.gid) eh.s.gid='g'+(++_nid);
       const origC={}; for(const k2 in _LCT) origC[k2]=((eh.s.content&&eh.s.content[k2])||[]).map(it=>_LCT[k2].map(f=>it[f]??0));   // 中身の元拍（左トリム中の絶対位置固定用）
       layerResize={s:eh.s,side:eh.side,origBeat:eh.s.beat||0,origLen:eh.s.len||4,ref:clipRef(eh.s),origC,
@@ -3169,6 +3764,10 @@ ndcv.addEventListener('pointerdown', e=>{
 ndcv.addEventListener('pointermove', e=>{
   const r=ndcv.getBoundingClientRect(), sx=e.clientX-r.left, sy=e.clientY-r.top;
   _ndMouseY=sy;   // L/M/Sショートカット用にマウスyを記録
+  { _ndEoHover=sx<LGUT&&_eoBtns.some(r2=>sx>=r2.x&&sx<=r2.x+r2.w&&sy>=r2.y&&sy<=r2.y+r2.h);   // 単独編集の帯の上（指のカーソル）
+    const tip=_ndEoHover   // 単独編集の帯の説明（キャンバスに描いた部品なので title で出す）
+      ?t('nle.editOnlyTip','このレーンだけを編集 — 3Dの編集はこのレーンだけに入ります。他のレーンは編集できません'):'';
+    if(ndcv.title!==tip){ if(tip) ndcv.title=tip; else ndcv.removeAttribute('title'); } }
   if(layerPaste){ tlHoverBeat=(sx>=LGUT&&sy>=LRULER)?Math.max(0,snapV(lXToBeat(sx))):null; if(tlHoverBeat!=null) updateLayerPaste(tlHoverBeat); return; }   // ゴースト追従
   if(markerDrag){ const nb=Math.max(0,snapV(lXToBeat(sx)));   // マーカードラッグ中は拍だけ更新
     if(nb!==markerDrag.m.beat){ if(!markerDrag.moved) snapshot('node');   // 最初に実際に動く直前に1回だけ履歴（以前は積まず、Undoで前の操作が取り消されていた）
@@ -3246,11 +3845,11 @@ ndcv.addEventListener('pointerup', e=>{
   if(layerBand){
     if(layerBand.moved){
       const bx0=Math.min(layerBand.x0,layerBand.x1), bx1=Math.max(layerBand.x0,layerBand.x1),
-        by0=Math.min(layerBand.y0,layerBand.y1), by1=Math.max(layerBand.y0,layerBand.y1), lh=laneHt();
+        by0=Math.min(layerBand.y0,layerBand.y1), by1=Math.max(layerBand.y0,layerBand.y1);
       const hit=new Set(layerBand.add?[...layerSel]:[]);
-      for(const s of sections){
-        const x=lBeatToX(s.beat||0), w=(s.len||4)*lPPB(), y=laneY(secLk(s),s.track||0)+4, h=lh-8;
-        if(x<=bx1&&x+w>=bx0&&y<=by1&&y+h>=by0) hit.add(s.id); }
+      for(const s of sections){   // 縦は表示窓に見えている所だけ（スクロールで隠れたクリップは囲めない）
+        const x=lBeatToX(s.beat||0), w=(s.len||4)*lPPB(), [y0,y1]=clipVisY(s);
+        if(y0<y1&&x<=bx1&&x+w>=bx0&&y0<=by1&&y1>=by0) hit.add(s.id); }
       layerSel=hit; }
     else if(!layerBand.add){ layerSel=new Set(); musicSelSet=new Set(); }   // 空クリック=全選択解除（song選択も）
     layerBand=null; }
@@ -3269,10 +3868,13 @@ ndcv.addEventListener('pointerup', e=>{
     compileLayersToFlat(); metaDirty=true; }
   layerDrag=null; layerPan=null; });
 ndcv.addEventListener('wheel',tlWheel,{passive:false});   // ズーム/スクラブは下段Musicと共有
-ndcv.addEventListener('mouseleave',()=>{ tlHoverBeat=null; _ndMouseY=-1; });
+ndcv.addEventListener('mouseleave',()=>{ tlHoverBeat=null; _ndMouseY=-1; ndcv.removeAttribute('title'); });
+// レーンの縦のスクロールバー: 右端（sbN/sbL・▲▼付き）と、溝の左端の細い物（sbNL/sbLL・2026-10-20・利用者の要望「縦にスクロールできること自体が
+// 分かりにくい」）。どちらも同じ laneScrN/laneScrL を表示・操作する＝常に同じ位置。働きも同じ（つまみのドラッグ・溝のクリック＝その位置へ・ホイール）
+const LANE_SBS=[['n','sbN'],['l','sbL'],['n','sbNL'],['l','sbLL']];
 function syncLaneSb(){   // drawLayersから毎フレーム（変化時のみstyle書込）。拍数ルーラーには被らない=LRULERから下
-  const padTop=50;   // 50=#nodepaneのpadding-top（canvas上端）
-  for(const g of [['n','sbN'],['l','sbL']]){ const lk=g[0], el=document.getElementById(g[1]); if(el){
+  const padTop=ndcv.offsetTop;   // キャンバスの上端（#nodepane の padding-top）。以前は 50 の決め打ちで、padding-top が 78 になった後は28px上にずれていた
+  for(const g of LANE_SBS){ const lk=g[0], el=document.getElementById(g[1]); if(el){
     const VP=laneVP(lk);
     const mx=laneMaxScroll(lk);
     if(mx<=0){ if(el.style.display!=='none'){ el.style.display='none'; } setScr(lk,0); continue; }
@@ -3281,24 +3883,28 @@ function syncLaneSb(){   // drawLayersから毎フレーム（変化時のみsty
     if(el._top!==top){ el._top=top; el.style.top=top+'px'; }
     if(el._h!==VP){ el._h=VP; el.style.height=VP+'px'; }
     const tr=el.querySelector('.sbTr'), th=el.querySelector('.sbTh');
-    const trH=tr.clientHeight, thH=Math.max(22,trH*VP/Math.max(1,laneCountOf(lk)*laneHt()));
+    const trH=tr.clientHeight, thH=Math.min(trH,Math.max(22,trH*VP/Math.max(1,laneCountOf(lk)*laneHt(lk))));
     const tY=mx>0?(scrOf(lk)/mx)*(trH-thH):0;
     if(th._h!==thH){ th._h=thH; th.style.height=thH+'px'; }
     if(Math.abs((th._y||0)-tY)>0.5){ th._y=tY; th.style.top=tY+'px'; }
   } } }
-for(const g of [['n','sbN'],['l','sbL']]){ const lk=g[0], el=document.getElementById(g[1]);
-  if(el){ const tr=el.querySelector('.sbTr'), th=el.querySelector('.sbTh');
-    el.querySelector('.sbUp').addEventListener('click',()=>setScr(lk,scrOf(lk)-laneHt()));
-    el.querySelector('.sbDn').addEventListener('click',()=>setScr(lk,scrOf(lk)+laneHt()));
+for(const g of LANE_SBS){ const lk=g[0], el=document.getElementById(g[1]);
+  if(el){ const tr=el.querySelector('.sbTr'), th=el.querySelector('.sbTh'), up=el.querySelector('.sbUp'), dn=el.querySelector('.sbDn');
+    if(up) up.addEventListener('click',()=>setScr(lk,scrOf(lk)-laneHt(lk)));   // ▲▼は右端の物だけ（左の細い物には無い）
+    if(dn) dn.addEventListener('click',()=>setScr(lk,scrOf(lk)+laneHt(lk)));
     let dg=null;
     th.addEventListener('pointerdown',e2=>{ e2.preventDefault(); dg={y:e2.clientY,s0:scrOf(lk)};
       try{th.setPointerCapture(e2.pointerId);}catch(_){} });
     th.addEventListener('pointermove',e2=>{ if(!dg) return;
       const trH=tr.clientHeight, thH=th.clientHeight, mx=laneMaxScroll(lk);
-      if(trH>thH) setScr(lk,dg.s0+(e2.clientY-dg.y)*mx/(trH-thH)); });
+      const z=(tr.getBoundingClientRect().height||trH)/Math.max(1,trH);   // 画面の px ÷ CSS の px（祖先に zoom が掛かっても動かした量とつまみが合うように）
+      if(trH>thH) setScr(lk,dg.s0+(e2.clientY-dg.y)/z*mx/(trH-thH)); });
     th.addEventListener('pointerup',()=>{ dg=null; });
     tr.addEventListener('pointerdown',e2=>{ if(e2.target===th) return;   // 溝クリック=その位置へジャンプ
       const r2=tr.getBoundingClientRect(); setScr(lk,((e2.clientY-r2.top)/Math.max(1,r2.height))*laneMaxScroll(lk)); });
+    el.addEventListener('wheel',e2=>{ e2.preventDefault();   // スクロールバーの上のホイール＝そのグループを縦にスクロール（1目盛り≒1レーン）
+      const px=e2.deltaMode===1?e2.deltaY*laneHt(lk)/3:e2.deltaMode===2?e2.deltaY*laneVP(lk):e2.deltaY*laneHt(lk)/100;
+      setScr(lk,scrOf(lk)+(Math.abs(px)<1?Math.sign(px):px)); },{passive:false});
   } }
 ovcv.addEventListener('pointermove',e=>{ const r=ovcv.getBoundingClientRect(), sx=e.clientX-r.left, sy=e.clientY-r.top;
   tlHoverBeat=(sx>=TLGUT)?Math.max(0,snapV(xToBeat(sx))):null;   // Musicレーン上でも黄ライン追従
@@ -3331,8 +3937,8 @@ ndcv.addEventListener('dblclick', e=>{   // クリップのヘッダー（ラベ
   if(sy>y+16) return;                                  // ヘッダー帯のみ対象（本体Wクリックは誤爆させない）
   const gx=Math.max(LGUT,x);
   ndInlineEdit({x:gx+2,y:y,w:Math.min(x+w,ndW)-gx-4,h:16},s.label||'',nm=>{
-    if(nm.trim()){ snapshot('node');
-      s.label=nm.trim(); metaDirty=true; stat(tf('msg.clipRename','クリップ名を変更: {label}',{label:s.label})); } });
+    if(nm.trim()){ clipHist(s);
+      s.label=nm.trim(); linkCopyProps(s); metaDirty=true; stat(tf('msg.clipRename','クリップ名を変更: {label}',{label:s.label})); } });
 });
 
 // ============ 左右ミラー ============
@@ -3345,6 +3951,7 @@ function headBeat(o){ return o.kind==='arc'||o.kind==='chain'?o.b:o.beat; }
 const MIR_ET={2:3,3:2,12:13,13:12};   // ライトの左右ペア（L LASER⇄R LASER・L SPEED⇄R SPEED）。RING/CENTER/BACK/BOOSTは左右の対が無いのでそのまま
 function mirrorClip(s){   // クリップ単位の左右反転（位置=左右ミラー・色=赤⇄青）。真実はcontent側なのでflatではなくcontentを直接反転する
   if(!s||s.kind==='null') return;
+  if(linkIsKid(s)){ linkBandKid(s); return; }   // リンクの子は編集できない（親を反転すれば子も変わる）
   if(_flatDirty) flushFlatEdits();   // 未同期の3D編集を先にcontentへ確定（後のflushで反転結果が巻き戻るのを防ぐ）
   snapshot('node');                  // contentはnodeドメイン（sections）に含まれる＝Undoで戻る
   if(!s.gid) s.gid='g'+(++_nid);
@@ -4451,8 +5058,14 @@ function dumpDomain(d){
     laySel:[...layerSel],musSel:[...musicSelSet],lanesN:notesLanes,lanesL:lightLanes});   // 選択・マーカーも履歴の一部（マーカー作成/削除もUndo可）
   if(d==='diffs'){   // 全難易度のライト（自動ライティング用）: 今の難易度は'node'、他の難易度はクリップとフラットのライト。レーン追加でずれるロックも含める
     const curK=(currentDiffName||'').toLowerCase(), others={};
-    for(const k in projDiffs){ if(k===curK||!projDiffs[k]) continue; others[k]={sections:projDiffs[k].sections||[],lightEvents:projDiffs[k].lightEvents||[]}; }
-    return JSON.stringify({node:dumpDomain('node'),others,locks:[...layerLockS]}); }
+    for(const k in projDiffs){ if(k===curK||!projDiffs[k]) continue; const st=projDiffs[k];
+      others[k]={name:st.name,v3:!!st.v3,sections:st.sections||[],lightEvents:st.lightEvents||[],notes:st.notes||[],bombs:st.bombs||[],walls:st.walls||[],arcs:st.arcs||[],chains:st.chains||[]}; }   // ノーツ類も（リンクの子は他の難易度のフラットも変える・2026-10-19）。name/v3＝やり直しで作り直す時用
+    const absent=OUT_DIFFS.map(dn=>(dn+'Standard.dat').toLowerCase()).filter(k=>k!==curK&&!projDiffs[k]);   // まだ無い難易度（難易度間コピーで作られる）＝戻す時に消す
+    // anaMade＝解析の結果から「クリップを作った」の印（溝のボタンを暗くする）。解析からクリップを作る操作の Ctrl+Z で印も戻すため。
+    // 解析の結果そのものの変化は全部 'ana' の履歴に積まれる＝ここで戻す時の結果は控えた時と同じなので、印だけを戻せばよい
+    return JSON.stringify({node:dumpDomain('node'),others,absent,locks:[...layerLockS],anaMade:!!(songAna&&songAna.made())}); }
+  if(d==='ana') return JSON.stringify((songAna&&songAna.save())||null);   // 曲の解析の結果（帯・付け直した名前）
+  if(d==='tempo') return JSON.stringify({bpm:BPM,off:songNode?songNode.offset:null});   // 曲の解析の「適用」（BPM・無音追加）。BPMの欄は履歴に積まないので専用の領域
   if(d==='info') return JSON.stringify({g:{...infoGraph,cam:undefined},sel:[..._inSel]});   // ビュー(cam)は履歴対象外
   if(d==='light') return JSON.stringify({lightEvents,sel:[...lightSelection].map(ev=>lightEvents.indexOf(ev)).filter(i2=>i2>=0)});
   return JSON.stringify({notes,bombs,walls,arcs,chains,
@@ -4461,10 +5074,20 @@ function dumpDomain(d){
 function restoreDomain(d,s2){
   const v=JSON.parse(s2);
   if(d==='diffs'){
-    for(const k in v.others){ const st=projDiffs[k]; if(st){ st.sections=v.others[k].sections; st.lightEvents=v.others[k].lightEvents; } }
+    const curK=(currentDiffName||'').toLowerCase();
+    for(const k in v.others){ let st=projDiffs[k]; const o=v.others[k];
+      // やり直し: その操作で作った難易度（戻した時に absent で消した物）を作り直す。作られる難易度は空の土台から（難易度間コピー・解析からクリップを作る）。
+      // 以前は作り直さず、他の難易度に作ったクリップ（リンクの子）がやり直しで消えていた
+      if(!st&&k!==curK&&o.name) st=projDiffs[k]={name:o.name,v3:o.v3!==false,base:EMPTY_V3(),notes:[],bombs:[],walls:[],arcs:[],chains:[],lightEvents:[],sections:[]};
+      if(st){ st.sections=o.sections; st.lightEvents=o.lightEvents;
+        for(const f of ['notes','bombs','walls','arcs','chains']) if(o[f]) st[f]=o[f]; } }
+    for(const k of v.absent||[]) if(k!==curK) delete projDiffs[k];
     restoreDomain('node',v.node);   // 先にレーン（ロックのずらしも含む）を戻し、ロックは保存した状態そのものに置き換える
     layerLockS.clear(); for(const k of v.locks||[]) layerLockS.add(k);
+    if(songAna&&typeof v.anaMade==='boolean') songAna.setMade(v.anaMade);
     return; }
+  if(d==='ana'){ if(songAna) songAna.load(v); metaDirty=true; return; }
+  if(d==='tempo'){ anaSetTempoRaw(v.bpm,v.off); metaDirty=true; return; }
   if(d==='node'){
     // handleはJSON不可なので現物から引き継ぐ
     const covH=new Map(extraNodes.filter(x=>x.handle).map(x=>[x.id,x.handle]));
@@ -4519,7 +5142,7 @@ function restoreDomain(d,s2){
   }
   metaDirty=true;
 }
-const DOM_LABEL={note:'NOTES',light:'LIGHT',node:'NODE',info:'INFO',diffs:'ALL DIFFS'};
+const DOM_LABEL={note:'NOTES',light:'LIGHT',node:'NODE',info:'INFO',diffs:'ALL DIFFS',ana:'ANALYSIS',tempo:'BPM'};
 function snapshot(dom){
   const d=dom||(lightMode?'light':'note');
   pushHist(d,dumpDomain(d));
@@ -4543,6 +5166,7 @@ function undo(){ const e=undoStack.pop();
   if(!e){ stat('取り消す操作がありません'); return; }
   const moved=gotoHistDiff(e); syncHistView(e.d);
   flushFlatEdits();   // 未反映の3D編集を今のクリップへ確定してから、やり直し用の写しを取る（restoreDomain('node') は戻したクリップへ書き戻さない）
+  _lkQuiet=true;   // 戻した親の中身で子を作り直す時、「親を編集した」の帯は出さない
   redoStack.push({d:e.d,s:dumpDomain(e.d),diff:currentDiffName}); restoreDomain(e.d,e.s);
   if(e.d==='note'||e.d==='light') _flatDirty=true;   // フラット復元→contentへ再同期（NLEミニロールと整合）
   stat(tf('msg.undo','取り消し {dom}（残り{n}）',{dom:DOM_LABEL[e.d]+(moved?' @'+moved:''),n:undoStack.length})); }
@@ -4550,6 +5174,7 @@ function redo(){ const e=redoStack.pop();
   if(!e){ stat('やり直す操作がありません'); return; }
   const moved=gotoHistDiff(e); syncHistView(e.d);
   flushFlatEdits();   // undo と同じ
+  _lkQuiet=true;
   undoStack.push({d:e.d,s:dumpDomain(e.d),diff:currentDiffName}); restoreDomain(e.d,e.s);
   if(e.d==='note'||e.d==='light') _flatDirty=true;   // フラット復元→contentへ再同期
   stat(tf('msg.redo','やり直し {dom}（残り{n}）',{dom:DOM_LABEL[e.d]+(moved?' @'+moved:''),n:redoStack.length})); }
@@ -4705,11 +5330,11 @@ function startPrevPlay(id){
   try{ refreshInfoCards(); }catch(_){}
 }
 function togglePrevPlay(id){ if(_pvPlay&&_pvPlay.id===id) stopPrevPlay(); else startPrevPlay(id); }
-/** 拍位置→元の音源の秒（Musicの配置・カット・無音追加を考慮）。その拍に音が無ければ null */
-function audioPosAtBeat(beat){ if(!audioBuf) return null;
+/** 拍位置→元の音源の秒（Musicの配置・カット・無音追加を考慮）。その拍に音が無ければ null。raw=丸めない（曲の解析の at 用） */
+function audioPosAtBeat(beat,raw){ if(!audioBuf) return null;
   const tt=beatToTimeTM(beat), off0=getSongOff();
   for(const sg of msegs()){ const rel=tt-beatToTimeTM(sg.beat);
-    if(rel>=0&&rel<sg.dur){ const p=off0+sg.off+rel; return (p>=0&&p<audioBuf.duration)?Math.round(p*100)/100:null; } }
+    if(rel>=0&&rel<sg.dur){ const p=off0+sg.off+rel; return (p>=0&&p<audioBuf.duration)?(raw?p:Math.round(p*100)/100):null; } }
   return null; }
 function pause(){ offset=aTime(); stopS(); playing=false; vwPlayD=null; document.getElementById('play').textContent='▶'; }
 document.getElementById('vol').addEventListener('input',e=>{   // 右のフェーダー=マスター
@@ -4822,7 +5447,7 @@ function metroTick(){ const t=actx.currentTime;
 let prevPlayBeat=0;
 
 // ---- load / save ----
-let files={}, handles={}, dirHandle=null, rawDiff=null, diffV3=false, currentDiffName='';
+let rawDiff=null, diffV3=false, currentDiffName='';
 // 同一ハンドルへのqueryPermission/requestPermission再問い合わせを避ける（WebView2埋め込み環境で
 // 2回目以降の呼び出しがレンダラをクラッシュさせる不具合の回避策。一度許可が取れたハンドルは
 // セッション中に許可が失効しないので、以後は問い合わせ自体をスキップする）
@@ -4833,9 +5458,9 @@ async function ensureRW(handle){
     await handle.requestPermission({mode:'readwrite'});
   _fsPermOk.add(handle);
 }
-// ---- プロジェクト(.nlmf): 元の .dat はいじらず、編集状態を project.nlmf に丸ごと保存 ----
-let projDiffs={}, infoText='', infoFileName='Info.dat';
-let projFileHandle=null;   // 「名前を付けて保存」で選んだ保存先（未指定なら曲フォルダ直下）
+// ---- プロジェクト(.nlmf): 編集状態を .nlmf に丸ごと保存 ----
+let projDiffs={};
+let projFileHandle=null;   // 保存先（開いた .nlmf・「名前を付けて保存」で選んだファイル。未指定なら保存の時に選ぶ）
 let infoJson=null, infoBase=null, infoDirty=false;
 function stashCurrentDiff(){ if(!currentDiffName||!rawDiff) return;
   flushFlatEdits();   // 退避前に3D編集をcontentへ確定（難易度切替でクリップに反映されるように）
@@ -5509,12 +6134,14 @@ ovcv.addEventListener('drop',e=>{
   const w=tlWindow(cur), b=Math.max(0,snapV(w.b0+(sx-TLGUT)/(ovW-TLGUT)*w.span));
   loadSongFromItem(item,b);
 });
-// ライブラリの曲の音源だけをMusicレーンへ読み込む（配置拍=beat）
-async function loadSongFromItem(item,beat){
+// ライブラリの曲の音源だけをMusicレーンへ読み込む（配置拍=beat）。
+// ask=false: 解析するかを聞くのは呼んだ側（曲データを読み込むは全部読んでから聞く）。戻り値＝新しく曲を取り込んだか（再接続・失敗は false）
+async function loadSongFromItem(item,beat,ask=true){
   try{
     await ensureItemInfo(item);   // 記録したライブラリの曲: BPM・試聴区間を本物の Info.dat から
     const fh=await getSongFile(item);
     const f=await fh.getFile();
+    const re=songReconnect(f.name);
     if(playing) pause();
     audioBuf=await actx.decodeAudioData(await f.arrayBuffer());
     songDur=audioBuf.duration;
@@ -5534,7 +6161,10 @@ async function loadSongFromItem(item,beat){
     if(songNode){ songNode.name=f.name; songNode.handle=fh; songNode.nativePath=np; }
     musicBeat=Math.max(0,beat); musicSegs=null; musicSelSet=new Set([0]); metaDirty=true;
     showOk(tf('msg.audioPlaced','音源を配置しました: {name}（拍 {beat}{bpm}）',{name:f.name,beat:musicBeat,bpm:bpm>0?`${t('word.midDot','・')}BPM ${BPM}`:''}));
-  }catch(err){ showErr(tf('msg.loadAudioFail','音源の読込に失敗: {err}',{err})); }
+    if(re) return false;
+    if(ask) anaAfterLoad();
+    return true;
+  }catch(err){ showErr(tf('msg.loadAudioFail','音源の読込に失敗: {err}',{err})); return false; }
 }
 // INFO画面へのドロップ = 曲情報を「未接続のノード3枚」として配置（書き出しへは自分で繋ぐ=ヘルバ様指定）
 async function dropInfoNodesFromItem(item,wx,wy){
@@ -5705,10 +6335,9 @@ function placeClipLine(item,place){
   if(!cnt){ showErr('このクリップは空です'); return; }
   const len=Math.max(4,Math.ceil((item._len||8)/4)*4);
   const beat=Math.max(0,place?place.beat:snapV(cur));
-  let tr=laneCountOf(lk)-1;   // 一番数字の低いトラック(Notes1/Light1=一番下)から詰める（重なる分だけ上へ・ドロップしたレーンには縛られない）
-  while(tr>=0&&laneOverlaps(beat,len,lk,tr)) tr--;
+  const tr=mediaDropTrack(beat,len,lk);   // 一番下から空きを探す。全部埋まっていれば一番上にレーンを足す（履歴もここで積む）
   if(tr<0){ showErr(tf('msg.laneFull','この位置は{grp}レーンが全て埋まっています',{grp:lk==='n'?t('word.notes','ノーツ'):t('word.light','ライト')})); return; }
-  snapshot('node'); edgesInited=true;   // 履歴は置き場所が決まってから（以前は先に積み、置けなかった時に空振りのUndoが残った）
+  edgesInited=true;
   const sec={id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat,track:tr,lk,col:pickStripCol(),
     label:item.name,len,kind:'sheet',content};
   sections.push(sec); relinkDiffEdges(); layerSel=new Set([sec.id]);
@@ -5741,15 +6370,13 @@ async function addSongLine(item,wx,wy,place){   // place={beat,lk,track,pick}: �
   if(!cnt){ showErr(tf('msg.chartNoContent','この譜面（{diff}）に{kind}がありません',{diff:dl,kind:lk==='n'?t('word.notes','ノーツ'):t('word.lighting','ライティング')})); return; }
   const len=Math.max(4,Math.ceil((frag._max+1)/4)*4);
   const beat=Math.max(0,place?place.beat:snapV(cur));
-  let tr=laneCountOf(lk)-1;   // 一番数字の低いトラック(Notes1/Light1=一番下)から詰める（重なる分だけ上へ・ドロップしたレーンには縛られない）
-  while(tr>=0&&laneOverlaps(beat,len,lk,tr)) tr--;
+  const tr=mediaDropTrack(beat,len,lk);   // 一番下から空きを探す。全部埋まっていれば一番上にレーンを足す（履歴もここで積む）
   if(tr<0){ showErr(tf('msg.laneFullNoStack','この位置は{grp}レーンが全て埋まっています（重ねて配置はできません）',{grp:lk==='n'?t('word.notes','ノーツ'):t('word.light','ライト')})); return; }
-  // 置き場所が決まってから NJS の取得と履歴（以前は先に行い、置けなかった時も NJS が書き換わり空振りの Undo が残った）
+  // 置き場所が決まってから NJS の取得（以前は先に行い、置けなかった時も NJS が書き換わり空振りの Undo が残った）
   if(lk==='n'){ const k=(curDn+'Standard.dat').toLowerCase();   // ★ノーツ譜面を持ってきた時だけ、その難易度のNJS/オフセットを取得（ライト配置では一切変更しない）
     njsCfg[k]={ njs:(+bm._noteJumpMovementSpeed>0)?+bm._noteJumpMovementSpeed:(_DIFF_NJS[srcDn]||16), offset:+bm._noteJumpStartBeatOffset||0 };   // 別の難易度を入れた時は、その難易度の NJS（その速さで作られた譜面のため）
     metaDirty=true; if(typeof refreshMusicHdr==='function') refreshMusicHdr(); }
-  snapshot('node');
-  edgesInited=true;                                        // 自動直列配線をここからの追加に走らせない
+  edgesInited=true;                                       // 自動直列配線をここからの追加に走らせない
   const sec={id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat,track:tr,lk,col:pickStripCol(),
     label:info._songName||item.name,len,kind:'sheet',content};
   sections.push(sec); relinkDiffEdges(); layerSel=new Set([sec.id]);
@@ -5758,6 +6385,16 @@ async function addSongLine(item,wx,wy,place){   // place={beat,lk,track,pick}: �
   showOk(tf('msg.chartPlaced','「{name}」の{kind}を配置しました: {diff}（{lane}・拍 {beat}）',{name:info._songName||item.name,kind:lk==='n'?t('word.notes','ノーツ'):t('word.lighting','ライティング'),diff:dl,lane:laneLabel(lk,tr),beat})
     +(pick&&pick.filtered?t('msg.chartPickFiltered','　※フィルターに合う難易度から選びました'):''));
 }
+// MEDIA→NLE のドロップ（placeClipLine・addSongLine）の行き先のレーン: 一番数字の低いトラック(Notes1/Light1=一番下)から空きを探す（重なる分だけ上へ・
+// ドロップしたレーンには縛られない）。全部埋まっていれば一番上にレーンを足して track0（3Dで置く時の clipSlotAt と同じ。レーンの既定が1本になったため、
+// 重ねて入れるたびに断らない・2026-10-20）。履歴もここで積む: レーンを足す時は全難易度のクリップがずれる＝'diffs'、足さない時は 'node'。
+// -1＝上限で足せない（何も変えず履歴も積まない）
+function mediaDropTrack(beat,len,lk){
+  let tr=laneCountOf(lk)-1;
+  while(tr>=0&&laneOverlaps(beat,len,lk,tr)) tr--;
+  if(tr>=0){ snapshot('node'); return tr; }
+  if(laneCountOf(lk)>=LANE_MAX) return -1;
+  flushFlatEdits(); snapshot('diffs'); laneAdd(lk); return 0; }
 // 任意のsections配列に対する空きトラック探索（projDiffsの非アクティブ難易度はlaneCountOf/laneOverlapsが使えないため専用実装）
 function firstFreeTrackIn(secArr,lk,beat,len,maxTracks){
   for(let tr=0;tr<maxTracks;tr++){
@@ -5777,16 +6414,17 @@ async function bulkLoadSongData(item){
   if(item._v4){ showErr(t('msg.v4NotSupported','この曲は v4 形式の譜面のため、まだ読み込めません（一覧の表示・並べ替え・絞り込み・音源の配置はできます）')); return; }
   await ensureItemInfo(item);   // 記録したライブラリの曲: 本物の Info.dat（試聴区間など）
   const info=item.info||{};
+  let newSong=false;   // 音源を新しく取り込んだ＝全部読み込んだ後に「曲を解析しますか？」（途中で聞くとテンポパートの取り込みの前の目盛りになる）
   try{
     const hasMusic=!!audioBuf&&!songDeleted;    // 既に音源が入っている＝Music(音源・BPM・プレビュー)は上書きせず読み込まない（ヘルバ様指定）
-    if(!hasMusic) await loadSongFromItem(item,0);            // 音源・BPM・プレビュー区間（既に音源がある時はスキップ）
+    if(!hasMusic) newSong=await loadSongFromItem(item,0,false);   // 音源・BPM・プレビュー区間（既に音源がある時はスキップ）
     { const sp=infoFreeSpot();   // 曲情報＋カバー画像（＋試聴）ノード（未接続）。既存のノードと重ならない所へ
       await dropInfoNodesFromItem(item,sp.x,sp.y); }
     const sets=info._difficultyBeatmapSets||[];
     const std=sets.find(s2=>s2._beatmapCharacteristicName==='Standard')||sets[0];
     const bms=(std&&std._difficultyBeatmaps)||[];
     if(!bms.length){ showOk(tf('msg.bulkSongNoChart','「{name}」に譜面が含まれていないため、曲情報のみ取り込みました',{name:info._songName||item.name})); return; }
-    snapshot('node');
+    flushFlatEdits(); snapshot('diffs');   // 開いていない難易度にもクリップを作り、足りなければレーンも足す（全難易度のクリップがずれる）＝全難易度の履歴（以前は 'node' で、Undo で他の難易度に作ったクリップが残った）
     let placedDiffs=0, placedClips=0, curTouched=false;
     const otherTouched=new Set();   // クリップを足した、開いていない難易度
     let tempoSrc=null;   // テンポ変化の読み元（最初に bpmEvents/_BPMChanges を持っていた譜面）
@@ -5809,7 +6447,8 @@ async function bulkLoadSongData(item){
       const isCur=key===(currentDiffName||'').toLowerCase();
       const target=isCur?sections:(projDiffs[key]=projDiffs[key]||{name:dnm+'Standard.dat',v3:true,base:EMPTY_V3(),notes:[],bombs:[],walls:[],arcs:[],chains:[],lightEvents:[],sections:[]}).sections;
       const mk=(lk,content,cnt)=>{ if(!cnt) return;
-        const tr=firstFreeTrackIn(target,lk,0,len,LANE_MAX); if(tr<0) return;
+        let tr=firstFreeTrackIn(target,lk,0,len,laneCountOf(lk));   // 今あるレーンの中だけ（以前は上限の10本まで探し、レーンの外＝見えない段へ入ることがあった）
+        if(tr<0){ if(!laneAdd(lk)) return; tr=0; }   // 埋まっていれば一番上にレーンを足す（全難易度のクリップが1段下がる＝target も）
         target.push({id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat:0,track:tr,lk,col:pickStripCol(),
           label:info._songName||item.name,len,kind:'sheet',content});
         placedClips++; if(isCur) curTouched=true; else otherTouched.add(key); };
@@ -5841,55 +6480,8 @@ async function bulkLoadSongData(item){
     metaDirty=true; if(typeof refreshMusicHdr==='function') refreshMusicHdr();
     showOk(tf('msg.bulkSongLoaded','「{name}」のデータを一括読み込みしました（{n}難易度分・{c}クリップ配置）{skip}',{name:info._songName||item.name,n:placedDiffs,c:placedClips,skip:(hasMusic?t('msg.bulkSongMusicKept','　※音源は既存のものを維持'):'')+tempoNote}));
   }catch(err){ showErr(tf('msg.bulkSongLoadFail','曲データの一括読込に失敗: {err}',{err})); }
+  finally{ if(newSong) anaAfterLoad(); }
 }
-document.getElementById('loadBtn').addEventListener('click', async ()=>{
-  if(!await confirmDiscard('switch')) return;   // 曲フォルダ読込もプロジェクトを置き換える
-  if(window.showDirectoryPicker){
-    try{ dirHandle=await showDirectoryPicker({mode:'readwrite'}); }catch{ return; }
-    files={}; handles={};
-    for await (const [name,h] of dirHandle.entries()){
-      if(h.kind==='file'){ handles[name.toLowerCase()]=h; files[name.toLowerCase()]=await h.getFile(); } }
-    await afterFolder();
-  } else document.getElementById('folder').click();
-});
-document.getElementById('folder').addEventListener('change', async e=>{
-  files={}; handles={}; dirHandle=null;
-  for(const f of e.target.files) files[f.name.toLowerCase()]=f;
-  await afterFolder();
-});
-async function afterFolder(){
-  const info=files['info.dat']; if(!info){stat('Info.dat が無い');return;}
-  infoText=await info.text();
-  infoFileName=(handles['info.dat']&&handles['info.dat'].name)||info.name||'Info.dat';
-  const ij=JSON.parse(infoText); BPM=ij._beatsPerMinute||120;
-  infoBase=ij; infoJson={...ij}; infoDirty=false; const ipEl=document.getElementById('infoPanel'); ipEl.dataset.built='';
-  const sel=document.getElementById('diff'); sel.innerHTML='';
-  const sets=ij._difficultyBeatmapSets||[]; const std=sets.find(s=>s._beatmapCharacteristicName==='Standard')||sets[0];
-  (std?._difficultyBeatmaps||[]).forEach(d=>{const o=document.createElement('option');o.value=d._beatmapFilename;o.textContent=d._difficulty;sel.appendChild(o);});
-  sel.onchange=()=>loadDiff(sel.value);
-  const sf=files[(ij._songFilename||'song.egg').toLowerCase()];
-  if(sf){ stat('音源読込中'); audioBuf=await actx.decodeAudioData(await sf.arrayBuffer()); songDur=audioBuf.duration;
-    buildWaveData(); document.getElementById('tbgTime').style.display=''; }
-  // プロジェクト(.nlmf、旧.bslm/.bsnmも可)があれば優先して読込（元の .dat は以後読むだけ）
-  let pj=null;
-  const projFile=files['project.nlmf']||files['project.bslm']||files['project.bsnm'];   // 新拡張子を優先、旧形式もそのまま読める
-  if(projFile){
-    try{ const pp=JSON.parse(await projFile.text());
-      if(pp&&(pp.format==='nlmf'||pp.format==='bslm'||pp.format==='bsnm')) pj=pp; }
-    catch(e){ console.warn('プロジェクト読込失敗',e); } }
-  try{ await applyProject(pj); }
-  catch(err){ showErr(tf('msg.projApplyErr','プロジェクト適用エラー: {err}',{err:err&&err.stack||err})); }
-  if(!pj){   // .dat からの新規: 譜面のテンポ変化をテンポパートへ（プロジェクトがある時はそちらのテンポパートが正）
-    for(const bm of (std?._difficultyBeatmaps||[])){ const f=files[String(bm._beatmapFilename||'').toLowerCase()]; if(!f) continue;
-      try{ const tp=tempoPartsFromDat(JSON.parse(await f.text()),BPM); if(tp.length){ tempoParts=tp; sortTempoParts(); break; } }catch(_){} } }
-  document.getElementById('saveBtn').style.display='';
-  document.getElementById('saveAsBtn').style.display='';
-  document.getElementById('openProjBtn').style.display='';
-  document.getElementById('exportBtn').style.display='';
-  markSaved();
-  if(pj) stat('プロジェクトを読み込みました（Ctrl+S=保存 / 書き出し=.dat生成）');
-}
-// プロジェクトデータの適用（pj=null なら .dat からの新規プロジェクト扱い）
 function resetAllState(){   // 新規/開く/最近使った の直前に全状態を初期化＝前ファイルの残留（特にフラット配列と_flatDirty）が新ファイルのクリップへ混入するのを防止（ヘルバ様報告のデータ混在バグ対策）
   if(playing) pause();
   stopPrevPlay();
@@ -5897,26 +6489,32 @@ function resetAllState(){   // 新規/開く/最近使った の直前に全状�
   sections=[];                                                         // クリップ構成もクリア
   projDiffs={}; currentDiffName=''; rawDiff=null;
   markers=[]; _mkSeq=0;
+  if(songAna) songAna.reset();                                         // 曲の解析の結果も持ち越さない（解析中ならやめる）
   _flatDirty=false;                                                    // ★未反映の3D編集フラグを消す＝旧フラットが新クリップへ同期されない
   chainCurveGlobal={...CHAIN_CURVE_DEFAULTS};
   // ★音源も必ずクリア＝新規で読み込んだ曲が、その後に開いた別プロジェクトへ残留するバグの対策（ヘルバ様報告）
   graphEdges=graphEdges.filter(e2=>e2.sig!=='audio');
   songNode=null; songDeleted=false; audioBuf=null; ovWave=null; ovWaveLen=0; ovBeats=0; songDur=0; cur=0; offset=0; prevPlayBeat=-1;   // songDeletedも必ずクリア＝前プロジェクトの「MUSIC削除」状態が持ち越されないように（監査 2026-07-14）
-  specMag=null; specSrcCanvas=null; specForBuf=null;
+  specMag=null; specTiles=null; specForBuf=null;
   musicSegs=null; musicBeat=0; musicSelSet=new Set();
   selection.clear(); lightSelection.clear(); layerSel=new Set(); gizmoMode=null;
   layerLockS.clear(); layerMuteS.clear(); layerSoloS.clear();          // レーンのロック/ミュート/ソロも持ち越さない
+  editOnlyTr=null; hideEditOnlyBand();                                 // 単独編集も持ち越さない
+  resetLanes();                                                        // レーンの数も既定へ（以前は前のプロジェクトの数のまま新規になり、増やした分が残った。開く時は applyProject が保存した数にする）
+  _lkHold=false; _lkParSig.clear(); _lkWarned.clear(); _linkVer++; hideLinkBand();   // リンクの控え・帯も持ち越さない
   _cpal=[]; lightBrush.chroma=null; lightBrush._lastChromaHex=null; _lightPalIdx=-1;   // クロマパレット/ブラシは持ち越さない＝新規は空・既定(左ノーツ色)。開くファイルはapplyProjectで上書き（ヘルバ様指定 2026-07-13）
   try{ updateChromaUI(); }catch(_){}
   resetHistory(); _pv4Hist=-1;
 }
+// プロジェクトデータの適用（pj=null はプロジェクト無し＝既定の構成。今は画面からは通らず、テストが新規の代わりに使う）
 async function applyProject(pj){
   resetAllState();   // 読み込み前に一旦リセット（残留の混入防止）
+  _lkHold=true;      // リンクの点検（linkSanitize）が済むまで子を親から作り直さない（古い版で子を編集したファイルを見分けるため）
   const sel=document.getElementById('diff');
   projDiffs={}; currentDiffName=''; rawDiff=null;
   sections=[]; layerSel=new Set();   // 開く前のボックスを残さない
   if(pj){ const src=pj.difficulties||{}; for(const k2 in src) projDiffs[k2]=decDiff(src[k2]); }   // v2タプル形式をデコード（v1はそのまま通る）
-  if(pj&&sel.options.length===0){                      // フォルダ未読込でも.bsnm単体で開ける
+  if(pj&&sel.options.length===0){                      // 難易度のプルダウンが空なら .nlmf の Info から作る
     const sets=(pj.info&&pj.info._difficultyBeatmapSets)||[];
     const std=sets.find(x=>x._beatmapCharacteristicName==='Standard')||sets[0];
     (std&&std._difficultyBeatmaps||[]).forEach(d=>{
@@ -5953,16 +6551,21 @@ async function applyProject(pj){
   _cpal=(pj&&Array.isArray(pj.chromaPalette))?pj.chromaPalette.filter(c=>safeHex(c,null)).slice(0,48):[];   // 色として正しい値だけ（ファイル由来の値をSVGへ差し込むため）   // クロマパレットはプロジェクトから復元（無ければ空＝新規/旧ファイル）
   try{ lightBrush.chroma=null; lightBrush._lastChromaHex=null; _lightPalIdx=-1; }catch(_){}   // ブラシのクロマ状態もリセット（既定=左ノーツ色へ戻る）
   laserBoostCols(); setNoteColStr(); refreshInfoCards(); applyModeDim();
+  { const lc=laneCountsOpen(pj); notesLanes=lc.n; lightLanes=lc.l; laneScrN=0; laneScrL=0; }   // レーン数（保存した数・無ければ既定）。難易度を読み込む前に決める（以前は読み込みの後で、それまで前のプロジェクトの数のままだった）
+  if(pj) oldAdoptDiffs(!(+pj.version>=2));   // 古い形式: クリップの外の物を全難易度でクリップへ（今の形のファイルでは何もしない・2026-10-20）
   await loadDiff(sel.value);
-  // セクションタグ: .bsnm > 旧bsnm.meta.json > 既定
+  { _lkHold=false; const n=linkSanitize();   // 親と中身の違う子（古い版で子を編集した等）はリンクを外して知らせる
+    if(n){ compileLayersToFlat(); setTimeout(()=>linkBandMsg(tf('lk.unlinkedOnOpen','{n} 個のリンクを外しました（親と中身が違っていたため。古い版で子のクリップを編集した時などに起きます）',{n}),'open'),0); } }
+  // セクションタグ: .nlmf（旧 .bsnm）> 既定
   markers=(pj&&Array.isArray(pj.markers))?structuredClone(pj.markers):[]; _mkSeq=markers.length;   // マーカー復元
+  if(songAna) songAna.load(pj&&pj.analysis);   // 曲の解析の結果（帯・付け直した名前・解析した時の目盛り）。中身は song-analysis.js が確かめる
   njsCfg=(pj&&pj.njsCfg&&typeof pj.njsCfg==='object')?structuredClone(pj.njsCfg):{};   // 難易度別NJS/オフセットの編集値を復元
   if(pj&&pj.chainCurveGlobal&&typeof pj.chainCurveGlobal==='object')
     chainCurveGlobal={...CHAIN_CURVE_DEFAULTS,...pj.chainCurveGlobal};
   else chainCurveGlobal={...CHAIN_CURVE_DEFAULTS};
-  notesLanes=Math.max(1,Math.min(LANE_MAX,(pj&&pj.notesLanes)||laneDefN())); lightLanes=Math.max(1,Math.min(LANE_MAX,(pj&&pj.lightLanes)||(6-laneDefN()))); laneScrN=0; laneScrL=0;   // レーン数復元（プロジェクト優先・無ければ個人設定）
   { const ls=(pj&&pj.laneStates)||{};   // レーンのミュート/ソロ/ロック状態を復元（未保存の旧ファイルは全解除のまま）
-    layerMuteS=new Set(ls.mute||[]); layerSoloS=new Set(ls.solo||[]); layerLockS=new Set(ls.lock||[]); }
+    layerMuteS=new Set(ls.mute||[]); layerSoloS=new Set(ls.solo||[]); layerLockS=new Set(ls.lock||[]);
+    editOnlyTr=(Number.isInteger(ls.editOnly)&&ls.editOnly>=0&&ls.editOnly<notesLanes)?ls.editOnly:null; }   // 単独編集（ファイル由来の値なので範囲を確かめる）
   infoGraph=(pj&&pj.infoGraph)?Object.assign(defaultInfoGraph(),structuredClone(pj.infoGraph)):defaultInfoGraph();
   infoGraph.cam={x:0,y:0,s:1,auto:1};   // 保存済みカメラは使わない（起動時は常に全ノード中央=「.」と同じ状態から）
   sanitizeInfoGraph();
@@ -5972,13 +6575,12 @@ async function applyProject(pj){
   if(!(pj&&+pj.version>=2)){   // v2はsectionsをloadDiffがdifficulties[current]から復元済み（トップレベル重複は廃止）。v1/旧形式のみここでsectionsを組む
     sections=[];
     if(pj&&Array.isArray(pj.sections)) sections=pj.sections.map(s2=>decSec(s2)).sort((a,b)=>a.beat-b.beat);
-    else if(files['bsnm.meta.json']){ try{ const meta=JSON.parse(await files['bsnm.meta.json'].text());
-      sections=(meta.sections||[]).sort((a,b)=>a.beat-b.beat); }catch(e){} }
     // マーカーが無ければ曲全体をひとつの大きなノードに（1ノードのまま作る派向け）
     if(!sections.length) sections.push({beat:0,label:(infoBase&&infoBase._songName)||'Song'});
     packLanes();   // 旧形式でも一番低いトラックへ詰める
   }
-  if(!pj) buildDefaultGraph();                          // 新規（.datフォルダ）は基本構成で配置
+  if(pj&&!(+pj.version>=2)) oldFixCur();                // 保存形式 v1: 今の難易度のクリップ（上で組んだ物）の長さ・中身を整え、全部の物をクリップの中へ（2026-10-20）
+  if(!pj) buildDefaultGraph();                          // プロジェクト無しは基本構成で配置
   ensureNodeIds(); ensureLens(); ensureEdges();
   relinkDiffEdges();
   const flatEmpty=!notes.length&&!bombs.length&&!walls.length&&!arcs.length&&!chains.length&&!lightEvents.length;
@@ -5987,7 +6589,7 @@ async function applyProject(pj){
   else { applyInfoChain(); selection.clear(); lightSelection.clear(); gizmoMode=null; rebuild(); }
   restoreView(pj);
 }
-/** 保存時の再生位置とNLEのズーム・表示位置を戻す（2026-10-06）。記録の無い旧ファイル・.datからの新規は先頭から（ズームはそのまま） */
+/** 保存時の再生位置とNLEのズーム・表示位置を戻す（2026-10-06）。記録の無い旧ファイル・プロジェクト無しは先頭から（ズームはそのまま） */
 function restoreView(pj){
   const v=(pj&&pj.view&&typeof pj.view==='object')?pj.view:{};
   const num=(x,lo,hi,d)=>(typeof x==='number'&&isFinite(x))?Math.max(lo,Math.min(hi,x)):d;   // ファイル由来の値なので数の範囲を確かめる
@@ -5995,6 +6597,107 @@ function restoreView(pj){
   tlSpan=num(v.span,4,1e4,tlSpan);   // 画面からのズームの上限は曲の全長（開いた時点では音源が未読込で測れない）。極端な値で拍ごとの描画が重くならないよう固定の上限
   tlFrozen=null; tlViewB0=null; tlB0=num(v.b0,0,1e6,Math.max(0,cur-tlSpan*0.5));
   vwB=null; vwPlayD=null;   // 3Dは再生ヘッドへ追従（前に開いていたファイルのビュー固定を持ち越さない）
+}
+// ============ 古い形式のプロジェクトを開く（2026-10-20） ============
+// 古い版のファイルには、クリップの外にある物（フラットにだけある物）・クリップの無い難易度・長さの無いクリップ（保存形式 v1。開く時は音源が無く
+// ensureLens が4拍にしていた）・ノーツのクリップの中のライト（ノードの画面の頃）がある。今の形はクリップの中身が正で、開く・難易度の切り替え・
+// NLE の操作のたびにクリップから作り直すため、そのままではクリップの外の物が消えていた。開く時に全部をクリップの中へ入れる（その拍を含む同じ種類の
+// クリップがあればそこへ・無ければ一番下のレーンの空いている所に小節の区切りで新しいクリップを作る）。
+// 今の形で保存したファイルはフラット＝クリップの中身なので何もしない（開き方・保存の中身は変わらない）。
+const _OLD_FLAT={notes:'notes',bombs:'bombs',walls:'walls',arcs:'arcs',chains:'chains',lights:'lightEvents'};   // 中身のキー → フラットのキー
+const _OLD_GRP={notes:'n',bombs:'n',walls:'n',arcs:'n',chains:'n',lights:'l'};
+const _oldKey=(key,o)=>key+'|'+_ENC[key].f.map(f=>{ const v=o[f]; return typeof v==='number'?+v.toFixed(4):(v??''); }).join(',');   // 同じ物か（絶対拍で比べる）
+const _oldBeat=(key,o)=>+(o[_LCT[key][0]]??0)||0;
+/** 長さの無いクリップ（保存形式 v1）: 次のクリップの頭まで（ensureLens と同じ）。最後のクリップは中身とフラットの最後の物を含む小節の終わりまで */
+function oldClipLens(st){
+  const ord=(st.sections||[]).filter(s=>s&&s.kind!=='null').sort((a,b)=>(a.beat||0)-(b.beat||0));
+  ord.forEach((s,i)=>{ if(s.len>0) return; const b0=s.beat||0; let end;
+    if(i+1<ord.length) end=ord[i+1].beat||0;
+    else { let mx=b0;
+      for(const key in _OLD_FLAT){ for(const o of ((s.content||{})[key]||[])) mx=Math.max(mx,b0+_oldBeat(key,o));
+        for(const o of (st[_OLD_FLAT[key]]||[])) mx=Math.max(mx,_oldBeat(key,o)); }
+      end=Math.max(b0+4,Math.ceil((mx+1e-3)/4)*4); }
+    s.len=Math.max(0.25,end-b0); });
+}
+/** 1つの難易度 st（{sections, notes…lightEvents}）の、クリップに入っていない物をクリップへ入れる。入れたら true（フラットもクリップから作り直す）。
+ *  old=true（保存形式 v1・フラットが正だった頃）: クリップの範囲の中でも中身に無い物を入れ、ノーツのクリップの中のライト（とライトのクリップの中のノーツ系）も
+ *  同じ種類のクリップへ移す。old=false（v2）: どのクリップの範囲にも無い物だけ（範囲の中で中身に無い物は今までどおりクリップの中身が正＝消した物を戻さない。
+ *  チェーン・アークだけは loadDiff が拾い直す） */
+function oldAdoptLoose(st,old){
+  const secs=st.sections||(st.sections=[]);
+  const moved={};   // 種類の違うクリップから移す物（絶対拍）
+  if(old) for(const s of secs){ if(!s||s.kind==='null'||!s.content) continue;
+    const lk=secLk(s), off=s.beat||0, L=s.len||4;
+    for(const key in _OLD_FLAT){ const arr=s.content[key]; if(_OLD_GRP[key]===lk||!arr||!arr.length) continue;
+      const keep=[];
+      for(const o of arr){ const rb=_oldBeat(key,o);
+        if(!(rb>=0&&rb<L)){ keep.push(o); continue; }   // 隠れている物（トリム）はそのまま
+        const c={...o}; for(const f of _LCT[key]) c[f]=(c[f]??0)+off; (moved[key]||(moved[key]=[])).push(c); }
+      s.content[key]=keep; } }
+  const have=new Map(), comp=flatFromSections(secs);   // 今クリップに入っている物（絶対拍）
+  for(const key in _OLD_FLAT) for(const o of comp[_OLD_FLAT[key]]){ const k=_oldKey(key,o); have.set(k,(have.get(k)||0)+1); }
+  // 入れる物: 同じ物ごとに「フラットの数」と「クリップの数＋移す数」の多い方まで足す（同じ物を二重にしない）。移す物を先に使う
+  const loose=[];
+  for(const key in _OLD_FLAT){ const by=new Map();
+    const put=(o,src)=>{ const k=_oldKey(key,o); let e=by.get(k); if(!e) by.set(k,e={f:[],m:[]}); e[src].push(o); };
+    for(const o of (st[_OLD_FLAT[key]]||[])) put(o,'f');
+    for(const o of (moved[key]||[])) put(o,'m');
+    for(const [k,e] of by){ const c=have.get(k)||0, nf=Math.max(0,Math.max(e.f.length,c+e.m.length)-c-e.m.length);
+      for(const o of [...e.m,...(nf?e.f.slice(-nf):[])]) if(_oldBeat(key,o)>=0) loose.push({key,o}); } }   // 負の拍はクリップに入らない（今までどおり）
+  if(!old){ const inAny=(lk,b)=>secs.some(s=>s&&s.kind!=='null'&&secLk(s)===lk&&b>=(s.beat||0)-1e-6&&b<(s.beat||0)+(s.len||4)-1e-6);
+    for(let i=loose.length-1;i>=0;i--){ const it=loose[i]; if(inAny(_OLD_GRP[it.key],_oldBeat(it.key,it.o))) loose.splice(i,1); } }
+  if(!loose.length&&!Object.keys(moved).length) return false;
+  const add=(s,key,o)=>{ const c={...o}; delete c._tr; for(const f of _LCT[key]) c[f]=(c[f]??0)-(s.beat||0);
+    if(!s.content) s.content={}; s.content[key]=[...(s.content[key]||[]),c]; };
+  // 1) その拍を含む同じ種類のクリップ（リンクの子でない）へ。物のレーン（_tr）のクリップを優先
+  const cover=(lk,b,tr)=>{ let best=null;
+    for(const s of secs){ if(!s||s.kind==='null'||secLk(s)!==lk||linkIsKid(s)) continue;
+      const r=b-(s.beat||0); if(!(r>=0&&r<(s.len||4)-1e-6)) continue;
+      if((s.track||0)===tr) return s; if(!best||(s.track||0)>(best.track||0)) best=s; }
+    return best; };
+  const rest={n:[],l:[]};
+  for(const it of loose){ const lk=_OLD_GRP[it.key], s=cover(lk,_oldBeat(it.key,it.o),it.o._tr||0);
+    if(s) add(s,it.key,it.o); else rest[lk].push(it); }
+  // 2) 覆うクリップが無い物: 一番下のレーンから、その拍が空いているレーンの隙間に、小節（4拍）の区切りで新しいクリップを作る（隣のクリップとは重ねない）
+  const label=(infoBase&&infoBase._songName)||'Song';
+  for(const lk of ['n','l']){ const arr=rest[lk]; if(!arr.length) continue;
+    arr.sort((a,b)=>_oldBeat(a.key,a.o)-_oldBeat(b.key,b.o));
+    const N=laneCountOf(lk);
+    const gapAt=b=>{ for(let T=N-1;T>=0;T--){ let lo=0, hi=Infinity, busy=false;
+        for(const s of secs){ if(!s||s.kind==='null'||secLk(s)!==lk||(s.track||0)!==T) continue;
+          const s0=s.beat||0, s1=s0+(s.len||4);
+          if(b>=s0-1e-6&&b<s1-1e-6){ busy=true; break; }
+          if(s1<=b+1e-6) lo=Math.max(lo,s1); else hi=Math.min(hi,s0); }
+        if(!busy) return {T,lo,hi,items:[]}; }
+      return null; };
+    const make=g=>{ if(!g||!g.items.length) return;
+      const bs=g.items.map(it=>_oldBeat(it.key,it.o)), mn=Math.min(...bs), mx=Math.max(...bs);
+      const b0=Math.min(mn,Math.max(g.lo,Math.floor(mn/4)*4)), b1=Math.max(Math.min(g.hi,Math.ceil((mx+1e-3)/4)*4),mx+1e-3);
+      const used=new Array(STRIP_COLS.length).fill(0); for(const s of secs) if(s&&s.col!=null) used[s.col%STRIP_COLS.length]++;
+      let col=0; for(let i=1;i<used.length;i++) if(used[i]<used[col]) col=i;   // 一番使われていない色（pickStripCol と同じ考え方）
+      const s={id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat:b0,len:b1-b0,track:g.T,lk,col,label,kind:'sheet',content:{}};
+      secs.push(s); for(const it of g.items) add(s,it.key,it.o); };
+    let g=null;
+    for(const it of arr){ const b=_oldBeat(it.key,it.o);
+      if(g&&b<g.hi-1e-6){ g.items.push(it); continue; }
+      make(g); g=gapAt(b); if(g) g.items.push(it); }
+    make(g); }
+  Object.assign(st,flatFromSections(secs));   // フラットもクリップから（物のレーン _tr をクリップに合わせる）
+  return true;
+}
+/** 開く時（loadDiff の前）: 全難易度の退避データで、クリップの外の物をクリップへ。old=保存形式 v1（長さの無いクリップ・種類の違う中身も直す） */
+function oldAdoptDiffs(old){
+  for(const k in projDiffs){ const st=projDiffs[k]; if(!st) continue;
+    if(old) oldClipLens(st);
+    if(oldAdoptLoose(st,old)) console.warn('古い形式: クリップの外にあった物をクリップへ入れました:',k); }
+}
+/** 保存形式 v1 を開いた時（applyProject が今の難易度のクリップを組んだ後）: 長さ→レーンの詰め直し→クリップの外の物を中へ→フラットをクリップから作り直す。
+ *  詰め直すとクリップのレーンとフラットの _tr がずれ、合わせ直さないライトが保存で消えていた */
+function oldFixCur(){
+  const st={sections,notes,bombs,walls,arcs,chains,lightEvents};
+  oldClipLens(st); packLanes();
+  if(oldAdoptLoose(st,true)) console.warn('古い形式: 今の難易度でクリップの外にあった物をクリップへ入れました');
+  ({notes,bombs,walls,arcs,chains,lightEvents}=flatFromSections(sections));
 }
 // 音源handleの永続化と自動復元（handleはJSONへ書けない → IndexedDBに退避。これが無いと再オープンで音源が消える）
 // window.pywebview はページ読込後に非同期で注入されるため、起動直後の自動読込では
@@ -6042,7 +6745,7 @@ async function tryAutoRestoreNativeInputs(){
         try{ await loadCoverPreview({id:'ig:'+cid,handle:h,name:n.data.name}); }catch(_){} } }catch(e){} }
   if(changed){ applyInfoGraph(); refreshInfoCards(); refreshOutCards(); }
 }
-// .bsnm を直接開く（曲フォルダ不要。音源だけはSONGノードの📁から）
+// .nlmf（旧 .bsnm）を開いた後の復元
 // .bsnm再オープン時: IndexedDBの元フォルダ参照から 音源・カバー・難易度切替 を復元
 async function restoreLineAssets(){
   let m={}; try{ m=(await idbGet('lineDirs'))||{}; }catch(e){}
@@ -6201,40 +6904,12 @@ async function loadDiff(f){ if(!f) return;
     selection.clear(); rebuild();   // 履歴は消さない＝難易度をまたいで1本で辿れる（各項目のdiffタグで戻り先が分かる・ヘルバ様指定 2026-07-17）
     stat(tf('msg.projStats','[project] BPM {bpm} ・ ノーツ{notes} ボム{bombs} 壁{walls} アーク{arcs} チェーン{chains}',{bpm:BPM,notes:notes.length,bombs:bombs.length,walls:walls.length,arcs:arcs.length,chains:chains.length}));
     return; }
-  const fl=files[f.toLowerCase()];
-  if(!fl){                                   // 元ファイルも無い＝ゼロから作る新しい難易度（箱は難易度ごとに独立=空のタイムラインから）
-    currentDiffName=f; rawDiff=EMPTY_V3(); diffV3=true;
-    notes=[];bombs=[];walls=[];arcs=[];chains=[];lightEvents=[];
-    resetDiffSections();
-    selection.clear(); rebuild(); stashCurrentDiff();   // 履歴は消さない（上と同じ理由）
-    stat(tf('msg.newDiffStart','新しい難易度を開始: {name}',{name:f.replace(/Standard\.dat$/,'')}));
-    return; }
-  const d=JSON.parse(await fl.text());
-  currentDiffName=f; rawDiff=d;
-  diffV3='colorNotes' in d||!!String(d.version||'').match(/^[34]/);
+  // 編集データが無い＝ゼロから作る新しい難易度（箱は難易度ごとに独立=空のタイムラインから）
+  currentDiffName=f; rawDiff=EMPTY_V3(); diffV3=true;
   notes=[];bombs=[];walls=[];arcs=[];chains=[];lightEvents=[];
-  // ライトイベント（レーン表示用）
-  if(diffV3){ for(const e of d.basicBeatmapEvents||[]) lightEvents.push({beat:e.b??0,et:e.et,i:e.i??0,f:e.f??1,raw:e}); }
-  else { for(const e of d._events||[]) lightEvents.push({beat:e._time,et:e._type,i:e._value??0,f:1,raw:e}); }
-  lightEvents.sort((a,b)=>a.beat-b.beat);
-  if(diffV3){
-    for(const n of d.colorNotes||[]) notes.push({kind:'note',beat:n.b,x:n.x,y:n.y,c:n.c,d:n.d,raw:n});
-    for(const n of d.bombNotes||[]) bombs.push({kind:'bomb',beat:n.b,x:n.x,y:n.y,raw:n});
-    for(const o of d.obstacles||[]) walls.push({kind:'wall',beat:o.b,x:o.x,y:o.y,dur:o.d,w:o.w,h:o.h,raw:o});
-    for(const a of d.sliders||[]) arcs.push({kind:'arc',b:a.b,c:a.c,x:a.x,y:a.y,d:a.d,mu:a.mu,tb:a.tb,tx:a.tx,ty:a.ty,tc:a.tc,tmu:a.tmu,m:a.m,raw:a});
-    for(const c of d.burstSliders||[]) chains.push({kind:'chain',b:c.b,c:c.c,x:c.x,y:c.y,d:c.d,tb:c.tb,tx:c.tx,ty:c.ty,sc:c.sc,s:c.s,raw:c});
-    absorbChainCompanionNotes(notes, chains);   // 実機.datはチェーン頭のcolorNoteを併記する仕様→エディタではチェーンへ吸収（書き出し時に再合成）
-  } else {
-    for(const n of d._notes||[]){
-      if(n._type===0||n._type===1) notes.push({kind:'note',beat:n._time,x:n._lineIndex,y:n._lineLayer,c:n._type,d:n._cutDirection,raw:n});
-      else if(n._type===3) bombs.push({kind:'bomb',beat:n._time,x:n._lineIndex,y:n._lineLayer,raw:n});
-    }
-    for(const o of d._obstacles||[]) walls.push({kind:'wall',beat:o._time,x:o._lineIndex,
-      y:o._type===1?2:0,dur:o._duration,w:o._width,h:o._type===1?1:3,raw:o});
-  }
-  selection.clear(); rebuild();   // 履歴は消さない（上と同じ理由）。初回の.dat読込＝この難易度の履歴はまだ無い
-  stashCurrentDiff();
-  stat(tf('msg.chartStats','BPM {bpm} ・ ノーツ{notes} ボム{bombs} 壁{walls} アーク{arcs} チェーン{chains}{v2}',{bpm:BPM,notes:notes.length,bombs:bombs.length,walls:walls.length,arcs:arcs.length,chains:chains.length,v2:diffV3?'':t('word.v2NoArcChain','（v2: アーク/チェーン非対応）')})); }
+  resetDiffSections();
+  selection.clear(); rebuild(); stashCurrentDiff();   // 履歴は消さない（上と同じ理由）
+  stat(tf('msg.newDiffStart','新しい難易度を開始: {name}',{name:f.replace(/Standard\.dat$/,'')})); }
 function stat(s){ document.getElementById('stat').textContent=(typeof s==='string')?t('m:'+s,s):s; }
 
 function buildDiffJsonFor(st){
@@ -6325,8 +7000,10 @@ function buildProjectText(){
   const coverData={}; for(const id in _coverB64) if(infoGraph.nodes&&infoGraph.nodes[id]) coverData[id]=_coverB64[id];   // カバー画像をbase64で同梱（存在ノードのみ）
   return JSON.stringify({format:'nlmf',version:2,savedAt:new Date().toISOString(),
     bpm:BPM,tempoParts,current:currentDiffName,musicBeat,musicSegs,songDeleted,noteRed:RED,noteBlue:BLUE,laserRed:LRED,laserBlue:LBLUE,markers,notesLanes,lightLanes,info:infoBase,infoGraph,njsCfg,coverData,chainCurveGlobal,chromaPalette:_cpal,
-    laneStates:{mute:[...layerMuteS],solo:[...layerSoloS],lock:[...layerLockS]},   // レーンのミュート/ソロ/ロック状態も保存（ヘルバ様指摘）
+    laneStates:{mute:[...layerMuteS],solo:[...layerSoloS],lock:[...layerLockS],   // レーンのミュート/ソロ/ロック状態も保存（ヘルバ様指摘）
+      ...(editOnlyTr!=null?{editOnly:editOnlyTr}:{})},   // 単独編集のノーツのレーン（内部の段）。projSigには入れない＝切り替えただけでは未保存にしない（viewと同じ・2026-10-19）
     view:{beat:curAnim?curAnim.to:cur,span:tlSpan,b0:tlShownB0()},   // 再生位置（ジャンプの途中なら着地点）とNLEのズーム・表示位置（開いた時に復元）。projSigには入れない＝動かしただけでは未保存にしない（2026-10-06）
+    analysis:songAna?songAna.save():undefined,   // 曲の解析の結果（無ければキーごと書かない）。projSig にも入れる＝名前の付け直しで未保存
     graph:{...(graphIO||{}),edges:graphEdges,
       song:songNode?(({handle,...r})=>r)(songNode):null,
       extra:extraNodes.map(({handle,...r})=>r),
@@ -6337,12 +7014,7 @@ async function rotateBakIdb(name, oldText){ try{
   const g2=await idbGet('projBak2:'+name); if(g2) await idbSet('projBak3:'+name,g2);
   const g1=await idbGet('projBak1:'+name); if(g1) await idbSet('projBak2:'+name,g1);
   await idbSet('projBak1:'+name,{t:Date.now(),text:oldText}); }catch(e){} }
-async function rotateBakDisk(dir, baseName, oldText){ try{   // ディレクトリ保存時はファイルと同場所にも3世代（*.bak1/2/3.nlmf）
-  const bn=i=>baseName.replace(/\.nlmf$/i,'')+'.bak'+i+'.nlmf';
-  for(let i=2;i>=1;i--){ try{ const src=await dir.getFileHandle(bn(i)); const t=await (await src.getFile()).text();
-    const w=await (await dir.getFileHandle(bn(i+1),{create:true})).createWritable(); await w.write(t); await w.close(); }catch(_){} }
-  const w=await (await dir.getFileHandle(bn(1),{create:true})).createWritable(); await w.write(oldText); await w.close(); }catch(e){} }
-// 保存 = project.nlmf（元の .dat は変更しない）。saveAs=true で保存先を選択
+// 保存 = .nlmf（開いたファイル・前に保存したファイルへ上書き。無ければ保存先を選ぶ）。saveAs=true で保存先を選択
 async function saveProject(saveAs=false){   // 戻り値: 保存できたら true（キャンセル/失敗は false）
   if(!sections.length){ showErr('保存対象がありません'); return false; }
   await refreshCoverB64();   // カバー画像をbase64化してから同梱（保存で画像が消えない）
@@ -6359,28 +7031,18 @@ async function saveProject(saveAs=false){   // 戻り値: 保存できたら tru
     return false;
   }
   if(saveAs) _nativeSavePath='';   // 名前を付けて保存＝以後は選んだ保存先へ
-  if(saveAs||(!projFileHandle&&!dirHandle)){
+  if(saveAs||!projFileHandle){
     try{ projFileHandle=await showSaveFilePicker({suggestedName:'project.nlmf',
       types:[{description:t('fp.project','Non-Linear Mapperプロジェクト'),accept:{'application/octet-stream':['.nlmf']}}]}); }
     catch(e){ return false; }                 // キャンセル
   }
   try{
-    if(projFileHandle){                       // 指定した保存先へ
-      await ensureRW(projFileHandle);
-      try{ const old=await (await projFileHandle.getFile()).text();   // 上書き前の内容を3世代バックアップ（事故保険）
-        if(old) await rotateBakIdb(projFileHandle.name, old); }catch(e){}
-      const w=await projFileHandle.createWritable(); await w.write(text); await w.close();
-      metaDirty=false;
-      showOk(tf('msg.projSaved','プロジェクト保存: {name}',{name:projFileHandle.name}));
-    } else {                                  // 既定: 曲フォルダ直下
-      await ensureRW(dirHandle);
-      const fh=await dirHandle.getFileHandle('project.nlmf',{create:true});
-      try{ const old=await (await fh.getFile()).text();   // 同場所に3世代（project.bak1/2/3.nlmf）＋IndexedDBにも3世代
-        if(old){ await rotateBakDisk(dirHandle,'project.nlmf',old); await rotateBakIdb(fh.name,old); } }catch(e){}
-      const w=await fh.createWritable(); await w.write(text); await w.close();
-      metaDirty=false; projFileHandle=projFileHandle||fh;
-      showOk('プロジェクト保存: 曲フォルダ/project.nlmf');
-    }
+    await ensureRW(projFileHandle);
+    try{ const old=await (await projFileHandle.getFile()).text();   // 上書き前の内容を3世代バックアップ（事故保険）
+      if(old) await rotateBakIdb(projFileHandle.name, old); }catch(e){}
+    const w=await projFileHandle.createWritable(); await w.write(text); await w.close();
+    metaDirty=false;
+    showOk(tf('msg.projSaved','プロジェクト保存: {name}',{name:projFileHandle.name}));
   }catch(err){ showErr(tf('msg.saveFail','保存失敗: {err}',{err})); return false; }
   markSaved(); return true;
 }
@@ -6405,6 +7067,7 @@ function projSig(){
   const info=infoBase?{...infoBase,_beatsPerMinute:undefined}:null;   // BPMの写し（BPM変更で後から書き足される）はbpmで比較済み＝戻しても差分が残る誤検知を防ぐ
   return JSON.stringify({bpm:BPM,tempoParts,musicBeat,musicSegs,songDeleted,col:[RED,BLUE,LRED,LBLUE],markers,notesLanes,lightLanes,info,
     ig:{...infoGraph,cam:undefined},njsCfg,chainCurveGlobal,cpal:_cpal,lanes:[[...layerMuteS],[...layerSoloS],[...layerLockS]],
+    ana:songAna?songAna.sig():undefined,   // 曲の解析の結果・付け直した名前（無ければキーごと無し＝解析していない旧プロジェクトの比較は変わらない）
     graph:{...gio,edges:graphEdges,song:noH(songNode),extra:extraNodes.map(noH),altIns,altOuts,altSongs:altSongs.map(noH),activeUids},d:dOut});
 }
 function setDirtyLamp(on){
@@ -6484,7 +7147,18 @@ if(NLM_DEV) window._dbgApp=Object.freeze({
     lamp:!!document.getElementById('swingLamp')?.classList.contains('on'),frames:swingPool.filter(g=>g.visible).length}),
   prev:()=>({playing:!!_pvPlay,id:_pvPlay?_pvPlay.id:null,connected:connectedNodeId('prev'),
     infoStart:infoBase?infoBase._previewStartTime:null,infoDur:infoBase?infoBase._previewDuration:null,leadInMs:getLeadInMs()}),
-  audioPosAtBeat:b=>audioPosAtBeat(b),
+  audioPosAtBeat:(b,raw)=>audioPosAtBeat(b,!!raw),   // raw=丸めない（スペクトログラムの位置の照合用）
+  /** スペクトログラム（tests/e2e_nle/test_spectro_music.py 用）: 2D の帯に最後に貼った区間（拍・元の刻みのコマ u・画面の横 dx（CSS px）・段 L）と、
+   * 元の1コマの秒・コマ数、3D の帯の行ごとの元の刻みのコマ（-1=音の無い所。中心の拍 cB の ±20拍を行数で等分した各行の中心）。
+   * band は 3D の帯を最後に描き直した時点の物（中心の拍が 1/4拍動いた時・拍→音源の秒の対応が変わった時に描き直す） */
+  spec:()=>structuredClone({spans:_specLast||[],hop:specHop,cols:specCols,
+    band:_specWinCols?{cB:parseInt(_specWinKey,10)/4,cols:Array.from(_specWinCols)}:null}),
+  /** 曲の解析（tests/e2e_nle/test_analysis.py 用）: 帯が出ているか・解析中の段階と進み具合・目盛りが変わったか・帯の上の知らせ・保存する中身・帯に描く文字 */
+  analysis:()=>songAna?songAna.dbg():null,
+  /** 解析の帯（#anacv）の拍beatのx とセクション・細かい区切りの段の中央のy（ページ座標px） */
+  anaScreen:beat=>songAna?songAna.screen(beat??cur):null,
+  /** 構成の解析に送る at（拍 0, 0.25, … ごとの元の音源の秒。音の無い所は null） */
+  anaAtGrid:()=>anaAtGrid(4),
   /** ライトの状況（自動ライティングの検証用）: 今の難易度のライトとライトのクリップ、各難易度の数 */
   lights:()=>structuredClone({lanes:lightLanes,locks:[...layerLockS],events:lightEvents.map(({raw,...r})=>r),
     clips:sections.filter(s=>secLk(s)==='l').map(s=>({label:s.label,track:s.track||0,beat:s.beat||0,len:s.len,n:((s.content||{}).lights||[]).length})),
@@ -6518,22 +7192,36 @@ if(NLM_DEV) window._dbgApp=Object.freeze({
   /** 3Dビューに表示中のオブジェクトの画面座標（ページ座標px。範囲選択の判定点と同じ）。クリック選択の位置に使う */
   objScreen:()=>{ const r=cv.getBoundingClientRect();
     return meshes.filter(m=>m.group.visible).map(m=>{ const o=m.obj, s=screenPosOf(m.group);
-      return {kind:o.kind, beat:o.beat??o.b, x:o.x, y:o.y, c:o.c, sx:r.left+s.x, sy:r.top+s.y, inView:s.in, sel:selection.has(o)}; }); },
+      return {kind:o.kind, beat:o.beat??o.b, x:o.x, y:o.y, c:o.c, tr:o._tr||0, sx:r.left+s.x, sy:r.top+s.y, inView:s.in, sel:selection.has(o)}; }); },
   /** ライトレーンli（0=左端）の拍beatの床の画面座標（ページ座標px。ライト範囲選択の判定点と同じ） */
   lightLaneScreen:(li,beat)=>{ const r=cv.getBoundingClientRect(), v=new THREE.Vector3(LANE_X0+li*LANE_DX,0.03,(beat-viewBeat())*ZPB).project(camera);
     return {x:r.left+(v.x+1)/2*r.width, y:r.top+(1-v.y)/2*r.height, inView:v.z<1}; },
   /** NLE（レイヤービュー）の拍beatのx と各帯・レーンの上端y（ページ座標px）。帯はキャンバスに直接描くのでDOMから取れない */
-  nleScreen:beat=>{ const r=ndcv.getBoundingClientRect(), lh=laneHt();
+  nleScreen:beat=>{ const r=ndcv.getBoundingClientRect();
     return {x:r.left+lBeatToX(beat??cur), left:r.left, top:r.top, w:r.width, h:r.height, gut:LGUT,
-      ruler:r.top, marker:r.top+LRULER-MKRH, tempo:r.top+LRULER-MKRH-TPRH, lanes:r.top+LRULER, laneH:lh,
-      notes:Array.from({length:notesLanes},(_,i)=>r.top+laneY('n',i)), lights:Array.from({length:lightLanes},(_,i)=>r.top+laneY('l',i))}; },
+      ruler:r.top, marker:r.top+LRULER-MKRH, tempo:r.top+LRULER-MKRH-TPRH, lanes:r.top+LRULER, laneH:laneHt('n'), laneHL:laneHt('l'),   // レーンの高さ（laneH＝ノーツ・laneHL＝ライト。2026-10-20〜別の高さ）
+      notes:Array.from({length:notesLanes},(_,i)=>r.top+laneY('n',i)), lights:Array.from({length:lightLanes},(_,i)=>r.top+laneY('l',i)),
+      eo:_eoBtns.map(b=>({t:b.t,x:r.left+b.x,y:r.top+b.y,w:b.w,h:b.h}))}; },   // 溝の単独編集の帯の押せる所（最後の描画の時点・窓の外は無い）
   /** NLEの状態（tests/e2e_nle の検証用）: 今の難易度のクリップ（位置と中身の数）・選択・分割モード・貼り付け・マーカー・レーンの状態・Music */
   nle:()=>structuredClone({clips:sections.filter(s=>s.kind!=='null').map(s=>({id:s.id,label:s.label,lk:secLk(s),track:s.track||0,beat:s.beat||0,len:s.len||4,
+      link:s.link||null,par:!!s.linkParent,col:s.col??null,colHex:s.colHex||null,
       n:Object.fromEntries(Object.keys(_LCT).map(k=>[k,((s.content||{})[k]||[]).length]))})),
     sel:[...layerSel], razor:layerRazor, paste:layerPaste?{at:layerPaste.at,n:layerPaste.items.length}:null, clipboard:layerClipboard?layerClipboard.items.length:0,
-    markers, lanes:{n:notesLanes,l:lightLanes}, mute:[...layerMuteS], solo:[...layerSoloS], lock:[...layerLockS],
+    markers, lanes:{n:notesLanes,l:lightLanes}, mute:[...layerMuteS], solo:[...layerSoloS], lock:[...layerLockS], editOnly:editOnlyTr,
     music:{beat:musicBeat, segs:musicSegs, sel:[...musicSelSet], audio:!!audioBuf, dur:songDur}, hover:tlHoverBeat, snap,
-    vp:(r=>({n:[r.top+laneTopOf('n'),r.top+laneTopOf('n')+laneVP('n')], l:[r.top+laneTopOf('l'),r.top+laneTopOf('l')+laneVP('l')]}))(ndcv.getBoundingClientRect())}),   // 各グループの表示窓（ページ座標px。レーンが多いと窓の外はスクロールで隠れる）
+    vp:(r=>({n:[r.top+laneTopOf('n'),r.top+laneTopOf('n')+laneVP('n')], l:[r.top+laneTopOf('l'),r.top+laneTopOf('l')+laneVP('l')]}))(ndcv.getBoundingClientRect()),   // 各グループの表示窓（ページ座標px。レーンが多いと窓の外はスクロールで隠れる）
+    scroll:{n:laneScrN,l:laneScrL,maxN:laneMaxScroll('n'),maxL:laneMaxScroll('l')}}),   // 各グループの縦のスクロール量（px）と最大
+  /** リンクしたクリップ（tests/e2e_nle/test_clip_link.py 用）: 全難易度のクリップ（難易度・位置・リンク・中身の数と相対拍の一覧）と、各難易度のフラットの数 */
+  links:()=>{ const clips=[]; linkEachSec((s,dk,cur)=>{ if(s.kind==='null') return; const c=s.content||{};
+      clips.push({dk,cur,id:s.id,label:s.label,lk:secLk(s),track:s.track||0,beat:s.beat||0,len:s.len||4,link:s.link||null,par:!!s.linkParent,col:s.col??null,colHex:s.colHex||null,
+        n:Object.fromEntries(Object.keys(_LCT).map(k=>[k,(c[k]||[]).length])),
+        notes:(c.notes||[]).map(o=>[o.beat,o.x,o.y,o.c,o.d]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2]),
+        lights:(c.lights||[]).map(o=>[o.beat,o.et,o.i]).sort((a,b)=>a[0]-b[0]||a[1]-b[1])}); });
+    const curK=(currentDiffName||'').toLowerCase(), flats={};
+    for(const k in projDiffs){ const st=k===curK?{notes,lightEvents}:projDiffs[k]; if(st) flats[k]={notes:(st.notes||[]).length,lights:(st.lightEvents||[]).length}; }
+    if(curK&&!flats[curK]) flats[curK]={notes:notes.length,lights:lightEvents.length};
+    const b=document.getElementById('lkBand');
+    return structuredClone({clips,flats,band:b&&b.classList.contains('on')?{kind:b.dataset.lk,text:b.textContent}:null}); },
   /** 曲の音量補正: 値（dB）・再生へ反映済みの値（dB）・再生の音量部品の今の倍率 */
   songGain:()=>({db:getSongGainDb(),applied:_songGainApplied,param:songGain.gain.value}),
   /** NLE・Musicの表示窓（拍）: 左端・幅（ズーム）・手動スクロール中か・追従を始める位置（窓の中の割合） */
@@ -6666,6 +7354,116 @@ async function mapCheckJump(dn,o){
   seekEase(o.beat||0);   // カメラも着地点（再生ヘッド）へ寄る
   stat(tf('mc.jumped','{diff} の {beat} 拍目へ移動しました',{diff:dispDiff(dn),beat:Math.round((o.beat||0)*1000)/1000}));
 }
+// ---- 曲の解析（テンポの推定・構成の解析・2026-10-19）: 画面・通信・保存の形は js/analysis/song-analysis.js、解析は serve.py の /__analysis/* ----
+// ここは本体の状態との橋渡しだけ（目盛り・at・BPMと無音追加の適用・マーカー・移動）。帯はスペクトログラムの箱の上の段（#anaPane）
+/** 目盛り＝解析した時と比べる値（BPM・無音追加・テンポパート・Musicの配置・音源の名前）。変われば帯に「解析し直してください」 */
+function anaGrid(){ return {bpm:BPM,leadMs:getLeadInMs(),tp:tempoParts.map(p=>[p.beat,p.bpm]),mb:musicBeat,
+  ms:musicSegs?musicSegs.map(s=>[s.beat,s.off,s.dur]):null,song:(songNode&&songNode.name)||''}; }
+/** 構成の解析に送る at: NLM の拍 0, 1/sub, 2/sub … ごとの元の音源の秒（Musicの配置・カット・無音追加・テンポパートを考慮＝audioPosAtBeat）。曲末まで・音の無い所は null */
+function anaAtGrid(sub){ let e=0; for(const sg of msegs()) e=Math.max(e,segEndBeat(sg));
+  const n=Math.floor(e*sub+1e-6), at=[];
+  for(let k=0;k<=n;k++){ const p=audioPosAtBeat(k/sub,true); at.push(p==null?null:Math.round(p*1000)/1000); }
+  return at; }
+/** BPM と無音追加を丸めずにそのまま戻す（'tempo' の履歴の差し戻し用。setBPMv は 0.01 に丸めるため） */
+function anaSetTempoRaw(bpm,off){
+  if(+bpm>0&&bpm!==BPM){ BPM=+bpm; refreshJdInfo(); if(infoBase){ infoBase._beatsPerMinute=BPM; infoDirty=true; applyInfoChain(); }
+    offset=beatToTimeTM(cur); if(playing) pause(); if(audioBuf) buildWaveData(); }
+  if(songNode&&off!=null&&isFinite(off)&&off!==songNode.offset){ songNode.offset=+off; if(audioBuf) buildWaveData(); if(pv4On&&typeof pv4Push==='function') pv4Push(); }
+  refreshMusicHdr(); }
+/** テンポの推定の「適用」（BPM・無音追加の欄と同じ値の入れ方。1回の Ctrl+Z で両方戻る） */
+function anaApplyTempo(bpm,leadMs){ snapshot('tempo'); setBPMv(bpm); setLeadInMs(leadMs); refreshMusicHdr(); }
+/** ノーツ・ライト等がどれかの難易度にあるか（適用の画面の注意書き用） */
+function anaHasChart(){ const has=st=>!!st&&['notes','bombs','walls','arcs','chains','lightEvents'].some(k=>(st[k]||[]).length>0);
+  return has({notes,bombs,walls,arcs,chains,lightEvents})||Object.values(projDiffs).some(has); }
+/** 帯のクリック＝その拍へ（数字のルーラーのクリックと同じ: 再生中なら止め、表示の窓は動かさない） */
+function anaSeek(b){ if(playing) pause(); curAnim=null; cur=Math.max(0,b); offset=beatToTimeTM(cur); }
+/** セクションの頭へ名前付きのマーカー。書き出したマーカーには ana=書き出した時の名前 を持たせ、手で名前を変えていなければ次の書き出しで名前を直す。
+ * 同じ位置にある他のマーカーは変えない。1回の Ctrl+Z で戻る */
+function anaExportMarkers(items){ const plan=[]; let skipped=0;
+  for(const it of items){ const b=Math.max(0,+it.beat||0), ex=markers.find(m=>Math.abs(m.beat-b)<1e-6);
+    if(!ex){ if(!plan.some(p=>!p.m&&Math.abs(p.beat-b)<1e-6)) plan.push({beat:b,name:it.name}); }
+    else if(typeof ex.ana==='string'&&ex.name===ex.ana){ if(ex.name!==it.name) plan.push({m:ex,name:it.name}); }
+    else skipped++; }
+  const added=plan.filter(p=>!p.m).length, updated=plan.length-added;
+  if(plan.length){ snapshot('node');
+    for(const p of plan){ if(p.m){ p.m.name=p.name; p.m.ana=p.name; } else markers.push({beat:p.beat,name:p.name,ana:p.name}); }
+    markers.sort((a,b)=>a.beat-b.beat); _mkSeq=Math.max(_mkSeq,markers.length); metaDirty=true; }
+  return {added,updated,skipped}; }
+// ---- 解析からクリップを作る（2026-10-19・確認の画面は js/analysis/ana-clips.js・入口は解析の帯の右クリック／溝の「⋯」） ----
+// 帯の区間どおりに空のクリップを、一番上に足した新しいノーツのレーンへ作る（既存のノーツ・レーンには触らない）。作った後そのレーンを単独編集にする。
+// 同じ番号（セクション）・グループ（細かい区切り）のクリップは自動でリンクできる（既定オン）。親＝開いている難易度のその番号の一番先頭
+//（空のクリップなので消える物は無い）。他の難易度にも作った分は、開いている難易度の親の子にする（難易度をまたぐリンク）。
+// レーンの追加で全難易度のクリップがずれるので、履歴は常に全難易度 'diffs'＝1回の Ctrl+Z で全部戻る（作った難易度も absent で消える）。
+/** 作る難易度の候補（難易度のプルダウンにある物） */
+function anaClipDiffs(){ const curK=(currentDiffName||'').toLowerCase(), out=[];
+  for(const dn of OUT_DIFFS){ const o=diffOptOf(dn); if(!o) continue; const dk=o.value.toLowerCase(), cur=dk===curK, st=cur?null:projDiffs[dk];
+    const n=cur?notes.length+chains.length:st?(st.notes||[]).length+(st.chains||[]).length:0;
+    out.push({dk,dn,value:o.value,label:dispDiff(dn),cur,empty:!cur&&!st,n}); }
+  return out; }
+/** 帯の右クリック／「⋯」の「クリップを作る…」: 結果が無い・目盛りが変わった（解析し直しが要る）・レーンが上限の時は理由を出して断る */
+async function anaOpenClips(){
+  const src=songAna&&songAna.clipSource();
+  if(!src||(!src.sections.length&&!src.segments.length)){ showErr(t('ana.c.noResult','構成の解析の結果がありません。先に［曲を解析］を押してください')); return; }
+  if(src.stale){ showErr(t('ana.c.stale','目盛り（BPM・無音追加・テンポパート・Music の配置）が解析した時と変わったため、帯の区間が今の拍と合っていない可能性があります。解析し直してからクリップを作ってください')); return; }
+  if(!currentDiffName){ showErr(t('ana.c.noDiff','クリップを作る難易度がありません')); return; }
+  if(notesLanes>=LANE_MAX){ showErr(tf('ana.c.laneFull','ノーツのレーンが上限（{n}本）です。空いているレーンを消してからもう一度実行してください',{n:LANE_MAX})); return; }
+  const r=await anaClipsDialog({t,tf,src,diffs:anaClipDiffs(),free:LANE_MAX-notesLanes,max:LANE_MAX});
+  if(!r) return;
+  const now=songAna&&songAna.clipSource();   // 解析は裏で進む＝画面を出している間に結果が変わった（解析し直しが終わった等）なら作らない
+  if(!now||JSON.stringify(now)!==JSON.stringify(src)){ showErr(t('ana.c.changed','画面を出している間に解析の結果が変わったため、クリップを作りませんでした。もう一度［クリップを作る…］を押してください')); return; }
+  anaMakeClips(src,r); }
+/** 作る: r={unit:'sec'|'seg'|'both', eo:単独編集にする方, diffs:[難易度のキー], link}。開いている難易度には必ず作る */
+function anaMakeClips(src,r){
+  const kinds=r.unit==='both'?['sec','seg']:[r.unit==='seg'?'seg':'sec'], listOf={sec:src.sections||[],seg:src.segments||[]};
+  if(kinds.some(k=>!listOf[k].length)) return;
+  if(notesLanes+kinds.length>LANE_MAX){ showErr(tf('ana.c.laneFull','ノーツのレーンが上限（{n}本）です。空いているレーンを消してからもう一度実行してください',{n:LANE_MAX})); return; }
+  if(!currentDiffName) return;
+  if(pasteFollow) confirmPasteFollow();   // 貼り付けの追従中・NLEの貼り付けの途中は確定／取り消してから（レーンがずれるため）
+  if(layerPaste) cancelLayerPaste();
+  stashCurrentDiff();
+  const curK=currentDiffName.toLowerCase(), cand=anaClipDiffs();
+  const keys=[curK,...cand.filter(d=>!d.cur&&(r.diffs||[]).includes(d.dk)).map(d=>d.dk)];
+  pushHist('diffs',dumpDomain('diffs'));   // 画面外の難易度も含めて1回の Undo で戻す（足したレーン・ずれたロック・作った難易度・リンク）
+  for(const _k of kinds) laneAdd('n');     // 一番上に足す（既存のクリップ・フラット・ロック・単独編集は全難易度で1段ずつ下へ）
+  const trOf={sec:0,seg:kinds.length>1?1:0};   // 両方＝上のレーンがセクション・その下が細かい区切り（帯と同じ並び）
+  const made=[];
+  for(const dk of keys){
+    let target=sections;
+    if(dk!==curK){ let st=projDiffs[dk];
+      if(!st){ const d=cand.find(x=>x.dk===dk);   // まだ無い難易度は空から作る（Undo で消える＝'diffs' の absent）
+        st=projDiffs[dk]={name:d?d.value:dk,v3:true,base:EMPTY_V3(),notes:[],bombs:[],walls:[],arcs:[],chains:[],lightEvents:[],sections:[]}; }
+      target=st.sections||(st.sections=[]); }
+    for(const kind of kinds) for(const it of listOf[kind]){
+      const s={id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat:it.start,len:it.end-it.start,track:trOf[kind],lk:'n',
+        col:it.order%STRIP_COLS.length,colHex:it.color,label:it.name,kind:'sheet',content:{notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:[]}};   // 色は帯と同じ（任意色）
+      target.push(s); made.push({s,dk,kind,key:it.key}); } }
+  let nLinks=0;
+  if(r.link){ const used=new Set(); linkEachSec(s=>{ if(s.link) used.add(s.link); });
+    const by=new Map();
+    for(const m of made){ const g=m.kind+'\u0001'+m.key; if(!by.has(g)) by.set(g,[]); by.get(g).push(m); }
+    for(const ms of by.values()){ if(ms.length<2) continue;   // 1つだけ（開いている難易度に1回だけ・他の難易度に作らない）はリンクしない
+      const par=ms.filter(m=>m.dk===curK).sort((a,b)=>a.s.beat-b.s.beat)[0]||ms[0];
+      let id; do{ id=linkNewId(); }while(used.has(id)); used.add(id);
+      for(const m of ms){ m.s.link=id; if(m===par) m.s.linkParent=true; }
+      nLinks++; } }
+  layerSel=new Set(); musicSelSet=new Set();
+  linkDone();   // 子の控えを作り直し、今の難易度のフラット・配線を作り直す（作ったクリップは空なので中身は変わらない）
+  stashCurrentDiff();
+  if(songAna) songAna.setMade(true);   // 溝の［クリップを作る］を暗い紫に（もう一度押せる）。印は解析の結果と一緒に保存し、上の 'diffs' の Ctrl+Z で戻る
+  const eoTr=trOf[kinds.length>1&&r.eo==='seg'?'seg':kinds[0]];
+  setEditOnly(eoTr);
+  { const y=laneY('n',eoTr); if(y<laneTopOf('n')||y+laneHt('n')>laneTopOf('n')+laneVP('n')) setScr('n',eoTr*laneHt('n')); }   // 単独編集にしたレーンが表示窓の外ならスクロール
+  const lanes=kinds.map(k=>laneLabel('n',trOf[k])).join(t('ana.sep','・'));
+  const vars={lanes,n:made.filter(m=>m.dk===curK).length,diffs:keys.slice().sort((a,b)=>linkDiffOrder(a)-linkDiffOrder(b)).map(k=>linkDiffName(k)).join(t('ana.sep','・')),
+    links:nLinks?tf('ana.c.doneLinks','・リンク {k}組',{k:nLinks}):'',eo:laneLabel('n',eoTr)};
+  showOk(keys.length>1?tf('ana.c.doneMulti','{lanes} にクリップを {n} 個ずつ作りました（{diffs}）{links}。{eo} を単独編集にしました（Ctrl+Z で戻せます）',vars)
+    :tf('ana.c.done','{lanes} にクリップを {n} 個作りました{links}。{eo} を単独編集にしました（Ctrl+Z で戻せます）',vars)); }
+var songAna=null;   // var＝作る前に resetAllState・projSig 等から参照されても TDZ で落ちない（作る前は null）
+songAna=installSongAnalysis({t,tf,FONT,showErr,showOk,stat,
+  hasAudio:()=>!!audioBuf, songFile:getSongFileLike, grid:anaGrid, atGrid:anaAtGrid, applyTempo:anaApplyTempo,
+  hasChart:anaHasChart, tempoParts:()=>tempoParts.length, snapshot:()=>snapshot('ana'), dirty:()=>{ metaDirty=true; },
+  tlWindow, phRect, crispVLine, wheel:tlWheel, specResize, seek:anaSeek, inlineEdit:ndInlineEdit, showMenu, exportMarkers:anaExportMarkers, makeClips:anaOpenClips,
+  hoverBeat:()=>tlHoverBeat??hoverBeat, setHover:b=>{ tlHoverBeat=(b==null)?null:Math.max(0,snapV(b)); }});
 // 難易度を測るプラグインの窓口（状態・測定結果）は「難易度を測る」パネルと譜面チェック（BL評価リストの★/Tech）で共有する
 const ratingClient=createRatingClient({t,collect:collectRatingInput});
 const mapCheckPanel=installMapCheckPanel({t,escHtml,dispDiff,collect:collectMapCheckInput,jump:mapCheckJump,autoLight:openAutoLight,coverFix:openCoverFit,rating:ratingClient});
@@ -6751,13 +7549,13 @@ async function exportMap(forceEgg=false){
   applyInfoGraph();   // 接続ノード(曲情報/設定/カバー)の確定情報をinfoBaseへ＋カバーhandleをextraNodesへミラー＋applyInfoChainでinfoJson更新
   const diffFiles=collectExportDiffs();
   if(!diffFiles.length){ showErr(t('m:書き出せる難易度がありません（ノーツ/ライトが空です）','書き出せる難易度がありません（ノーツ/ライトが空です）')); return; }
-  // --- 出力先: outDirHandle(選んだCustomLevels) 内に「出力フォルダ名」サブフォルダを作成。無ければ従来のdirHandle/ダウンロード ---
+  // --- 出力先: outDirHandle(選んだCustomLevels) 内に「出力フォルダ名」サブフォルダを作成。無ければダウンロード ---
   const folderName=((graphIO&&graphIO.out&&graphIO.out.folderName)||'').trim();
   let dest=null, destLabel='';
   if(outDirHandle&&folderName){
     try{ dest=await outDirHandle.getDirectoryHandle(folderName,{create:true}); destLabel=folderName; }
     catch(err){ showErr(tf('msg.exportFail','書き出し失敗: {err}',{err})); return; }
-  } else if(dirHandle){ dest=dirHandle; destLabel=dirHandle.name||''; }
+  }
   // --- カバー画像 → cover.<ext> ---
   let coverName='';
   const covN=extraNodes.find(n=>n.kind==='cover'&&graphEdges.some(e=>e.sig==='cover'&&e.fromId===n.id&&e.toId==='out'));
@@ -6863,6 +7661,24 @@ function objUnder(e){ if(lightMode) return null;
       const fd=_fv.distanceTo(raycaster.ray.origin);
       if(fd<wallDist-0.05) return null; } }
   return wallHit; }
+// 単独編集中、マウスの下にある「他のレーン」の物（objUnder と同じ拾い方＝壁より他を優先）。objUnder が何も拾わなかった時に、帯を出すために使う
+//（重なっている時は objUnder＝単独編集のレーンが先に拾う）。ロック中の他のレーンも含める（帯の［そのレーンを単独編集にする］でロックは外れる）
+function otherLaneObjUnder(e){
+  if(lightMode||editOnlyTr==null) return null;
+  if(e) setPtr(e); else raycaster.setFromCamera(pointer,camera);
+  const hits=raycaster.intersectObjects(meshes.filter(m=>m.group.visible&&objOffEditN(m.obj)).map(m=>m.group),true);
+  let wallHit=null, wallDist=1e9;
+  for(const h of hits){ let o=h.object; while(o&&!o.userData.obj)o=o.parent;
+    const obj=o&&o.userData.obj; if(!obj) continue;
+    if(obj.kind==='wall'){ if(!wallHit){ wallHit=obj; wallDist=h.distance; } continue; }
+    return obj; }
+  if(wallHit&&raycaster.ray.intersectPlane(floorPlane,_fv)&&_fv.distanceTo(raycaster.ray.origin)<wallDist-0.05) return null;
+  return wallHit; }
+/** 単独編集中に、マウスの下が他のレーンの物だけなら帯を出して true（クリック自体は何もしない） */
+function editOnlyClickOther(e){
+  if(editOnlyTr==null||lightMode||objUnder(e)) return false;
+  const o=otherLaneObjUnder(e); if(!o) return false;
+  showEditOnlyBand(o); return true; }
 
 // ---- 編集モード（Eトグル・拍ロック・ゴースト） ----
 let hoverBeat=null;
@@ -7081,22 +7897,36 @@ function clipSlotAt(b,lk,top){
     return {tr,add:false}; }
   return N<LANE_MAX?{tr:0,add:true}:null;
 }
-function makeClipAt(b,lk,slot){   // clipSlotAt で決めた場所に空の1小節クリップを作る→track
+function makeClipAt(b,lk,slot){   // clipSlotAt で決めた場所に空の1小節クリップを作る→track（slot.beat/len があればその範囲＝単独編集の空き）
   if(slot.add){ if(lk==='n') notesLanes++; else lightLanes++;
     laneShiftAll(lk,1); }   // 既存を1段下げ、track0を空ける（ソロ/ミュートはリセット・ロックは1段ずらす＝新track0は非ロック）
-  const sec={id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat:Math.max(0,Math.floor(b/4)*4),track:slot.tr,lk,col:pickStripCol(),
-    label:'Sheet',len:4,kind:'sheet',content:{notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:[]}};
+  const sec={id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat:slot.beat!=null?slot.beat:Math.max(0,Math.floor(b/4)*4),track:slot.tr,lk,col:pickStripCol(),
+    label:'Sheet',len:slot.len||4,kind:'sheet',content:{notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:[]}};
   sections.push(sec); relinkDiffEdges(); return slot.tr; }
+// 単独編集の行き先: 必ず単独編集のレーン。その拍にクリップがあればそれ、無ければそのレーンの1小節（前後のクリップと重なる分は詰めた空き）に新しいクリップ。
+// 置けない（ロック・ミュート・他のソロで見えない）時は null（呼ぶ側が editOnlyRefuse で知らせる）
+function editOnlyPlan(b){
+  const tr=editOnlyTr;
+  if(editOnlyBlockMsg()) return null;
+  const mine=s=>secLk(s)==='n'&&s.kind!=='null'&&(s.track||0)===tr;
+  if(sections.some(s=>mine(s)&&(s.beat||0)<=b+1e-6&&(s.beat||0)+(s.len||4)>b+1e-6)) return {tr};
+  const start=Math.max(0,Math.floor(b/4)*4); let b0=start, b1=start+4;
+  for(const s of sections){ if(!mine(s)) continue; const s0=s.beat||0, s1=s0+(s.len||4);
+    if(s1<=b+1e-6&&s1>b0) b0=s1;
+    if(s0>b+1e-6&&s0<b1) b1=s0; }
+  return {tr,slot:{tr,add:false,beat:b0,len:b1-b0}};
+}
 // EDIT配置の対象クリップ決定ルール（ヘルバ様指定）: 無→作成／有→そのクリップ／重なり→①選択中②なければ一番下／全ロック→一番上に新規（空き無ければ上に新レーン）
 // 行き先だけを求める（状態は変えない）: {tr}=既存のクリップ／{tr,slot}=クリップを作る（clipSlotAt）／null=作れない
 function clipTrackPlan(b,lk){
+  if(lk==='n'&&editOnlyTr!=null) return editOnlyPlan(b);   // 単独編集中は自動の振り分けを使わない（NLEで他のレーンのクリップを選んでいても単独編集のレーン）
   const cover=sections.filter(s=>secLk(s)===lk&&s.kind!=='null'&&(s.beat||0)<=b+1e-6&&(s.beat||0)+(s.len||4)>b+1e-6);
   if(!cover.length){ const slot=clipSlotAt(b,lk,false); return slot&&{tr:slot.tr,slot}; }   // クリップ無し→作成（一番下寄り）
   const isLk=c=>layerLockS.has(lk+(c.track||0));
-  const sel=cover.find(c=>layerSel.has(c.id)&&!isLk(c));          // ①選択中クリップを優先
+  const sel=cover.find(c=>layerSel.has(c.id)&&!isLk(c)&&!linkIsKid(c));          // ①選択中クリップを優先（リンクの子は打てない）
   if(sel) return {tr:sel.track||0};
-  const unlocked=cover.filter(c=>!isLk(c));
-  if(unlocked.length) return {tr:unlocked.reduce((a,c)=>((c.track||0)>(a.track||0)?c:a)).track||0};   // ②一番下(track最大)
+  const unlocked=cover.filter(c=>!isLk(c)), free=unlocked.filter(c=>!linkIsKid(c));   // リンクの子より他のクリップを優先（子しか無ければ子＝呼ぶ側が帯を出す）
+  if(unlocked.length) return {tr:(free.length?free:unlocked).reduce((a,c)=>((c.track||0)>(a.track||0)?c:a)).track||0};   // ②一番下(track最大)
   const slot=clipSlotAt(b,lk,true); return slot&&{tr:slot.tr,slot};   // ③全ロック→一番上に新規
 }
 function clipTrackForBeat(b,lk){ const p=clipTrackPlan(b,lk); if(!p) return -1; if(p.slot) makeClipAt(b,lk,p.slot); return p.tr; }
@@ -7118,9 +7948,10 @@ function placeHistDone(made){ if(made){ _flatDirty=true; flushFlatEdits(); } }  
 // ロック済み/クリップ消失なら通常配置と同じ規則へフォールバック（clipTrackForBeat＝全ロックなら新規クリップを自動作成）。
 // ヘルバ様指摘: 「ペースト先の一番下トラックがロックされていたら、新規トラックを作ってでも別の場所へ」
 function pasteTrackFor(b,lk,preferTr){
+  if(lk==='n'&&editOnlyTr!=null) return clipTrackForBeat(b,lk);   // 単独編集中はコピー元のレーンを使わず単独編集のレーンへ
   if(preferTr!=null&&!layerLockS.has(lk+preferTr)){
     const cov=sections.find(s=>secLk(s)===lk&&s.kind!=='null'&&(s.track||0)===preferTr&&(s.beat||0)<=b+1e-6&&(s.beat||0)+(s.len||4)>b+1e-6);
-    if(cov) return preferTr;
+    if(cov&&!linkIsKid(cov)) return preferTr;   // リンクの子へは貼らない（他の行き先へ）
   }
   return clipTrackForBeat(b,lk);
 }
@@ -7129,14 +7960,23 @@ function placeAt(cell){
   const b=snapV(lockBeat);
   // 置かない場合の確認はクリップを作る前に済ませる（以前は先にクリップ・レーンを自動で作り、ここで止まると履歴の無い空のクリップが残った）
   if(!sigConnected('notes')){ stat('⚠ ノーツの配線が切断中です（ノードエディタで再接続してから）'); return; }
+  const atCell=n=>Math.abs(n.beat-b)<1e-4&&n.x===cell.x&&n.y===cell.y;
+  const mine=n=>!objOffEditN(n);   // 単独編集中は単独編集のレーンの物だけを相手にする（オフなら全部）
+  { const kid=linkPlaceBlock(b,'n',cell); if(kid){ linkBandKid(kid); return; } }   // 行き先がリンクの子（親より長い空白も）＝置かずに帯
+  if(editOnlyTr!=null){
+    // 単独編集: 他のレーンの物があるマス（単独編集のレーンの物は無い）をクリック＝書き換えずに帯（クリック自体は何もしない）
+    const other=![...notes,...bombs].some(n=>atCell(n)&&mine(n))&&[...notes,...bombs].find(n=>atCell(n)&&!mine(n));
+    if(other){ showEditOnlyBand(other); return; }
+    if(editOnlyRefuse()) return;   // 単独編集のレーンがミュート中等＝置かずに知らせる
+  }
   // ロック中のレーンにある物は上書きしない（以前は配置ブラシのクリックで向き・色が書き換わり、ロックしていないレーンへ移っていた）
-  if([...notes,...bombs].some(n=>Math.abs(n.beat-b)<1e-4&&n.x===cell.x&&n.y===cell.y&&objLockedN(n))){
+  else if([...notes,...bombs].some(n=>atCell(n)&&objLockedN(n))){
     stat('🔒 ロック中のレーンのオブジェクトは変更できません'); return; }
-  if(brush.type==='bomb'&&bombs.some(n=>Math.abs(n.beat-b)<1e-4&&n.x===cell.x&&n.y===cell.y)) return;   // 同じ所にボムがある＝変化なし（履歴も積まない）
+  if(brush.type==='bomb'&&bombs.some(n=>atCell(n)&&mine(n))) return;   // 同じ所にボムがある＝変化なし（履歴も積まない）
   const {tr,made}=placeTrackHist(b,'n','note');   // クリップが無い拍なら Layer1 の空きにクリップを自動生成（履歴ごと）
   if(tr<0){ stat('⚠ クリップを作れません（ノーツレーンが全て埋まっています）'); return; }
   if(brush.type==='note'){
-    const exist=notes.find(n=>Math.abs(n.beat-b)<1e-4&&n.x===cell.x&&n.y===cell.y);
+    const exist=notes.find(n=>atCell(n)&&mine(n));
     if(exist){ exist.c=brush.c; exist.d=brush.d; exist._tr=tr; refreshMesh(exist); recolorLinkedSliders(exist); redirLinkedSliders(exist); selection=new Set([exist]); }
     else { const n={kind:'note',beat:b,x:cell.x,y:cell.y,c:brush.c,d:brush.d,_tr:tr,raw:null}; notes.push(n); addObj(n); selection=new Set([n]); }
   } else if(brush.type==='bomb'){
@@ -7144,7 +7984,7 @@ function placeAt(cell){
   }
   placeHistDone(made);
   gizmoMode=null;   // 置いた直後はギズモを出さない＝連続配置中にハンドルが次のクリックを奪わない（ギズモは既存をクリックで選択した時だけ）
-  if(brush.type==='note') swingWarnCheckPlaced(notes.find(n=>Math.abs(n.beat-b)<1e-4&&n.x===cell.x&&n.y===cell.y));
+  if(brush.type==='note') swingWarnCheckPlaced(notes.find(n=>atCell(n)&&mine(n)));
   if(camMode==='place') selection.clear();   // 配置モードは置いた後に選択を残さない＝次を違う傾きで置ける（ヘルバ様指定）
 }
 // ---- 同じ向きの連続の警告（2026-10-01）----
@@ -7232,6 +8072,7 @@ function ensureSwingPool(n){ while(swingPool.length<n){ const g=new THREE.Group(
 function deleteNoteBombAt(e){   // 配置モードの右クリック: マウス下のノーツ/ボム/壁を削除（ヘルバ様指定）
   const o=objUnder(e);
   if(o&&(o.kind==='note'||o.kind==='bomb'||o.kind==='wall')){ snapshot(); removeObj(o); metaDirty=true; stat(tf('msg.deleted','削除しました')); return true; }
+  if(!o&&(editOnlyClickOther(e)||linkClickKid(e))) return true;   // 単独編集: 他のレーンの物は消さずに帯／リンクの子の物も消さずに帯
   return false;
 }
 // 配置モードの壁は段階式（ヘルバ様指定）:
@@ -7249,6 +8090,8 @@ function wallPlaceClick(e){
   const wb=snapV(lockBeat);
   if(inNullRange(wb)){ stat('⚠ NULLノードの範囲には配置できません'); return; }
   if(!sigConnected('notes')){ stat('⚠ ノーツの配線が切断中です（ノードエディタで再接続してから）'); return; }   // クリップを自動で作る前に確認（placeAtと同じ）
+  if(editOnlyRefuse()) return;   // 単独編集のレーンがミュート中等＝置かずに知らせる
+  { const kid=linkPlaceBlock(wb,'n'); if(kid){ linkBandKid(kid); return; } }   // 行き先がリンクの子＝置かずに帯
   const {tr:wtr,made}=placeTrackHist(wb,'n','note');   // クリップが無い拍なら自動生成（クリップ・レーンごと1つの履歴＝placeAtと同じ）
   if(wtr<0){ stat('⚠ クリップを作れません（ノーツレーンが全て埋まっています）'); return; }
   const n={kind:'wall',beat:wb,x,y,dur:WALL_MIN_DUR,w:1,h:1,_tr:wtr,raw:null};   // 1ボックス分からスタート
@@ -7362,6 +8205,8 @@ cv.addEventListener('pointerdown', e=>{
     // 数字が盾になるのは「その奥に箱が無いとき」だけ。箱が有れば箱を優先＝真上寄りの角度で数字が箱に重なっても掴める
     // （ヘルバ様報告 2026-07-17: 盾が効きすぎて一切クリックできなかった）
     if(overLightNumRay()&&!lightUnder(e)) return;   // 数字だけの上＝選択/配置/削除/範囲選択の起点、どれも起こさない
+    if((e.button===0||e.button===2)&&!e.ctrlKey&&!lightUnder(e)){ const kev=linkKidLightUnder(e);   // リンクの子のライトの上＝選択・削除せずに帯
+      if(kev){ linkBandKid(linkKidAt('l',kev._tr,kev.beat)); return; } }
     if(e.button===0&&e.shiftKey){
       const ex=lightUnder(e)||hoverLightEvent();
       if(ex){ lightSelection.has(ex)?lightSelection.delete(ex):lightSelection.add(ex);
@@ -7386,6 +8231,7 @@ cv.addEventListener('pointerdown', e=>{
       if(n){ selection=new Set([n]); syncGizmoForSelection();   // 配置済みノーツの上=選択（セレクトツール廃止・ヘルバ様指定）
         if(n.kind==='note'){ brush.c=n.c; brush.d=n.d; setColor(n.c,false); refreshPal(); }
         return; }
+      if(editOnlyClickOther(e)||linkClickKid(e)) return;   // 単独編集: 他のレーンの物の上＝帯だけ（置かない・選ばない）／リンクの子の物の上も帯だけ
       if(brush.type==='wall'){ wallPlaceClick(e); }   // 段階式（仮配置→高さ→奥行き）
       else { refreshHoverVisuals(); if(ghostCell) placeAt(ghostCell); }
       return; }
@@ -7394,6 +8240,7 @@ cv.addEventListener('pointerdown', e=>{
   if(e.button===0){
     // 段階式の壁を調整中は選択へ落とさない（上の配置モード側と同じ理由）
     if(wallStage&&placeMode&&!e.shiftKey){ setPtr(e); wallPlaceClick(e); return; }
+    if(editOnlyClickOther(e)||linkClickKid(e)) return;   // 単独編集: 他のレーンの物の上＝帯だけ（選択・配置・範囲選択の起点にしない）／リンクの子の物の上も帯だけ
     // 配置済みオブジェクトの上では配置しない＝クリックで選択（セレクトツール廃止・ヘルバ様指定）。空きの時だけブラシで配置する
     const _hit=(!e.shiftKey&&placeMode)?objUnder(e):null;
     // 壁は配置モードと同じ段階式（①クリックで仮配置→横幅 ②高さ ③奥行き）に統一。
@@ -7443,6 +8290,8 @@ addEventListener('pointerup', e=>{
     const wb=snapV(lockBeat);
     if(!sigConnected('notes')){ wallDrag=null; updateWallGhost();   // クリップを自動で作る前に確認（placeAtと同じ）
       stat('⚠ ノーツの配線が切断中です（ノードエディタで再接続してから）'); return; }
+    if(editOnlyRefuse()){ wallDrag=null; updateWallGhost(); return; }   // 単独編集のレーンがミュート中等＝置かずに知らせる
+    { const kid=linkPlaceBlock(wb,'n'); if(kid){ wallDrag=null; updateWallGhost(); linkBandKid(kid); return; } }   // 行き先がリンクの子＝置かずに帯
     const {tr:wtr,made}=placeTrackHist(wb,'n','note');   // クリップが無い拍なら Layer1 の空きに自動生成（クリップ・レーンごと1つの履歴＝placeAtと同じ）
     if(wtr<0){ wallDrag=null; updateWallGhost(); stat('⚠ クリップを作れません（ノーツレーンが全て埋まっています）'); return; }
     const s=wallSpan();
@@ -7472,10 +8321,13 @@ addEventListener('pointerup', e=>{
         stat(tf('msg.lightBoxSel','ライト範囲選択: +{added}（計{total}）',{added,total:lightSelection.size}));
       } else {
         if(!box.add) selection.clear();
-        let added=0;
-        for(const m of meshes){ if(!m.group.visible||objLockedN(m.obj)) continue; const s=screenPosOf(m.group);   // ロック中レーンは範囲選択からも除外
-          if(s.in&&s.x>=x0&&s.x<=x1&&s.y>=y0&&s.y<=y1){ if(!selection.has(m.obj)){selection.add(m.obj); added++;} } }
-        stat(tf('msg.boxSel','範囲選択: +{added}（計{total}）',{added,total:selection.size})); } }
+        let added=0, other=0;
+        for(const m of meshes){ if(!m.group.visible) continue; const off=objOffEditN(m.obj);
+          if(!off&&objLockedN(m.obj)) continue; const s=screenPosOf(m.group);   // ロック中レーンは範囲選択からも除外
+          if(s.in&&s.x>=x0&&s.x<=x1&&s.y>=y0&&s.y<=y1){ if(off){ other++; continue; }   // 単独編集: 他のレーンの物は帯を出さず黙って外す（数だけ隅に出す）
+            if(!selection.has(m.obj)){selection.add(m.obj); added++;} } }
+        stat(tf('msg.boxSel','範囲選択: +{added}（計{total}）',{added,total:selection.size}));
+        if(other) noteEditOnly(tf('eo.boxSkip','他のレーンの {n} 個は対象外',{n:other})); } }
     else if(!box.add){ if(box.light) lightSelection.clear(); else selection.clear(); }
     if(box.light) gizmoMode=lightSelection.size?'move':null;   // 範囲選択の結果にもギズモを出す（ノーツのsyncGizmoForSelectionと同じ流儀）
     else syncGizmoForSelection();
@@ -7929,7 +8781,7 @@ function extendClipToFit(sec,minB,maxB){
   if(minB<b0-1e-6){
     let newB0=Math.max(0,minB);
     const ln=neighborClip(sec,'l');
-    if(ln){ const lnEnd=(ln.beat||0)+(ln.len||4); if(newB0<lnEnd-1e-6) trimSectionEnd(ln,newB0); }
+    if(ln){ const lnEnd=(ln.beat||0)+(ln.len||4); if(newB0<lnEnd-1e-6){ if(ln.link) newB0=Math.min(b0,lnEnd); else trimSectionEnd(ln,newB0); } }   // リンクしたクリップは削らない（その手前まで）
     const delta=b0-newB0;
     if(delta>1e-6){ sec.beat=newB0; sec.len=(sec.len||4)+delta; changed=true; }
   }
@@ -7937,7 +8789,7 @@ function extendClipToFit(sec,minB,maxB){
     let newEnd=Math.max(b1,maxB+snap*0.001);
     newEnd=Math.ceil(newEnd/snap)*snap||snap;
     const rn=neighborClip(sec,'r');
-    if(rn&&newEnd>(rn.beat||0)+1e-6) trimSectionStart(rn,newEnd);
+    if(rn&&newEnd>(rn.beat||0)+1e-6){ if(rn.link) newEnd=Math.max(b1,rn.beat||0); else trimSectionStart(rn,newEnd); }   // リンクしたクリップは削らない（その手前まで）
     const newLen=newEnd-b0;
     if(newLen>(sec.len||4)+1e-6){ sec.len=newLen; changed=true; }
   }
@@ -8045,10 +8897,13 @@ function applyHandleDrag(){
         const dx=d.axis==='x'?k*d.sign:0, dy=d.axis==='y'?k*d.sign:0, db=d.axis==='z'?k*d.sign*snap:0;
         if(o0.x+dx<0||o0.x+dx>3||o0.tx+dx<0||o0.tx+dx>3) return false;
         if(o0.y+dy<0||o0.y+dy>2||o0.ty+dy<0||o0.ty+dy>2) return false;
-        if(o0.b+db<0) return false; continue; }
+        if(o0.b+db<0) return false;
+        if(db&&linkMoveBlocked('n',o._tr,o0.b,o0.b+db)) return false;   // リンクの子の中へ入れない・飛び越えない
+        continue; }
       const nx=o0.x+(d.axis==='x'?k*d.sign:0);
       const ny=o0.y+(d.axis==='y'?k*d.sign:0);
       const nb=o0.beat+(d.axis==='z'?k*d.sign*snap:0);
+      if(nb!==o0.beat&&linkMoveBlocked('n',o._tr,o0.beat,nb)) return false;   // リンクの子の中へ入れない・飛び越えない
       const wEnd=o.kind==='wall'?o.w-1:0;
       const hEnd=o.kind==='wall'?Math.min(o.h,3-o0.y)-1:0;
       if(nx<0||nx+wEnd>3) return false;
@@ -8184,6 +9039,7 @@ function applyPasteFollowPosition(ax, ay, at){
   if(!pasteFollow) return false;
   const at2=Math.max(0,snapV(at));
   if(at2===pasteFollow.at&&ax===pasteFollow.ax&&ay===pasteFollow.ay) return false;
+  if(at2!==pasteFollow.at&&pasteFollow.items.some(it=>linkMoveBlocked('n',it.o._tr,headBeat(it.o),at2+it.rel))) return false;   // リンクの子の中へは追従させない
   pasteFollow.at=at2; pasteFollow.ax=ax; pasteFollow.ay=ay;
   for(const it of pasteFollow.items){
     const o=it.o;
@@ -8268,6 +9124,7 @@ let pasteFollow=null;   // 貼り付け後のマウス追従 {at,ax,ay,items:[{o
 let pasteFloorClick=false;
 function pasteSel3D(){
   if(!clip3D){ stat('貼り付ける内容がありません（Ctrl+Cでコピー）'); return; }
+  if(clip3D.kind!=='light'&&editOnlyRefuse()) return;   // 単独編集のレーンがミュート中等＝貼らずに知らせる
   if(pasteFollow){ setFollowGhost(pasteFollow.items.map(it=>it.o),false); pasteFollow=null; }   // 連続ペーストは前のを確定扱い（前バッチの半透明を戻す）
   // 履歴: 貼り先にクリップが無いとクリップ（全ロックならレーンも）を自動で作る。作ったかは貼った後で分かるので、候補の履歴を先に写しておき、
   // 作っていれば構造の履歴（'node'・レーンを足したら全難易度の 'diffs'）を積む＝1回のUndoでクリップ・レーン・ずれたロックも戻る
@@ -8282,6 +9139,7 @@ function pasteSel3D(){
   // 選択中のNLEクリップ（1個・種別一致）があれば、そのクリップへ放り込む（ヘルバ様指定＝別クリップへ移す手段）
   const selSec=(lk)=>{ if(layerSel.size!==1) return null;
     const s=sections.find(s2=>layerSel.has(s2.id));
+    if(lk==='n'&&s&&editOnlyTr!=null&&(s.track||0)!==editOnlyTr) return null;   // 単独編集中は他のレーンのクリップを選んでいても単独編集のレーンへ（帯は出さない）
     return (s&&s.kind!=='null'&&secLk(s)===lk)?s:null; };
   if(clip3D.kind==='light'){
     const tSec=selSec('l');
@@ -8291,6 +9149,10 @@ function pasteSel3D(){
       const nv={beat,et:v.et,i:v.i,f:v.f,raw:null,_tr:tr};
       if(v.chroma) setLightChroma(nv,v.chroma); return nv; });
     lightEvents.push(...added); lightEvents.sort((a,b2)=>a.beat-b2.beat);
+    { const bad=added.find(v=>linkKidAt('l',v._tr,v.beat));   // 行き先がリンクの子＝貼り付けを取り消して帯（自動で作ったクリップ・レーンも戻す）
+      if(bad){ const kid=linkKidAt('l',bad._tr,bad.beat), hd=(notesLanes+lightLanes!==nLane0)?'diffs':(sections.length!==nSec0)?'node':pdom;
+        if(hd!==pdom) restoreDomain(hd,pre[hd]); else { const set=new Set(added); lightEvents=lightEvents.filter(v=>!set.has(v)); }
+        lightSelection.clear(); linkBandKid(kid); return; } }
     const he=pasteHist();
     if(tSec){ const mn=Math.min(...added.map(v=>v.beat)), mx=Math.max(...added.map(v=>v.beat));
       extendClipToFit(tSec,mn,mx); _flatDirty=true; metaDirty=true;
@@ -8312,6 +9174,10 @@ function pasteSel3D(){
       else o._tr=pasteTrackFor(headBeat(o),'n',o._tr);   // クリップ未選択時: 元トラックがロック中なら空きへ自動回避（新規クリップ作成もあり得る）
       arrOf(o.kind).push(o); addObj(o); added.push(o);
     }
+    { const bad=added.find(o=>linkKidAt('n',o._tr,headBeat(o)));   // 行き先がリンクの子＝貼り付けを取り消して帯（自動で作ったクリップ・レーンも戻す）
+      if(bad){ const kid=linkKidAt('n',bad._tr,headBeat(bad)), hd=(notesLanes+lightLanes!==nLane0)?'diffs':(sections.length!==nSec0)?'node':pdom;
+        if(hd!==pdom) restoreDomain(hd,pre[hd]); else for(const o of added) removeObj(o);
+        selection.clear(); linkBandKid(kid); return; } }
     const he=pasteHist();
     selection=new Set(added);
     const anchor=added.reduce((a,o)=>headBeat(o)<headBeat(a)?o:a);
@@ -8621,25 +9487,30 @@ addEventListener('keydown', e=>{
       const sel=sections.filter(x=>layerSel.has(x.id)&&x.kind!=='null');
       if(!sel.length){ stat('コピーするクリップを選択してください'); return; }
       const base=Math.min(...sel.map(s=>s.beat||0));
-      layerClipboard={items:sel.map(s=>({rel:(s.beat||0)-base,track:s.track||0,lk:secLk(s),len:s.len||4,label:s.label,col:s.col,colHex:s.colHex||null,
+      layerClipboard={dk:(currentDiffName||'').toLowerCase(),   // コピー元の難易度とクリップの id（リンクして貼り付け・別の難易度への貼り付けで繋ぐ時に使う）
+        items:sel.map(s=>({rel:(s.beat||0)-base,track:s.track||0,lk:secLk(s),len:s.len||4,label:s.label,col:s.col,colHex:s.colHex||null,src:s.id,
           content:structuredClone(s.content||{})}))};
       stat(tf('msg.clipCopy','クリップをコピー ×{n}',{n:sel.length})); return; }
     if(hit(e,'cut')){ e.preventDefault();   // カット（コピー＋削除）
       const sel=sections.filter(x=>layerSel.has(x.id)&&x.kind!=='null');
       if(!sel.length){ stat('カットするクリップを選択してください'); return; }
-      const base=Math.min(...sel.map(s=>s.beat||0));
-      layerClipboard={items:sel.map(s=>({rel:(s.beat||0)-base,track:s.track||0,lk:secLk(s),len:s.len||4,label:s.label,col:s.col,colHex:s.colHex||null,
+      const base=Math.min(...sel.map(s=>s.beat||0)), tx=linkTxBegin();   // リンクの親をカットして次の親の画面でキャンセルした時は、クリップボードも前の物に戻す
+      layerClipboard={dk:(currentDiffName||'').toLowerCase(),   // カットは元が消えるので、リンクして貼り付けはできない（コピー元が見つからない）
+        items:sel.map(s=>({rel:(s.beat||0)-base,track:s.track||0,lk:secLk(s),len:s.len||4,label:s.label,col:s.col,colHex:s.colHex||null,src:s.id,
           content:structuredClone(s.content||{})}))};
       const n2=sel.length;
-      deleteLayerSel();
+      deleteLayerSel(tx);
       stat(tf('msg.clipCut','クリップをカット ×{n}（Ctrl+Vで貼り付け）',{n:n2})); return; }
     if(hit(e,'paste')){ e.preventDefault(); if(!e.repeat) startLayerPaste(); return; }   // ゴースト追従ペースト（マウスで位置決め→クリックで確定 / Esc取消）
     if(hit(e,'nleMerge')){ e.preventDefault(); if(!e.repeat){ musicSelSet.size>=2?mergeMusicSel():mergeLayerSel(); } return; }   // マージ。Musicセグメント選択中はそちらを結合
     if(hit(e,'markerAdd')){ e.preventDefault(); if(!e.repeat) addMarkerAt(tlHoverBeat??cur); return; }   // カーソル位置にマーカー挿入（NLE）
+    if(hit(e,'nleLinkPaste')){ e.preventDefault(); if(!e.repeat) startLayerPaste(true); return; }   // リンクして貼り付け（既定 Ctrl+Shift+V）
+    if(hit(e,'nleLink')){ e.preventDefault(); if(!e.repeat) linkSelected(); return; }   // 選んだクリップをリンク（既定 K）
     if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;   // 未設定の修飾キー付きは無効化（NLE=素のキーのみ許可。文書化済みCtrl系は上で処理済み）
     if(hit(e,'nleLock')&&_ndMouseY>=LRULER){ if(!e.repeat){ const la=laneAtY(_ndMouseY); toggleLaneState('l',la.lk,la.gi); } return; }   // L=マウス下トラックをロック切替(on/off)
     if(hit(e,'nleMute')&&_ndMouseY>=LRULER){ if(!e.repeat){ const la=laneAtY(_ndMouseY); toggleLaneState('m',la.lk,la.gi); } return; }   // M=ミュート切替
     if(hit(e,'nleSolo')&&_ndMouseY>=LRULER){ if(!e.repeat){ const la=laneAtY(_ndMouseY); toggleLaneState('s',la.lk,la.gi); } return; }   // S=ソロ切替
+    if(hit(e,'nleEditOnly')&&_ndMouseY>=LRULER){ if(!e.repeat){ const la=laneAtY(_ndMouseY); if(la.lk==='n') toggleEditOnly(la.gi); } return; }   // E=単独編集の入/切（ノーツのレーンだけ。ライトのレーンの上では何もしない）
     if(e.key==='r'||e.key==='R'){ if(!e.repeat){ layerRazor=!layerRazor; stat(layerRazor?'分割モード ON（クリップをクリックで分割）':'分割モード OFF'); } return; }
     // マーカー挿入は Ctrl+E（上のCtrl系ハンドラで処理）。旧Qは廃止（ヘルバ様指定）
     if(hit(e,'del')||e.key==='Delete'){ e.preventDefault();
@@ -9680,7 +10551,9 @@ function _tick(){
     const ax2=cell?cell.x:pasteFollow.ax, ay2=cell?cell.y:pasteFollow.ay;
     applyPasteFollowPosition(ax2, ay2, at2); }
   if(nodeColMode!=='info'){ drawOverview(curV); drawSpecPane(curV); drawLayers(curV); }   // INFO表示中は nodepane/overview が display:none＝毎フレームの描画を丸ごとスキップ
+  syncEditOnlyUI();   // 3Dの隅の「✎ 単独編集: Notes n」（レーンの増減・言語・NOTES/LIGHTINGの切替に追従。変わった時だけ書き換える）
   drawPRoll(curV);
+  if(nodeColMode!=='info'&&songAna) songAna.draw(curV);   // 曲の解析の帯（スペクトログラムの箱の上の段。結果がある時・解析中だけ出る）
   if(curTab==='bodyPv') pv4Frame();   // pv4エンジン（現行プレビュー）
   document.getElementById('time').textContent=`${fmt(beatToTimeTM(cur))} / ${fmt(songDur)} ・ beat ${cur.toFixed(2)} ・ ♪ ${notes.length}${selection.size?` ・ ${tf('ui.selN','選択{n}',{n:selection.size})}`:''}`;
   // 診断HUD: FPS / フレーム時間 / 音声レイテンシ
@@ -9746,13 +10619,12 @@ async function newProject(){
   resetAllState();   // 前ファイルの残留を全消し（フラット/_flatDirty/クリップ/ロック等）
   projFileHandle=null;
   _nativeSavePath=''; _nativeSaveName='';   // ダブルクリックで開いたファイルの保存先を引き継がない＝新規を保存して元ファイルを上書きする事故の防止
-  files={}; handles={}; dirHandle=null;
   infoGraph=defaultInfoGraph(); layoutInfoNodes(); applyInfoGraph();
   diffV3=true;
   infoBase=null; infoJson=null;
   if(playing) pause();
   audioBuf=null; ovWave=null; songDur=0; BPM=120; cur=0; offset=0; prevPlayBeat=-1;
-  specMag=null; specSrcCanvas=null; specForBuf=null; tempoParts=[];
+  specMag=null; specTiles=null; specForBuf=null; tempoParts=[];
   restoreView(null);   // NLEの表示も先頭へ（前に開いていたファイルの表示位置を残さない。ズームはそのまま）
   document.getElementById('diff').innerHTML=''; lineSrc.clear();   // 難易度リストを初期化
   newDefaultGraph();
@@ -9791,6 +10663,7 @@ document.getElementById('mFileMenu').addEventListener('click',async e=>{
   else if(act==='mapcheck'){ closeFileMenu(); mapCheckPanel.open(); }
   else if(act==='rating'){ closeFileMenu(); ratingPanel.open(); }
   else if(act==='autolight'){ closeFileMenu(); openAutoLight(); }
+  else if(act==='analyze'){ closeFileMenu(); if(songAna) songAna.start(); }   // 曲の解析（テンポ・構成）
   else if(act==='update'){ closeFileMenu(); updater.manualCheck(); }
 });
 
@@ -9924,11 +10797,13 @@ function dispDiff(n){ return n==='ExpertPlus'?'Expert+':n; }
 function diffOptOf(name){ const sel=document.getElementById('diff');
   return [...sel.options].find(o=>o.textContent===name||o.value.toLowerCase().startsWith(name.toLowerCase()+'standard'))||null; }
 function diffIsCurrent(name){ const o=diffOptOf(name); return !!o&&o.value===document.getElementById('diff').value; }
+/** 難易度の中身の数: n=ノーツ類（ノーツ・ボム・壁・アーク・チェーン）・l=ライト・nc/lc=ノーツ／ライトのクリップの数（空のクリップも。転送で置き換わる物） */
 function diffCountsOf(name){
-  if(diffIsCurrent(name)) return {n:notes.length,l:lightEvents.length};
-  const o=diffOptOf(name); if(!o) return {n:0,l:0};
-  const st=projDiffs[o.value.toLowerCase()];
-  return st?{n:(st.notes||[]).length,l:(st.lightEvents||[]).length}:{n:0,l:0};
+  const cnt=(st,secs)=>({n:['notes','bombs','walls','arcs','chains'].reduce((a,k)=>a+(st[k]||[]).length,0),l:(st.lightEvents||[]).length,
+    nc:(secs||[]).filter(s=>s.kind!=='null'&&secLk(s)==='n').length,lc:(secs||[]).filter(s=>s.kind!=='null'&&secLk(s)==='l').length});
+  if(diffIsCurrent(name)) return cnt({notes,bombs,walls,arcs,chains,lightEvents},sections);
+  const o=diffOptOf(name), st=o&&projDiffs[o.value.toLowerCase()];
+  return st?cnt(st,st.sections):{n:0,l:0,nc:0,lc:0};
 }
 function renderDiffBar(){
   const bar=document.getElementById('diffBar'); if(!bar) return;
@@ -9955,14 +10830,10 @@ function renderDiffBar(){
 function openDiffMenu(dn,idx,seg){
   const sr=seg.getBoundingClientRect(), x=sr.left, y=sr.bottom+3;   // ボタンの左端に揃えて直下に開く（ファイルメニュー/スナップと同じ流儀）
   const others=OUT_DIFFS.filter(n2=>n2!==dn&&diffOptOf(n2));
-  const again=items=>setTimeout(()=>showMenu(x,y,items),0);   // 上書き確認だけは実行直前に差し替え表示
-  const guarded=(dst,payload,fn)=>{   // 上書きになる場合は注意喚起を挟む
-    const c=diffCountsOf(dst), hit=payload==='lights'?c.l:(payload==='notes'?c.n:c.n+c.l);
-    if(hit>0) again([[tf('ctx.overwrite','⚠ {diff}の既存の{kind}を置き換え — 実行する',{diff:dispDiff(dst),kind:payload==='lights'?t('word.lighting','ライティング'):payload==='notes'?t('word.notes','ノーツ'):t('word.content','内容')}),fn],[t('ctx.cancel','キャンセル'),()=>{}]]);
-    else fn(); };
-  const run=(s2,d2,payload)=>{ if(payload==='all'){ diffCopy(s2,d2,'notes'); diffCopy(s2,d2,'lights'); } else diffCopy(s2,d2,payload); };
-  const sendSub=payload=>others.map(n2=>['→ '+dispDiff(n2),()=>guarded(n2,payload,()=>run(dn,n2,payload))]);   // 転送=→
-  const recvSub=payload=>others.map(n2=>['← '+dispDiff(n2),()=>guarded(dn,payload,()=>run(n2,dn,payload))]);   // 受信=←
+  // 転送・受信は確認の画面（上書きの注意・「親の難易度に繋ぐ」（既定オン）・繋いだ時の注意）を挟む（リンクしたクリップ・2026-10-19）
+  const ask=(s2,d2,payload)=>diffCopyAsk(s2,d2,payload).then(r=>{ if(r) diffCopyRun(s2,d2,payload,r.link); });
+  const sendSub=payload=>others.map(n2=>['→ '+dispDiff(n2),()=>ask(dn,n2,payload)]);   // 転送=→
+  const recvSub=payload=>others.map(n2=>['← '+dispDiff(n2),()=>ask(n2,dn,payload)]);   // 受信=←
   showMenu(x,y,[
     [t('ctx.sendNotes','ノーツを転送'),sendSub('notes')],
     [t('ctx.recvNotes','ノーツを受信'),recvSub('notes')],
@@ -10018,16 +10889,16 @@ function syncSetQuick(){   // トップバーの表示を「実効値」へ同�
     const col=hexOf(g>>>0);
     if(b.dataset.col!==col){ b.dataset.col=col; b.innerHTML=laserSwSvg(col); } }
 }
+/** 空の難易度の退避データ（空のタイムライン＝クリップも無し） */
+function diffBlankStore(name){ return {name,v3:true,base:EMPTY_V3(),notes:[],bombs:[],walls:[],arcs:[],chains:[],lightEvents:[],sections:[]}; }
 function diffStoreOf(name,create){   // 難易度の退避データ（現在の難易度も退避してから返す=常に最新）
   const o=diffOptOf(name); if(!o) return null;
   stashCurrentDiff();
   const key=o.value.toLowerCase();
   let st=projDiffs[key];
-  if(!st&&create){
-    const secs=structuredClone(sections);   // ボックス構造=全難易度一体（中身は空で複製）
-    for(const s2 of secs) if(s2.content) for(const k of ['notes','bombs','walls','arcs','chains','lights']) s2.content[k]=[];
-    st=projDiffs[key]={name:o.value,v3:true,base:EMPTY_V3(),notes:[],bombs:[],walls:[],arcs:[],chains:[],lightEvents:[],sections:secs};
-  }
+  // まだ無い難易度は空のタイムラインから（箱は難易度ごとに独立＝loadDiff・解析からクリップを作る・'diffs' のやり直しと同じ）。2026-10-20 まで今の難易度の
+  // クリップの並びを中身だけ空にして複製していたため、まだ開いていない難易度へライトを転送するとノーツのクリップ（空のクリップ・リンクも）まで写っていた
+  if(!st&&create) st=projDiffs[key]=diffBlankStore(o.value);
   return st;
 }
 function _diffApplyLive(D,payload){   // 対象が現在表示中の難易度ならライブ状態へ反映
@@ -10035,26 +10906,60 @@ function _diffApplyLive(D,payload){   // 対象が現在表示中の難易度な
   else { notes=D.notes; bombs=D.bombs; walls=D.walls; arcs=D.arcs; chains=D.chains; selection.clear(); }
   sections=structuredClone(D.sections||[]); relinkDiffEdges(); gizmoMode=null; rebuild();
 }
-function diffCopy(srcName,dstName,payload){   // payload: 'notes'（ボム/壁/アーク/チェーン込み）| 'lights'
-  const S=diffStoreOf(srcName,true), D=diffStoreOf(dstName,true);
+/** 転送・受信の確認の画面（上書きの注意・「親の難易度に繋ぐ」（既定オン）・繋いだ時の注意）。戻り値 {link}|null */
+async function diffCopyAsk(src,dst,payload){
+  const c=diffCountsOf(dst), hit=(payload!=='lights'?c.n+c.nc:0)+(payload!=='notes'?c.l+c.lc:0);   // 写す種類の物とクリップ（空のクリップも置き換わる）
+  const kindW=payload==='lights'?t('word.lighting','ライティング'):payload==='notes'?t('word.notes','ノーツ'):t('word.content','内容');
+  const r=await linkDialog({kind:'copy',title:tf('lk.copyTitle','{src} の{kind}を {dst} へコピー',{src:dispDiff(src),dst:dispDiff(dst),kind:kindW}),
+    lines:[hit>0?tf('lk.copyOverwrite','⚠ {dst} の今の{kind}は置き換わります',{dst:dispDiff(dst),kind:kindW}):''],
+    checks:[{main:t('lk.copyLink','親の難易度に繋ぐ（リンク）'),checked:true,
+      sub:tf('lk.copyLinkSub','{dst} の各クリップを {src} の同じクリップの子にします（{src} のクリップが子なら、その親に繋ぎます）',{src:dispDiff(src),dst:dispDiff(dst)})}],
+    note:t('lk.copyWarn','繋ぐと、親を編集した時に繋いだ全難易度へ反映されます。後から必要な所だけリンクを解除できます。'),
+    buttons:[{label:t('lk.copyRun','コピーする'),value:'ok',pri:true},{label:t('word.cancel','キャンセル'),value:null}]});
+  return r.value==='ok'?{link:!!r.checks[0]}:null; }
+function diffCopyRun(src,dst,payload,link){ return diffCopy(src,dst,payload,{link}); }
+function diffCopy(srcName,dstName,payload,opts){   // payload: 'notes'（ボム/壁/アーク/チェーン込み）| 'lights' | 'all'。opts.link=送り先を送り元の子にする
+  const link=!!(opts&&opts.link), kinds=payload==='all'?['n','l']:[payload==='lights'?'l':'n'];
+  const so=diffOptOf(srcName), dop=diffOptOf(dstName);
+  if(!so||!dop){ showErr('対象の難易度がありません'); return; }
+  const sk=so.value.toLowerCase(), dk=dop.value.toLowerCase();
+  const dstCur=diffIsCurrent(dstName), srcCur=diffIsCurrent(srcName);
+  flushFlatEdits();
+  // 履歴: 常に全難易度 'diffs'＝1回のUndoで送り先（まだ無かった難易度は消える）・送り元に付けたリンク・他の難易度の親子まで戻る
+  //（2026-10-20。以前は繋がない画面外への転送はUndoできなかった）。クリップ（箱）ごと差し替えるので、フラットだけの 'note'/'light' では戻らない
+  let lkTouch=link; if(!lkTouch) linkEachSec((s,k)=>{ if(s.link&&(k===sk||k===dk)&&kinds.includes(secLk(s))) lkTouch=true; });
+  const tx=lkTouch?linkTxBegin():null;   // 送り先で親が消えて次の親の画面が出た時、キャンセルでコピーをまるごと取り消す
+  snapshot('diffs');
+  linkTxMark(tx);
+  const S=diffStoreOf(srcName,false)||diffBlankStore(so.value), D=diffStoreOf(dstName,true);   // 送り元がまだ無い難易度＝空（退避データは作らない）。送り先は後（今の難易度なら最新の退避を書き換える）
   if(!S||!D){ showErr('対象の難易度がありません'); return; }
-  const dstCur=diffIsCurrent(dstName);
-  // 現在の難易度への受信はUndo可。クリップ（箱）ごと差し替えるので、箱を含む 'node' の履歴に積む（Undoで箱からフラットを作り直す）。
-  // 以前はフラットだけの 'note'/'light' で、Undo後もクリップが送り元の箱（長さ・色・並び）のまま残っていた
-  if(dstCur){ flushFlatEdits(); snapshot('node'); }
-  const flatK=payload==='lights'?['lightEvents']:['notes','bombs','walls','arcs','chains'];
-  const kind=payload==='lights'?'l':'n';
-  for(const k of flatK) D[k]=structuredClone(S[k]||[]);
-  // 箱は難易度ごとに独立: 対象種（ノーツ/ライト）のクリップを、送り元のクリップ群で丸ごと差し替える
-  D.sections=(D.sections||[]).filter(x2=>secLk(x2)!==kind);
-  for(const ss of (S.sections||[])){ if(ss.kind==='null'||secLk(ss)!==kind) continue;
-    const ds=structuredClone(ss); ds.id='n'+(++_nid)+Math.random().toString(36).slice(2,6);
-    D.sections.push(ds); }
-  if(dstCur) _diffApplyLive(D,payload);
+  for(const kind of kinds){
+    const flatK=kind==='l'?['lightEvents']:['notes','bombs','walls','arcs','chains'];
+    for(const k of flatK) D[k]=structuredClone(S[k]||[]);
+    // 箱は難易度ごとに独立: 対象種（ノーツ/ライト）のクリップを、送り元のクリップ群で丸ごと差し替える
+    D.sections=(D.sections||[]).filter(x2=>secLk(x2)!==kind);
+    for(const ss of (S.sections||[])){ if(ss.kind==='null'||secLk(ss)!==kind) continue;
+      const ds=structuredClone(ss); ds.id='n'+(++_nid)+Math.random().toString(36).slice(2,6); linkClear(ds);
+      if(link){ if(!ss.link){ ss.link=linkNewId(); ss.linkParent=true; } ds.link=ss.link; }   // 送り元が子ならその親に繋ぐ（同じリンクの子になる）
+      D.sections.push(ds); } }
+  if(srcCur&&link) for(const ss of (S.sections||[])){ const live=sections.find(x=>x.id===ss.id);   // 送り元が今の難易度: 退避の写しに付けたリンクを画面のクリップへも
+    if(live&&ss.link){ live.link=ss.link; if(ss.linkParent) live.linkParent=true; } }
+  if(dstCur){ if(kinds.includes('n')) _diffApplyLive(D,'notes'); if(kinds.includes('l')) _diffApplyLive(D,'lights'); }
+  let orphans=[];
+  if(lkTouch){
+    // 送り先で消えたクリップが親だったリンク: 送り元にメンバーがいればそれを親に（同じ中身）。いなければ次の親を選んでもらう
+    for(const g of linkGroups().values()){ if(g.par) continue; const e=g.all.find(x=>x.dk===sk); if(e) e.s.linkParent=true; }
+    orphans=linkTidy(); linkSync(); }
   metaDirty=true; renderDiffBar();
-  showOk(tf('msg.diffCopied','{src} の{kind}を {dst} へコピーしました{warn}',{src:dispDiff(srcName),kind:payload==='lights'?t('word.lighting','ライティング'):t('word.notes','ノーツ'),dst:dispDiff(dstName),warn:dstCur?'':t('word.offscreenNoUndo','　※画面外の難易度への操作はUndoできません')}));
+  const kindW=payload==='all'?t('word.notesLights','ノーツとライティング'):payload==='lights'?t('word.lighting','ライティング'):t('word.notes','ノーツ');
+  showOk(link?tf('msg.diffCopiedLinked','{src} の{kind}を {dst} へコピーしました（{src} に繋ぎました）',{src:dispDiff(srcName),kind:kindW,dst:dispDiff(dstName)})
+    :tf('msg.diffCopied','{src} の{kind}を {dst} へコピーしました{warn}',{src:dispDiff(srcName),kind:kindW,dst:dispDiff(dstName),warn:''}));
+  if(orphans.length) linkAskNextParents(orphans,tx);
 }
 function diffClear(dnName,payload){
+  { const o=diffOptOf(dnName);   // 他の難易度とリンクしているクリップがあれば消さない（親なら他の難易度まで消え、子なら親の写しが崩れる）
+    if(o&&linkBlocksClear(o.value.toLowerCase(),payload==='lights'?'l':'n')){
+      showErr(tf('lk.noClear','{diff} の{kind}には他の難易度とリンクしているクリップがあるため消せません（リンクを解除してから）',{diff:dispDiff(dnName),kind:payload==='lights'?t('word.lighting','ライティング'):t('word.notes','ノーツ')})); return; } }
   const D=diffStoreOf(dnName,true); if(!D){ showErr('対象の難易度がありません'); return; }
   const cur=diffIsCurrent(dnName);
   if(cur) snapshot(payload==='lights'?'light':'note');
@@ -10096,7 +11001,7 @@ addEventListener('pointermove',e=>{ const m=paneOf(e.target); if(m) hoverPane=m;
 // ---- 設定モーダル ----
 document.getElementById('mbSettings').onclick=()=>{
   { const el=document.getElementById('laneRatio'), lv=document.getElementById('laneRatioVal');   // 開くたび現在のレーン数へ同期
-    if(el){ el.value=notesLanes; if(lv) lv.textContent=notesLanes+' : '+lightLanes; } }
+    if(el){ el.value=notesLanes; if(lv) lv.textContent=String(notesLanes); } }
   document.getElementById('settingsBg').style.display='flex';
   if(document.querySelector('#settingsBox .setPanel.on[data-panel=media]')) libOnline.refreshPrefs(); };   // MEDIA タブを開いたまま閉じていた時も状態を聞き直す
 document.getElementById('settingsClose').onclick=()=>{ document.getElementById('settingsBg').style.display='none'; };
@@ -10253,11 +11158,11 @@ document.querySelectorAll('#settingsBox .slRow').forEach(row=>{
     inp.addEventListener('blur',()=>done(true));
   });
 });
-// レーン構成スライダー（ノーツ:ライト＝計6・プロジェクト状態を直接編集。既存のレーン増減を流用）
+// ノーツのレーンの本数のスライダー（今のプロジェクトのノーツのレーンを直接編集＋新規作成の既定。既存のレーン増減を流用。ライトは変えない）
 { const el=document.getElementById('laneRatio'), lv=document.getElementById('laneRatioVal');
-  if(el){ el.value=notesLanes; if(lv) lv.textContent=notesLanes+' : '+lightLanes;
-    el.addEventListener('input',()=>{ const n=+el.value; if(lv) lv.textContent=n+' : '+(6-n); });   // ドラッグ中はラベルだけ
-    el.addEventListener('change',()=>{ try{ localStorage.setItem('bsnm_laneratio',String(el.value)); }catch(e){} setLaneRatio(+el.value); }); } }   // 個人の初期設定として保存＋現プロジェクトへ適用
+  if(el){ el.value=notesLanes; if(lv) lv.textContent=String(notesLanes);
+    el.addEventListener('input',()=>{ if(lv) lv.textContent=String(+el.value); });   // ドラッグ中はラベルだけ
+    el.addEventListener('change',()=>{ try{ localStorage.setItem('bsnm_noteLanes',String(el.value)); }catch(e){} setNoteLanes(+el.value); }); } }   // 個人の初期設定として保存＋現プロジェクトへ適用
 const langSel=document.getElementById('langSel'); langSel.value=langCode;
 langSel.onchange=()=>{ langCode=langSel.value; localStorage.setItem('bsnm_lang',langCode); loadLang(); };
 // ---- 数値ステッパー共通（BPM・プレビュー秒）: ‹›=±1 / Shift+‹›=±0.1 / 値クリック=手打ち ----
@@ -10298,15 +11203,17 @@ function getLeadInMs(){ const o=songNode&&songNode.offset; return (isFinite(o)&&
 // 以前は無音追加だけを焼き込み、NLEでMusicを動かす/切ると、エディタでは合っているのにゲームではずれた。
 // 切り貼り表 [[元の音源の開始秒, 終了秒, 書き出し先の開始秒], …] はエディタの再生（play）と同じ計算＝区間 sg は
 // 「拍 sg.beat の時刻から、元の音源の off0+sg.off 秒目を sg.dur 秒鳴らす」（off0=getSongOff()＝無音追加ぶんの負の値）。
-// 元の音源の範囲外（無音追加の先頭など）は切り詰め、その分あとから鳴らす（play と同じ）
-function eggPieces(){
+// 元の音源の範囲外（無音追加の先頭など）は切り詰め、その分あとから鳴らす（play と同じ）。
+// musicPieces は msegs の順のまま（スペクトログラムの帯も同じ表で描く＝drawSpecPane。Musicを動かす・切ると波形と一緒に動く・切れる・2026-10-20）
+function musicPieces(){
   if(!audioBuf) return [];
   const off0=getSongOff(), D=audioBuf.duration, out=[];
   for(const sg of msegs()){ let s=off0+sg.off, d=sg.dur, at=beatToTimeTM(sg.beat);
     if(s<0){ at-=s; d+=s; s=0; }
     const e=Math.min(D,s+d); if(e-s>0.001) out.push([s,e,at]); }
-  return out.sort((a,b)=>a[2]-b[2]);
+  return out;
 }
+function eggPieces(){ return musicPieces().sort((a,b)=>a[2]-b[2]); }
 // 元の音源の秒 → 書き出した song.egg の秒（試聴区間の開始用）。その秒が切り取られていれば、その後で最初に鳴る区間の頭
 function eggOutSecOf(src){
   const P=eggPieces(); if(!P.length) return src+getLeadInMs()/1000;
@@ -10665,6 +11572,7 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.layerLockS = layerLockS; } catch (_) {}
   try { rt.objLockedN = objLockedN; } catch (_) {}
   try { rt.objLockedL = objLockedL; } catch (_) {}
+  try { rt.objOffEditN = objOffEditN; } catch (_) {}
   try { rt._lgBtns = _lgBtns; } catch (_) {}
   try { rt._clipSw = _clipSw; } catch (_) {}
   try { rt.layerVisible = layerVisible; } catch (_) {}
@@ -10759,15 +11667,10 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.metroGain = metroGain; } catch (_) {}
   try { rt.metroFlashMs = metroFlashMs; } catch (_) {}
   try { rt.prevPlayBeat = prevPlayBeat; } catch (_) {}
-  try { rt.files = files; } catch (_) {}
-  try { rt.handles = handles; } catch (_) {}
-  try { rt.dirHandle = dirHandle; } catch (_) {}
   try { rt.rawDiff = rawDiff; } catch (_) {}
   try { rt.diffV3 = diffV3; } catch (_) {}
   try { rt.currentDiffName = currentDiffName; } catch (_) {}
   try { rt.projDiffs = projDiffs; } catch (_) {}
-  try { rt.infoText = infoText; } catch (_) {}
-  try { rt.infoFileName = infoFileName; } catch (_) {}
   try { rt.projFileHandle = projFileHandle; } catch (_) {}
   try { rt.infoJson = infoJson; } catch (_) {}
   try { rt.infoBase = infoBase; } catch (_) {}
@@ -10999,7 +11902,7 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.laneMaxScroll = laneMaxScroll; } catch (_) {}
   try { rt.laneAdd = laneAdd; } catch (_) {}
   try { rt.laneRemove = laneRemove; } catch (_) {}
-  try { rt.setLaneRatio = setLaneRatio; } catch (_) {}
+  try { rt.setNoteLanes = setNoteLanes; } catch (_) {}
   try { rt.laneY = laneY; } catch (_) {}
   try { rt.laneAtY = laneAtY; } catch (_) {}
   try { rt.laneLabel = laneLabel; } catch (_) {}
@@ -11030,6 +11933,16 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.shiftMusicSelBeat = shiftMusicSelBeat; } catch (_) {}
   try { rt.shiftSelLayersBeat = shiftSelLayersBeat; } catch (_) {}
   try { rt.toggleLaneState = toggleLaneState; } catch (_) {}
+  try { rt.setEditOnly = setEditOnly; } catch (_) {}
+  try { rt.toggleEditOnly = toggleEditOnly; } catch (_) {}
+  try { rt.linkSelected = linkSelected; } catch (_) {}
+  try { rt.linkUnlink = linkUnlink; } catch (_) {}
+  try { rt.linkMakeParent = linkMakeParent; } catch (_) {}
+  try { rt.linkJumpParent = linkJumpParent; } catch (_) {}
+  try { rt.linkOtherDiffs = linkOtherDiffs; } catch (_) {}
+  try { rt.linkSync = linkSync; } catch (_) {}
+  try { rt.anaOpenClips = anaOpenClips; } catch (_) {}
+  try { rt.anaMakeClips = anaMakeClips; } catch (_) {}
   try { rt.layerPasteFit = layerPasteFit; } catch (_) {}
   try { rt.startLayerPaste = startLayerPaste; } catch (_) {}
   try { rt.updateLayerPaste = updateLayerPaste; } catch (_) {}
@@ -11152,7 +12065,6 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.addSongLine = addSongLine; } catch (_) {}
   try { rt.bulkLoadSongData = bulkLoadSongData; } catch (_) {}
   try { rt.firstFreeTrackIn = firstFreeTrackIn; } catch (_) {}
-  try { rt.afterFolder = afterFolder; } catch (_) {}
   try { rt.resetAllState = resetAllState; } catch (_) {}
   try { rt.applyProject = applyProject; } catch (_) {}
   try { rt.tryAutoLoadSongNative = tryAutoLoadSongNative; } catch (_) {}
@@ -11172,7 +12084,6 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.decDiff = decDiff; } catch (_) {}
   try { rt.buildProjectText = buildProjectText; } catch (_) {}
   try { rt.rotateBakIdb = rotateBakIdb; } catch (_) {}
-  try { rt.rotateBakDisk = rotateBakDisk; } catch (_) {}
   try { rt.saveProject = saveProject; } catch (_) {}
   try { rt.srcInfo = srcInfo; } catch (_) {}
   try { rt.njsOffExport = njsOffExport; } catch (_) {}

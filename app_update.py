@@ -12,7 +12,7 @@
 #  - update.json の置き場所（REPO の releases/latest/download/update.json）と形式（format=1 の項目）
 #  - apply_main の引数（--apply-update --target <exe のフォルダ> --pid <終了を待つ pid> --lang <ja|en>）
 #    ＝旧版が起動するのは「新しい版の」exe なので、新しい版はこの引数を受け付け続けること
-#  - 配布 zip の中身の形（最上位 NonLinearMapper/ の下に exe・_internal・案内文）
+#  - 配布 zip の中身の形（最上位 NonLinearMapper/ の下に exe・_internal・案内文・ライセンス）
 # 安全のための約束（rating_plugin.py と同じ）:
 #  - 取得先 URL はここに固定。JS から URL・パスを受け取らない（受け取るのは言語だけ）
 #  - zip は update.json の SHA-256・サイズと照合してから展開し、フォルダ外へ出る名前を拒否する
@@ -28,7 +28,9 @@ NOTES_URL = {'ja': f'https://github.com/{REPO}/blob/master/CHANGELOG.md',
 FORMAT = 1                    # update.json の形式の版。上げたら旧版は自動更新せず「リリースページを開く」になる
 EXE_NAME = 'NonLinearMapper.exe'
 ZIP_TOP = 'NonLinearMapper'   # 配布 zip の最上位フォルダ
-REPLACE_ITEMS = (EXE_NAME, '_internal', 'はじめにお読みください.txt')   # 差し替える物（これ以外には触らない）
+# 差し替える物（これ以外には触らない）。どちらかの側に無い物は飛ばす（古い版の配布フォルダにはライセンスのファイルが無い）。
+# 差し替えは新しい版の exe が自分の一覧で行うので、ここに足した物は古い版からの更新でも届く
+REPLACE_ITEMS = (EXE_NAME, '_internal', 'はじめにお読みください.txt', 'LICENSE', 'THIRD_PARTY_NOTICES.txt')
 UPDATE_DIR = '_update'        # exe 隣の作業フォルダ（ダウンロード・展開先。更新後に消す）
 PREV_PREFIX = '_previous_'    # 差し替え前の版の退避（_previous_v1.2.0-oz/。1 世代だけ残す）
 MAX_ZIP = 600 * 1024 * 1024

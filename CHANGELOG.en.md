@@ -8,6 +8,65 @@ For basic usage, see the [tutorial](docs/tutorial.en.md), the [advanced tutorial
 <!-- Format: one "## v1.2.3-oz" heading per version. Top-level bold items ("- **...**") are the headlines shown in the in-app
 update notice (tools/make_release.py puts them into update.json). Keep the same versions and the same number of headlines as CHANGELOG.md. -->
 
+## v2.0.0-oz
+
+- **NLM can now analyze a song to suggest the BPM and lead-in silence, and to show its structure (verse, chorus, ...)**
+  Choose "Analyze song (tempo & structure)…" in the File menu (or "🎼 Analyze song" to the left of the NLE spectrogram). NLM estimates the tempo and suggests a BPM
+  and a lead-in silence. If they differ from your current settings, a confirmation window opens; click "Apply suggestion" to use them (Ctrl+Z undoes it).
+  - The window also tells you that double or half the BPM follows the same beat, offers candidate B (the lead-in silence shifted by half a beat) when the strong beats
+    may be off-beats, points out where the beat shifts once in the middle of the song, and warns when the tempo wanders (a live recording, for example)
+    so that no single BPM fits.
+  - NLM then analyzes the structure and shows the analysis band (Sections / Segments) in the NLE. The upper row shows sections (a tentative name — Intro, Verse, Pre-chorus, Chorus,
+    Interlude, Bridge, Outro — and a number; the same number means the same content; ★ marks the chorus candidate), and the lower row shows finer segments.
+    Click the band to move there.
+  - The names are only a guess from the order of the sections. Double-click the band to rename all sections with the same number at once.
+    Right-click → "Export section starts as markers" turns them into timeline markers.
+  - The results and your names are saved in the project. If you change the BPM, the lead-in silence, the Music placement and so on, NLM asks you to analyze again.
+  - Analysis takes about 30 seconds to a minute per song, and you can keep editing meanwhile (the progress is shown at the left of the band). Formats such as m4a are read with ffmpeg.
+  - When you load a song, NLM asks "Analyze this song?" (with a short explanation of what the analysis gives you). When an analysis finishes, it shows what to do next.
+    You can turn both off, and turn them back on in Preferences → "Application" → "Song analysis".
+  - Because the analysis components are now included in the app, the download zip has grown to about 118 MB (about 290 MB after extracting).
+- **New "Edit only" mode: edit just one note lane**
+  Turn it on with the switch on the second row of a note lane's left gutter (or press E over the NLE). Notes you place or paste in 3D then go to that lane only,
+  and notes on other lanes can't be edited, as if they were locked. Press it again to turn it off.
+  - Clicking a note on another lane shows a small band over the 3D view where you can switch Edit only to that lane, turn Edit only off, or keep it as it is
+    (the click itself changes nothing). Box selection quietly leaves out objects on other lanes.
+  - The Edit only lane is saved in the project (switching it alone does not mark the project as unsaved).
+- **Clips with the same content can now be linked (even across difficulties)**
+  Select two or more clips in the NLE and right-click → "🔗 Link" (K key) to choose the parent. Only the parent of linked clips can be edited, and the children
+  always have the same content as the parent (for example, fix the first chorus and the second and third choruses change with it). Names and colors follow the parent too.
+  - You can't place objects in a child clip. Touching a child shows a band where you can "Jump to parent" or "Unlink". A child can only be trimmed at its right end,
+    and any part longer than the parent stays empty.
+  - "🔗 Paste linked" (Ctrl+Shift+V) pastes copied clips as children. When you paste into another difficulty, you choose "Link" or "Don't link" each time.
+  - "Send notes" and the other items in the difficulty button menu (▼) now have "Link to the parent difficulty" (on by default). The copied clips become children
+    of the clips in the source difficulty, so fixing a parent changes every linked difficulty. You can unlink just the parts you need later.
+    Right-click → "🔗 Link with clips at the same position in other difficulties…" links them afterwards.
+  - Linked clips can't be split or joined (unlink them first). If you delete a parent, you choose the next parent from the remaining clips
+    ("Cancel" takes you back to before the deletion).
+  - Links are saved in the project. Children are saved with their content, so no notes disappear when you open the file in an older version
+    (if a child was edited in an older version, NLM removes that link when opening the file and tells you).
+- **You can now create empty clips from the analyzed song structure in one go**
+  "🧩 Create clips" to the left of the analysis band (also in the band's right-click menu) adds a new notes lane at the top of the NLE and creates empty clips
+  that follow the band (named after the band and its number, such as "Verse S2", in the band's colors). The new lane is set to Edit only, so you can start mapping right away.
+  - Choose sections, segments, or both (each on its own lane), and choose the difficulties to create them in.
+  - Clips with the same number are linked automatically (you can turn this off). The first clip of each number becomes the parent, so mapping the first chorus
+    fills the later choruses too. Clips created in other difficulties are linked to the parents in the open difficulty.
+  - Existing notes and lanes are not touched. A single Ctrl+Z removes everything that was created.
+- **The NLE is easier to use**
+  - A new project starts with one note lane and three light lanes (it no longer keeps the number of lanes from the map you had open before).
+    "Lane layout (Notes : Lights = 6 total)" in Preferences is now "Note lanes".
+  - When there is no free lane where you drop or paste a clip from MEDIA or the assets, NLM adds a lane at the top instead of refusing.
+  - A vertical scrollbar was added to the left of the lane names too (it works the same as the one on the right).
+  - The spectrogram and the Music waveform no longer flicker when you zoom out and play.
+- **Bug fixes**
+  - "Send lighting" in the difficulty button menu (▼) also copied empty note clips when sent to a difficulty that hadn't been opened yet
+    (and "Send notes" did the same with light clips). This is fixed, and every send can now be undone with a single Ctrl+Z.
+  - Moving, splitting or trimming the Music clip left the spectrogram in its old position. Fixed.
+  - Opening project files in old formats (such as ones saved with old versions of the original NLM) could lose part of the map. Fixed.
+  - Undoing adding or removing a lane left the clips of other difficulties shifted by one lane. Fixed.
+  - "📥 Load song data" could put clips on a lane that wasn't shown. Fixed.
+  - Clicking a light lane could select a note clip hidden under it. Fixed.
+
 ## v1.6.0-oz
 
 - **You can now adjust the song volume (with automatic adjustment)**

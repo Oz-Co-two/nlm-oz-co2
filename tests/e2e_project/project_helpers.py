@@ -120,6 +120,21 @@ def menu_pick(ed, *labels):
         ed.wait(0.05)
 
 
+def copy_dialog(ed, link=None, ok=True):
+    """難易度の転送・受信の確認の画面（リンクしたクリップ・2026-10-19〜。上書きの注意もこの画面）。
+    link=True/False で「親の難易度に繋ぐ」（既定オン）を合わせ、ok=True で「コピーする」/ False でキャンセルを本物のクリックで押す。画面の文と、開いた時のチェックを返す"""
+    sel = "#dirtyDlg[data-lk=copy]"
+    wait_until(ed, f"!!document.querySelector('{sel} .ddBtns button')", label="転送の確認の画面")
+    text = ed.js("document.getElementById('dirtyDlg').innerText")
+    checked = ed.js(f"document.querySelector('{sel} input[type=checkbox]').checked")
+    if link is not None and checked != link:
+        _click_el(ed, f"{sel} input[type=checkbox]")
+        wait_until(ed, f"document.querySelector('{sel} input[type=checkbox]').checked==={json.dumps(link)}", label="繋ぐのチェック")
+    _click_el(ed, f"{sel} .ddBtns button.pri" if ok else f"{sel} .ddBtns button:not(.pri)")
+    wait_until(ed, f"!document.querySelector('{sel}')", label="転送の確認の画面が閉じる")
+    return text, checked
+
+
 def diff_totals(ed):
     """難易度ごとの数（保存内容から）。{'Hard': {...}, 'Expert': {...}} ではなく 名前.dat をキーに"""
     from e2e_helpers import project, diff_counts_from_project

@@ -172,11 +172,12 @@ def test_token_required(t):
 
 
 def test_public_static_without_token(t):
-    '''画面の部品（editor.html・js・css・icons・fonts・preview-v4）は合言葉なしで返す（<script src>・<link>・<img>・import() は
+    '''画面の部品（editor.html・js・css・icons・fonts・preview-v4・guide）は合言葉なしで返す（<script src>・<link>・<img>・import() は
     ヘッダーを付けられない）'''
     font = next((H.ROOT / "fonts").glob("*.ttf")).name
     for p in ("/editor.html", "/editor.html?dev=1", "/js/main.js", "/js/vendor/three/three.module.js", "/css/base.css",
-              "/icons/app_icon.svg", f"/fonts/{font}", "/preview-v4/preview-v4.js", "/preview-v4/env/DefaultEnvironment.json"):
+              "/icons/app_icon.svg", f"/fonts/{font}", "/preview-v4/preview-v4.js", "/preview-v4/env/DefaultEnvironment.json",
+              "/guide/ana-clips-btn-ja.png", "/guide/ana-clips-btn-en.png"):
         st, _, _ = H.req("GET", p, token=False)
         t.eq(st, 200, p)
 

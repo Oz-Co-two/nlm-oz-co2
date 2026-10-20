@@ -34,8 +34,13 @@ zipファイルを右クリック→プロパティ→「許可する」にチ�
 ▼song.eggへの書き出し（変換）には ffmpeg が必要です
 自動ではインストールされません。事前に以下を実行して導入してください。
   winget install Gyan.FFmpeg
+「曲を解析」で m4a などの形式（wav・mp3・ogg・flac 以外）の曲を読む時にも使います。
 未導入のまま書き出すと、エラーメッセージでインストール方法が案内されます。
 NLMを起動したまま導入した場合は、NLMを一度閉じて起動し直してください。
+
+▼ライセンス
+NLM は GPLv3 で公開しています（同じフォルダの LICENSE）。同梱している第三者の部品
+（画面の部品・曲の解析の部品など）のライセンスは THIRD_PARTY_NOTICES.txt にあります。
 
 ※大切なデータはバックアップの上でご利用ください。
 
@@ -80,7 +85,12 @@ right-click the zip file → Properties → check "Unblock" → extract it again
 * Exporting song.egg (converting audio) needs ffmpeg
 It is not installed automatically. Install it beforehand with:
   winget install Gyan.FFmpeg
+"Analyze song" also uses it to read formats such as m4a (other than wav, mp3, ogg and flac).
 If it is missing when you export, NLM shows how to install it.
 If you install it while NLM is running, close NLM and start it again.
+
+* License
+NLM is released under the GPLv3 (LICENSE in this folder). The licenses of the bundled third-party
+components (UI libraries, song analysis libraries, etc.) are in THIRD_PARTY_NOTICES.txt.
 
 * Please back up important data before use.

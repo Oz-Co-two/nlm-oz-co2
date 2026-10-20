@@ -2,6 +2,7 @@
 
 機能を足したり直したりした後に、**基本の機能が壊れていないか**を自動で確かめるためのもの。
 追加ライブラリは不要（Python 3.14 の標準ライブラリ＋手元の Microsoft Edge をヘッドレスで使う）。
+ただし曲の解析のテスト（`unit_py/test_serve_analysis.py`）は、exe に同梱する librosa・scipy・scikit-learn が `.venv-build` に要る（CLAUDE.md「ビルド・実行」）。
 
 ```
 .venv-build/Scripts/python.exe tools/run_tests.py              全部（グループごとに並列）
@@ -23,7 +24,7 @@
 
 | フォルダ | 中身 | ブラウザ |
 |---|---|---|
-| `unit_py/` | Python側（serve.py のアクセス制御・ファイル読み書きの許可範囲・自動更新 等） | 使わない |
+| `unit_py/` | Python側（serve.py のアクセス制御・ファイル読み書きの許可範囲・自動更新・曲の解析の API 等） | 使わない |
 | `unit_js/` | JSの計算部分（譜面チェック・自動ライティング・カバー補正 等）をページ内で直接呼ぶ | 使う |
 | `e2e/` | エディタを実際に操作して結果を数値で確かめる（配置・Undo・保存→開き直し・書き出しの照合・曲データの読込 等） | 使う |
 | `e2e_project/` | 保存・開く・新規・未保存時の3択・バックアップ、難易度の転送/受信/全消去 | 使う |
@@ -33,8 +34,12 @@
 | `e2e_misc/` | BPMの自動判定、exe版だけの処理（pywebview を偽物にして通す）、環境設定、難易度を測る（応答は偽物） | 使う |
 | `visual/` | 画面の崩れ検出（画像なし）と、基準画像とのピクセル比較 | 使う |
 
-`t.fresh()` は localStorage と、一時のデータフォルダの `config/settings.json`（環境設定のミラー）を消してから開き直す＝
+`t.fresh()` は localStorage を消し、一時のデータフォルダの `config/settings.json`（環境設定のミラー）を初期値に書き直してから開き直す＝
 テストごとに環境設定は初期値から始まる。設定が残ることを確かめる時は `ed.reload(clear_storage=False)` を直接使う。
+ここでの初期値は `config/settings.default.json` に `cdp.Editor.TEST_SETTINGS` を重ねた物（`bsnm_anaAsk='0'`＝曲を読み込んでも
+「曲を解析しますか？」を出さない。多くのテストが曲を読み込むため）。その画面を確かめるテストは localStorage の `bsnm_anaAsk` を消して出す
+（`tests/e2e_nle/test_analysis_ask.py`）。同じく `bsnm_anaGuide='0'`＝解析が終わっても「次にやること」の案内を出さない（確かめるテストは
+`bsnm_anaGuide` を消す・`analysis_helpers.guide_on`・`tests/e2e_nle/test_analysis_guide.py`）。
 
 全部で約1分半（同時に10プロセス）。速くするために次の3つをしている（2026-10-11。以前は約8分でCPUが張り付いていた）:
 
@@ -245,6 +250,47 @@ def test_place_undo(t):
   - `test-out/history/20261012_143720/`（unit_py＋e2e_nle＋e2e_misc を同時）: `test_lanes.py::test_lane_states_saved_and_restored` の素材の読み込みで
     `TypeError: Failed to fetch`（呼び出し元に Kaspersky の `fetchCallImpl`）＝上の2つ目と同じ形。
   - 同時に回すテストの数が多い時に続けて出ている。対処の候補（`request_queue_size`・HTTP/1.1・同時の数を減らす）は上と同じで、まだ試していない。
+- **2026-10-20**（曲を取り込んだ時の「曲を解析しますか？」を足した git worktree で、`run_tests.py e2e_nle e2e_project e2e_misc unit_js e2e e2e_info` を同時に）:
+  `e2e_project/test_save_open.py::test_save_ctrl_s_first`（分けた片方の最初のテスト）の起動待ちの時間切れ。Log 領域に `net::ERR_CONNECTION_REFUSED`
+  （`js/notes/chain-bezier.js` など起動時に読むモジュール）＝上と同じ形。`e2e_project` だけを回し直すと 36/36 通った。
+- **2026-10-20にもう1回**（リンクの次の親の画面のキャンセルの作業。`run_tests.py e2e_nle e2e_project e2e_edit unit_js`＝計20に分けて同時。同じPCで別の作業フォルダの
+  テストも流れていた）: `e2e_nle/test_clip_link_diffs.py::test_copy_link_parent_edit_reaches_other_diff` の起動待ちの時間切れ。Log 領域に
+  `net::ERR_NO_BUFFER_SPACE`（`js/core/state.js`）＝上と同じ形。単独で回すと通った。
+- **2026-10-20 にもう1回**（解析が終わった時の案内を足した git worktree で、`run_tests.py e2e_nle e2e_project e2e_misc unit_js unit_py` を同時に・
+  `test-out/history/20261020_084731/`）: e2e_nle で3件。`test_analysis_clips.py::test_clips_sections_link_edit_only_and_undo` の起動待ちの時間切れ
+  （Log 領域に `net::ERR_CONNECTION_REFUSED`・`js/vendor/three/addons/postprocessing/EffectComposer.js`）、`test_media_library_net.py::test_details_update_once_on_boot` の
+  `TypeError: Failed to fetch`（Kaspersky の `fetchCallImpl`）、同じファイルの `test_prefs_media_tab` の待ち合わせの時間切れ＝どれも上と同じ形。
+  `test_media_library_ui.py::test_measure_4000_rows_all_columns` も 52.3ms（基準 50ms）で落ちた（PC が混んでいた）。4件とも1件ずつ回し直すと通った。
+- **2026-10-21**（v2.0.0-oz のリリース前の全テスト `run_tests.py -j 8`・694件。他の作業は何も動いていない）: `e2e/test_mapcheck.py::test_mapcheck_run_rich` が
+  素材の読み込み（`load_fixture` の fetch）で `TypeError: Failed to fetch`（Kaspersky の `fetchCallImpl`）＝上と同じ形。同時の数が少なくても出る。
+  `e2e -k test_mapcheck` を2回回し直すと2回とも通った。
+
+### e2e_nle「帯のセクションの右クリック『クリップを作る…』…」で解析のメニューが出ない（2026-10-20・未解決）
+
+- **起きたこと**: 解析中の知らせを帯の左寄せにした git worktree で `run_tests.py e2e_nle -k analysis -j 3`（`-k` なので分けずに1つの Edge で39件を順に）を
+  回した時に1回、`test_analysis_clips.py::test_clips_sections_link_edit_only_and_undo` が「待ち合わせが 15.0 秒で終わりません: 解析のメニュー（最後の値 False）」
+  （`test-out/history/20261020_195809/`）。帯の拍10（セクションの段）を右クリックしてもメニューが出なかった。このテストだけ・`-k test_clips_` を2回・`-k analysis` を
+  もう1回・e2e_nle 全部を回し直すと、どれも通った。同じPCで別の作業フォルダのテストも流れていた可能性がある。
+- **分かっていること**: 解析中の知らせ（`#anaMsg`）は左寄せになって拍10の辺りに重なるが、待ち合わせ（`wait_band`）は知らせが隠れる（`msg===''`）まで待つ。
+  解析の結果が入るのと解析中を外すのは同じ同期の処理の中なので、隠れた後にまた出ることは無い。下の知らせ（`#errToast`）は画面の下で帯には重ならない。原因は調べ切れていない。
+- **次に出たら見る所**: `last.txt` で、右クリックの直前の `window._dbgApp.analysis()`（`msg`・`running`）と、`document.elementFromPoint` で右クリックの位置にあった要素。
+
+### e2e_nle「カタログの右クリック『読み直す』…『−』で記録から外す」でページ内エラー（2026-10-20・未解決）
+
+- **起きたこと**: 上の 2026-10-20 と同じ回（計20に分けて同時・別の作業フォルダのテストも同時）で、`test_media_library.py::test_rescan_and_remove` が
+  `console.error: ライブラリを読み込めませんでした: media_lib（記録にないライブラリです）` で失敗（`t.no_errors()`）。単独で回すと通った。
+- **分かっていること**: この文は `libRescan`（右クリック「読み直す」の最初の `rescan` の応答）と `libScanNative`（走査の続き。こちらは `alive()` で
+  外したライブラリなら黙る）が、サーバーが `unknown-lib`（`media_library.py` の記録に無い id）を返した時に出す。サーバーは記録ファイル
+  （`config/library.json`）の変化を (mtime_ns, size) で見て読み直す。テストの前に `t.fresh()` が記録を消し、`open_lib` が書き直す。原因は調べていない。
+- **次に出たら見る所**: `last.txt` で、エラーが「読み直し」の待ち合わせの前に出たか（＝サーバーが書き直した記録をまだ読んでいない）、「−」の後か。
+
+### e2e_nle「4000行・全部の列…列の幅の測り直しは 50ms 以内」が少し超える（2026-10-20・未解決）
+
+- **起きたこと**: 難易度間コピーの作業の git worktree で `run_tests.py e2e_nle e2e_project e2e_edit e2e unit_js`（計20に分けて同時・同じPCで別の作業フォルダの
+  テストも流れていた）の時、`test_media_library_ui.py::test_measure_4000_rows_all_columns` が「文字の大きさを変えた時の測り直し: 一番短い 59.2ms
+  （[74.5, 69.1, 63.9, 59.2, 69.9]）」で失敗（`test-out/history/20261020_084925/`）。このテストだけを回し直すと通った。変更は MEDIA に関係しない（難易度間コピー）。
+- **分かっていること**: 時間で判定するテストなので、CPU が混んでいると5回とも遅くなる。同時に回す数が多い時だけ出ている。
+- **次に出たら見る所**: 単独で回して 50ms 以内なら混雑のせい。単独でも超えるなら `lib-table.js` の `measureWidths` が遅くなった（CLAUDE.md「MEDIA ライブラリ」の目安）。
 
 ### 画面テスト「曲データを読み込む: BPM変化の取り込みの確認」のエラー（2026-10-04・未解決）
 
@@ -269,6 +315,13 @@ def test_place_undo(t):
   補助タブでの画像の読込 `createImageBitmap` など）。
 - **次に出たら見る所**: `test-out/history/<日時>/visual_errors/tempo_import_dialog.txt` の「どこで」（準備の手順か撮影か）、
   例外の全文、「通信の失敗」（Log 領域）、「ページ・ブラウザの出来事」（ページの入れ替わり・クラッシュ）。
+
+### e2e_nle「記録したフォルダが無い時は薄く表示し…」の「まだ無い: 実際 0 / 期待 1」（2026-10-20・解決済み）
+
+- **起きたこと**: e2e_nle 全部（同時10）と同時に unit_js・check_js も回していた時に1回（`test_media_library.py::test_missing_library`）。1件だけやり直すと通った。
+- **原因**: 無いフォルダのクリックは、走査を始める前（`/__lib/rescan` の応答）で「読み込めませんでした」を出す＝`scanning` は最初から false のまま。
+  テストは `!scanning` を待ってから 0.3 秒だけ待っていたので、PC が混んで応答が 0.3 秒より遅いと知らせの前に数えていた。
+- **修正**: 知らせが届くまで（最大約5秒）待ってから数える。
 
 ### e2e_nle「クリップの色…保存して開き直しても残る」が単独で回すと失敗（2026-10-11・解決済み）
 

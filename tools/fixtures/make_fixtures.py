@@ -23,6 +23,15 @@ from cdp import Editor  # noqa: E402
 BPM, SECONDS, RATE = 120, 16, 22050
 
 
+def keep_three_note_lanes(ed):
+    """ノーツのレーンを3本にする（2026-10-20に新規の既定が1本になった。テストは素材のノーツのレーン3本・ライト3本を前提にしているので、
+    作り直しても前と同じ並びにする: basic＝Notes 1 に Sheet、rich＝一番上の Notes 3 に譜面）"""
+    ed.js("(()=>{ const rt=window._dbg.rt; while(rt.laneCountOf('n')<3) rt.laneAdd('n'); return true; })()")
+    got = ed.js("window._dbgApp.nle().lanes")
+    if got != {"n": 3, "l": 3}:
+        raise SystemExit(f"レーンを 3:3 にできません: {got}")
+
+
 def make_wav(path):
     n = SECONDS * RATE
     samples = [0.0] * n
@@ -43,6 +52,7 @@ def make_wav(path):
 def make_project(path):
     # 空の状態から音源だけ読み、配置モードの赤枠にクリックでノーツを置く（1拍ずつ進めながら赤青交互）
     with Editor() as ed:
+        keep_three_note_lanes(ed)
         ed.js("""(async()=>{ const blob=await (await fetch('tools/fixtures/basic.wav',{cache:'no-store'})).blob();
           const file=new File([blob],'basic.wav',{type:'audio/wav'});
           await window._dbg.rt.loadSongFromItem({isMusic:true,name:'basic',songFh:{getFile:async()=>file},info:{_beatsPerMinute:120}},0);
@@ -182,6 +192,7 @@ def make_rich(proj_path, map_dir):
     for name, obj in files.items():
         (map_dir / name).write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
     with Editor(ready=True) as ed:
+        keep_three_note_lanes(ed)
         # 1) 曲データの一括読込（音源・BPM・試聴区間・曲情報ノード・全難易度のNJS/譜面クリップ）。song.egg の中身は basic.wav
         ed.js(bulk_load_js("tools/fixtures/rich_map/", list(files), "tools/fixtures/basic.wav"))
         ed.wait(1.0)

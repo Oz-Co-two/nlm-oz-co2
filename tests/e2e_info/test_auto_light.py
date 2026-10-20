@@ -19,7 +19,7 @@ def _ev_key(e):
 def _lock_lane0(ed):
     """NLEのライトのレーン0の上でLキー（レーンのロック）。本物のキー入力"""
     g = ed.js("window._dbgApp.nleScreen(0)")
-    ed.move(g["left"] + g["w"] * 0.6, g["lights"][0] + g["laneH"] / 2)
+    ed.move(g["left"] + g["w"] * 0.6, g["lights"][0] + g["laneHL"] / 2)   # laneHL＝ライトのレーンの高さ
     ed.key("l")
     wait_until(ed, "window._dbgApp.lights().locks.length===1", label="レーンのロック")
 
@@ -181,3 +181,27 @@ def test_auto_light_no_chart(t):
     t.ok('ライトを作る譜面がありません' in msg or 'ノーツのある難易度がありません' in msg, f'お知らせ: {msg}')
     errs = ed.errors()   # 利用者へのお知らせは console.error にも出る＝それ以外のエラーが無いこと
     t.ok(all(('ライトを作る譜面がありません' in e or 'ノーツのある難易度がありません' in e) for e in errs), f'想定外のエラー: {errs}')
+
+
+def test_auto_light_new_project_one_note_lane(t):
+    '''新規（ノーツのレーン1本・ライト3本・2026-10-20からの既定）で3Dに置いたノーツから自動ライト: ライトのレーンが一番上に1本増えて4本・
+    ノーツのレーンは1本のまま。Undoでライトのレーンも3本に戻る'''
+    from e2e_helpers import place_at
+    ed = open_fixture(t)
+    t.eq(ed.js("window._dbgApp.nle().lanes"), {"n": 1, "l": 3}, '準備: 新規はノーツ1本・ライト3本')
+    hover_3d(ed)
+    for x in (0, 3):
+        place_at(ed, x, 0)
+    before = _lights(ed)
+    file_menu(ed, 'autolight')
+    n = _n_from_dialog(wait_dialog(ed))
+    click_text(ed, '#dirtyDlg button', '作成')
+    wait_dialog_closed(ed)
+    a = _lights(ed)
+    t.eq((a["lanes"], len(a["events"])), (4, n), 'ライトのレーンが1本増え、作ったライトが入る')
+    t.eq([(c["track"], c["n"]) for c in a["clips"]], [(0, n)], '自動ライトのクリップは一番上のレーン')
+    t.eq(ed.js("window._dbgApp.nle().lanes.n"), 1, 'ノーツのレーンは1本のまま')
+    t.eq(ed.js("window._dbgApp.state().counts.notes"), 2, 'ノーツは変わらない')
+    _undo_restores(t, ed, before)
+    t.eq(ed.js("window._dbgApp.nle().lanes"), {"n": 1, "l": 3}, 'Undoでレーンも既定の数に戻る')
+    t.no_errors()

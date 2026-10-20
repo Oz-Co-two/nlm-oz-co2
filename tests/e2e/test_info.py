@@ -1,4 +1,4 @@
-"""INFO（ノードエディタ）と、曲フォルダの読込まわりの確認"""
+"""INFO（ノードエディタ）と、曲データの一括読込まわりの確認"""
 import json
 from pathlib import Path
 
@@ -51,23 +51,6 @@ def test_bulk_import_nodes_do_not_overlap(t):
     t.no_errors()
 
 
-def test_open_folder_keeps_tempo_changes(t):
-    '''「フォルダを開く」（.dat から新規）でも、譜面のテンポ変化がテンポパートとして取り込まれる'''
-    ed = t.fresh()
-    files = [str((ROOT / "tools" / "fixtures" / "rich_map").resolve())]   # フォルダ選択の欄（webkitdirectory）なのでフォルダのパスを渡す
-    doc = ed.call("DOM.getDocument")["root"]["nodeId"]
-    node = ed.call("DOM.querySelector", nodeId=doc, selector="#folder")["nodeId"]
-    ed.call("DOM.setFileInputFiles", files=files, nodeId=node)   # フォルダ選択ダイアログの代わり（change が起きて afterFolder が動く）
-    wait_until(ed, "window._dbgApp.state().counts.notes>0", label="フォルダの読込")
-    # テンポ変化は譜面を表示した後に取り込む＝入るまで待つ（入らなければ下の確認で失敗する）
-    try:
-        wait_until(ed, "JSON.parse(window._dbg.rt.buildProjectText()).tempoParts.length>0", label="テンポパートの取り込み")
-    except AssertionError:
-        pass
-    pj = json.loads(ed.js("window._dbg.rt.buildProjectText()"))
-    t.eq(pj.get("tempoParts"), [{"beat": 16, "bpm": 150}], '読込後のテンポパート')
-    t.eq(ed.js("window._dbgApp.state().BPM"), 120, '基準BPM（Info.dat）')
-    t.no_errors()
 
 
 def _bulk_load_with_audio_first(t):

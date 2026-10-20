@@ -57,6 +57,14 @@
 
   .laneSb .sbTh:hover{background:#8a8a8a;}
 
+  /* 溝の左端の細いスクロールバー（2026-10-20）: 右端の物と同じ見た目の系統で幅9px（溝の 2〜11px）・▲▼無し。
+     溝の中の部品（単独編集の帯・レーン名）は 13px 目から描く（editor-app.js の EO_GUT・LANE_LBL_X） */
+  .laneSb.laneSbL{right:auto;left:2px;width:9px;border-radius:4px;}
+
+  .laneSb.laneSbL .sbTr{margin:2px 0;}
+
+  .laneSb.laneSbL .sbTh{left:1px;right:1px;border-radius:3px;}
+
    /* 1/16でも幅が変わらない4文字分 */
   /* 難易度バー: 5ボタン均等・ON=難易度色（Easy緑→Expert+赤）。▾=難易度間のデータ操作メニュー */
   #diffTools{position:absolute;top:10px;right:8px;z-index:9;display:flex;gap:6px;align-items:stretch;height:24px;max-width:calc(100% - 250px);}
@@ -124,4 +132,28 @@
 
    /* ▼は.dfArrと同じ控えめ */
   #sqEnvPanel{top:30px;min-width:150px;max-height:340px;overflow-y:auto;}
+
+  /* リンクしたクリップ（2026-10-19）: 子を触った時などの帯（単独編集の帯 #eoBand と同じ作り・色はリンクの紫）。位置はJSが固定位置で入れる */
+  #lkBand{position:fixed;transform:translateX(-50%);z-index:60;display:none;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px 8px;
+    background:rgba(30,24,44,.96);border:1px solid #8160e3;border-radius:8px;padding:5px 7px 5px 12px;font-size:12px;color:#e4dcff;
+    box-shadow:0 4px 14px rgba(0,0,0,.5);}
+  #lkBand.on{display:flex;}
+  #lkBand .lkMsg{margin-right:2px;}
+  #lkBand button{background:#2f2742;border:1px solid #54467a;color:#f1ecff;border-radius:5px;padding:3px 9px;font:inherit;font-size:11.5px;cursor:pointer;white-space:nowrap;}
+  #lkBand button:hover{background:#463a66;}
+  #lkBand button.pri{background:#4a3a86;border-color:#8160e3;}
+  #lkBand button.pri:hover{background:#5b48a6;}
+  /* リンクの確認の画面（#dirtyDlg の中）: 親・難易度の一覧 */
+  #dirtyDlg.lkDlg{max-width:560px;}
+  #dirtyDlg .lkTitle{font-weight:700;margin-bottom:8px;}
+  #dirtyDlg .lkLine{margin-bottom:8px;color:#c9c9d2;}
+  #dirtyDlg .lkNote{margin:4px 0 12px;color:#ffd27a;}
+  #dirtyDlg .lkOpts{display:flex;flex-direction:column;gap:6px;margin:4px 0 12px;}
+  #dirtyDlg .lkOpt{display:flex;gap:8px;align-items:flex-start;background:#2e2e35;border:1px solid #3d3d46;border-radius:7px;padding:7px 10px;cursor:pointer;}
+  #dirtyDlg .lkOpt.dis{opacity:.55;cursor:default;}
+  #dirtyDlg .lkOpt input{margin-top:3px;flex:0 0 auto;}
+  #dirtyDlg .lkOptBody{display:flex;flex-direction:column;gap:2px;line-height:1.45;}
+  #dirtyDlg .lkOptMain{font-weight:700;color:#f0f0f4;}
+  #dirtyDlg .lkOptSub{color:#a9a9b4;font-size:12px;}
+  #dirtyDlg .lkOptWarn{color:#ff9d8a;font-size:12px;}
 

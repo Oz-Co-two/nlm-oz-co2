@@ -15,7 +15,7 @@ helba kindly gave permission (in the comments on note) to publish, modify and re
 - **Reference manual**: https://helba.flashhub.net/nlm/manual/ (Japanese)
 - **Original changelog**: https://helba.flashhub.net/nlm/changelog.html (Japanese)
 - **Tutorials for this fork** (with screenshots): [basic](docs/tutorial.en.md) — from loading a song to placing notes, exporting and saving /
-  [advanced](docs/tutorial-advanced.en.md) — faster workflows, the MEDIA library, tempo, lights, the INFO screen and the checks before publishing
+  [advanced](docs/tutorial-advanced.en.md) — faster workflows, song analysis (tempo & structure), Edit only, linked clips, the MEDIA library, tempo, lights, the INFO screen and the checks before publishing
 
 The English tutorials show the English UI; the Japanese tutorials ([basic](docs/tutorial.md) / [advanced](docs/tutorial-advanced.md)) show the Japanese UI.
 
@@ -23,6 +23,11 @@ The English tutorials show the English UI; the Japanese tutorials ([basic](docs/
 
 - **Video-editor-style timeline (NLE)**: notes and lights are stored in clips on lanes, so you can split, copy, move and mirror whole sections of a map.
   Markers, tempo parts (BPM changes), the waveform and a spectrogram are shown on the same timeline.
+- **Song analysis**: suggests the BPM and the lead-in silence (with warnings for off-beats, beat shifts and wandering tempo), and shows the song's structure
+  on the NLE — sections with tentative names (Intro, Verse, Chorus, ...) and numbers, where the same number means the same content. You can rename them per number,
+  export them as markers, and create empty clips from them (linked by number, on a new Edit only lane).
+- **Edit only**: limit 3D editing to one note lane; notes on other lanes can't be changed by accident.
+- **Linked clips**: link clips with the same content (such as every chorus, even across difficulties) so that editing the parent updates all of them.
 - **3D placement view** and a **game-like 3D preview** with the environment and lights (ported from [ArcViewer](https://github.com/AllPoland/ArcViewer/))
 - **INFO screen**: song info, difficulties, cover image, the song select preview section and export settings are connected as nodes
 - **Map check (BeatLeader criteria)**: a port of [BS Map Check](https://github.com/KivalEvan/BeatSaber-MapCheck) by Kival Evan (BeatLeader preset).
@@ -49,6 +54,8 @@ See [CHANGELOG.en.md](CHANGELOG.en.md) for the changes in each version.
 2. Extract it to a place you can write to (Desktop, Documents, etc.)
 3. Run `NonLinearMapper.exe` (it needs the `_internal` folder next to it)
 
+From v2.0.0-oz the app includes the components for song analysis (tempo & structure), so the zip is about 118 MB (about 290 MB after extracting).
+
 The exe is not code-signed, so Windows SmartScreen may show "Windows protected your PC" on the first launch.
 In that case, click "More info" → "Run anyway".
 
@@ -60,9 +67,10 @@ are created next to the exe.
 **The UI starts in Japanese.** Click **環境設定** (Preferences — the second menu at the top left, next to ファイル),
 and on the first tab change **言語 / Language** to **English**. The setting is kept for the next launch.
 
-### ffmpeg (needed to write song.egg)
+### ffmpeg (needed to write song.egg and to analyze some audio formats)
 
 To export song.egg from audio that is not OGG (and to write the lead-in silence or the song volume adjustment into the audio), `ffmpeg` must be on the PATH.
+"Analyze song" also uses it to read formats such as m4a (other than wav, mp3, ogg and flac).
 **It is not installed automatically**, so install it beforehand:
 
 ```bash
@@ -117,6 +125,9 @@ of the Beat Saber map viewer [ArcViewer](https://github.com/AllPoland/ArcViewer/
 Because GPLv3 is a copyleft license, the whole project, which includes that part, is released under GPLv3.
 
 The full license texts of bundled third-party components (three.js, pywebview, etc.) are in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
+The release zip also contains LICENSE and THIRD_PARTY_NOTICES.txt, next to the exe.
+For "Analyze song", the exe version bundles librosa, NumPy, SciPy, scikit-learn, Numba and others
+(including the LGPL libraries libsndfile and libsoxr; where to get their source code is in the same file).
 The map check (BeatLeader criteria) is a port of [BS Map Check](https://github.com/KivalEvan/BeatSaber-MapCheck) (MIT) by Kival Evan.
 
 The add-on plugin [nlm-rating](https://github.com/Oz-Co-two/nlm-rating) used by "Estimate difficulty" is a separate program (MIT) that is not included in NLM.
@@ -140,6 +151,8 @@ The development notes ([CLAUDE.md](CLAUDE.md), Japanese) describe the build step
 # Development venv (Python 3.14; 3.15 or later is not supported yet because of pythonnet)
 py -3.14 -m venv .venv-build
 .venv-build/Scripts/python -m pip install pywebview pythonnet pyinstaller
+# Components for song analysis (song_analysis/). NLM runs without them, but "Analyze song" is not available
+.venv-build/Scripts/python -m pip install librosa scipy scikit-learn
 
 # Build
 .venv-build/Scripts/python -m PyInstaller --noconfirm --clean nlm.spec
@@ -153,7 +166,8 @@ in your default browser (use `--no-browser` to skip that). The access key change
 - Opening the page with `?dev=1` in the URL (e.g. `http://127.0.0.1:8138/editor.html?dev=1#k=…`) enables the developer hooks
   (`window._dbg` / `window._dbgApp`) in the DevTools console. They are not created in the distributed exe or without `?dev=1`.
 
-`tools/` contains scripts used during development (tempo / beat grid analysis, build and deploy, JS syntax check, automated tests,
+`tools/` contains scripts used during development (tempo / beat grid analysis, song structure analysis reports — the calculation is the same `song_analysis/`
+as "Analyze song" in the app —, build and deploy, JS syntax check, automated tests,
 map check comparison tests, release file creation, tutorial screenshots). They are not meant for regular users,
 and their documentation ([tools/README.md](tools/README.md), [tests/README.md](tests/README.md)) is in Japanese.
 
@@ -169,7 +183,8 @@ The desktop version (exe) is Windows only. On Linux, pywebview (used to make it 
 File System Access API that the editor relies on, and replacing all of it with native dialogs would take work.
 
 Instead, **running the local server and opening the editor in a browser** should work with the current code.
-**No build is needed**, and no extra pip packages are required.
+**No build is needed.** Extra pip packages are needed only for "Analyze song" (`pip install librosa scipy scikit-learn`;
+without them, only the analysis is unavailable).
 
 ```bash
 git clone https://github.com/Oz-Co-two/nlm-oz-co2.git
@@ -186,6 +201,7 @@ the server starts, so a bookmarked URL will not work after a restart. Press `Ctr
 - **A Chromium-based browser is required.** Firefox lacks the required API, so files cannot be saved or loaded.
   Brave may also have the API disabled depending on its settings.
 - **ffmpeg** is needed to export `song.egg` (install it with `sudo apt install ffmpeg` etc.; not needed if your audio is OGG and you use neither lead-in nor the song volume adjustment).
+  "Analyze song" also uses it to read formats such as m4a.
 - **Limitations**: automatic reconnection of the output folder and cover image is desktop-only. In the browser you need to select them
   again each time you open a project.
 - **"Estimate difficulty" is not available**, because the add-on plugin (nlm-rating) is a Windows exe only.

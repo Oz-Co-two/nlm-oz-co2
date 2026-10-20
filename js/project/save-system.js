@@ -15,7 +15,6 @@ export class SaveSystem {
   static get methodNames() {
     return [
     '_slimBase',
-    'afterFolder',
     'applyOpenedProject',
     'applyProject',
     'buildProjectText',
@@ -35,7 +34,6 @@ export class SaveSystem {
     'parseDiffFragment',
     'resetAllState',
     'tryAutoLoadSongNative',
-    'rotateBakDisk',
     'rotateBakIdb',
     'saveProject',
     'saveProjectCopy'
@@ -43,7 +41,6 @@ export class SaveSystem {
   }
 
   _slimBase(...args) { return this.rt._slimBase(...args); }
-  afterFolder(...args) { return this.rt.afterFolder(...args); }
   applyOpenedProject(...args) { return this.rt.applyOpenedProject(...args); }
   applyProject(...args) { return this.rt.applyProject(...args); }
   buildProjectText(...args) { return this.rt.buildProjectText(...args); }
@@ -63,7 +60,6 @@ export class SaveSystem {
   parseDiffFragment(...args) { return this.rt.parseDiffFragment(...args); }
   resetAllState(...args) { return this.rt.resetAllState(...args); }
   tryAutoLoadSongNative(...args) { return this.rt.tryAutoLoadSongNative(...args); }
-  rotateBakDisk(...args) { return this.rt.rotateBakDisk(...args); }
   rotateBakIdb(...args) { return this.rt.rotateBakIdb(...args); }
   saveProject(...args) { return this.rt.saveProject(...args); }
   saveProjectCopy(...args) { return this.rt.saveProjectCopy(...args); }

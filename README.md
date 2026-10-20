@@ -13,11 +13,11 @@ English: [README.en.md](README.en.md)
 
 はじめて使う方は、まず **[チュートリアル](docs/tutorial.md)** をどうぞ。曲の読み込みからノーツ配置、
 Beat Saber で遊べる形への書き出し・保存までを、画像付きで順番に説明しています。
-慣れてきたら **[上級編チュートリアル](docs/tutorial-advanced.md)** もどうぞ。作業を速くする操作や、MEDIA ライブラリ、公開前のチェック・★の測定などを説明しています。
+慣れてきたら **[上級編チュートリアル](docs/tutorial-advanced.md)** もどうぞ。作業を速くする操作や、曲の解析（テンポ・構成）、単独編集、リンクしたクリップ、MEDIA ライブラリ、公開前のチェック・★の測定などを説明しています。
 各パネルの細かい操作は、原作サイトのリファレンスマニュアルが詳しいです。
 
 - **チュートリアル（画像付き・基本の流れ）**: [docs/tutorial.md](docs/tutorial.md)
-- **上級編チュートリアル（作業を速くする操作・MEDIA ライブラリ・公開前のチェック・★の測定など）**: [docs/tutorial-advanced.md](docs/tutorial-advanced.md)
+- **上級編チュートリアル（作業を速くする操作・曲の解析・単独編集・リンクしたクリップ・MEDIA ライブラリ・公開前のチェック・★の測定など）**: [docs/tutorial-advanced.md](docs/tutorial-advanced.md)
 - **原作 / 公式ドキュメント**: https://helba.flashhub.net/nlm/
 - **リファレンスマニュアル**: https://helba.flashhub.net/nlm/manual/
 - **原作の修正履歴**: https://helba.flashhub.net/nlm/changelog.html
@@ -32,6 +32,8 @@ note のコメント欄にて helba さんご本人から、本フォークと�
 1. [Releases](https://github.com/Oz-Co-two/nlm-oz-co2/releases) から最新の `NonLinearMapper-v〇.〇.〇-oz.zip` をダウンロード
 2. 書き込みできる場所（デスクトップやドキュメントなど）に展開する
 3. `NonLinearMapper.exe` を起動する（`_internal` フォルダとセットで動きます）
+
+v2.0.0-oz から、曲の解析（テンポ・構成）の部品をアプリに入れたため、zip は約 118 MB（展開後 約 290 MB）です。
 
 初回起動時に、exe と同じフォルダへ `config/`（環境設定）・`asset/`（「アセットへ保存」したクリップ）・`lang/`（翻訳）が作られます。
 
@@ -78,7 +80,8 @@ v1.1.0-oz 以前から v1.2.0-oz 以降へ更新した場合は、既存プロ�
 一般利用者向けではありませんが、開発時に使うスクリプトを同梱しています。
 
 - テンポ・拍グリッド解析ツール一式（MP3 のテンポ変化検出、NLM に設定する BPM／無音追加の
-  逆算）。詳細は [tools/README.md](tools/README.md) を参照
+  逆算）と、曲の構成解析ツール（`analyze_structure.py`。区切り・同じ区間・仮の名前を報告の HTML に出す）。
+  計算はアプリの「曲を解析」と同じ `song_analysis/` を使います。詳細は [tools/README.md](tools/README.md) を参照
 - ビルド＆配布フォルダ反映スクリプト（`build_and_deploy.py`）
 - JS 構文・初期ロードチェックツール（`check_js.py`、Node.js 不使用のためヘッドレス Edge で検証）
 - 自動検証ツール（`cdp.py`）とテスト素材（`fixtures/`）: ヘッドレス Edge でエディタを実際に操作・撮影して確認する
@@ -101,7 +104,10 @@ MIT ではなく GPLv3 を選んだ理由は、3D プレビュー描画エンジ
 ライセンスのため、この部分を含むプロジェクト全体を GPLv3 としています。
 
 同梱する第三者コンポーネント（three.js、pywebview 等）のライセンス全文は
-[THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt) を参照してください。譜面チェック（BeatLeader基準）は
+[THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt) を参照してください。配布用の zip にも、exe と同じフォルダに
+LICENSE と THIRD_PARTY_NOTICES.txt が入っています。exe 版は「曲を解析」のために librosa・NumPy・SciPy・
+scikit-learn・Numba などを同梱しています（LGPL の libsndfile・libsoxr を含む。ソースの入手先も同じファイルにあります）。
+譜面チェック（BeatLeader基準）は
 Kival Evan 作の [BS Map Check](https://github.com/KivalEvan/BeatSaber-MapCheck)（MIT）の移植です。
 
 「難易度を測る」で使う追加プラグイン [nlm-rating](https://github.com/Oz-Co-two/nlm-rating) は NLM 本体に含まれない
@@ -126,6 +132,8 @@ Beat Saber の一部の Mod も使っている物）です。お使いの PC が
 # 開発用venv（Python 3.14。pythonnet の対応範囲の都合で 3.15 以降は未対応）
 py -3.14 -m venv .venv-build
 .venv-build/Scripts/python -m pip install pywebview pythonnet pyinstaller
+# 曲の解析（song_analysis/）の部品。無くても動くが「曲を解析」が使えない
+.venv-build/Scripts/python -m pip install librosa scipy scikit-learn
 
 # ビルド
 .venv-build/Scripts/python -m PyInstaller --noconfirm --clean nlm.spec
@@ -140,10 +148,10 @@ py -3.14 -m venv .venv-build
   開発用の窓口（`window._dbg` / `window._dbgApp`）が使えます。配布版（exe）と `?dev=1` なしの通常利用では作られません。
 - 自動検証ツール（ヘッドレス Edge での撮影・操作）は [tools/README.md](tools/README.md) を参照してください。
 
-### ffmpeg（song.egg 変換に必要）
+### ffmpeg（song.egg 変換と、一部の形式の曲の解析に必要）
 
 song.egg への書き出し（OGG 以外の音源の変換、無音追加・音量補正の焼き込み）には、PATH 上に
-`ffmpeg` が必要です。**自動ではインストールされない**ため、事前に導入しておいてください。
+`ffmpeg` が必要です。「曲を解析」で m4a などの形式（wav・mp3・ogg・flac 以外）を読む時にも使います。**自動ではインストールされない**ため、事前に導入しておいてください。
 
 ```bash
 winget install Gyan.FFmpeg
@@ -167,7 +175,8 @@ NLM を起動したままインストールした場合は、NLM を一度閉じ
 置き換えるには作業が必要なためです。
 
 代わりに、**ローカルサーバーを起動してブラウザからアクセスする形**であれば、今のコードのままで
-動く見込みです。**ビルドは不要**で、追加の pip パッケージも要りません。
+動く見込みです。**ビルドは不要**です。追加の pip パッケージは「曲を解析」を使う時だけ要ります
+（`pip install librosa scipy scikit-learn`。無ければ解析だけが使えません）。
 
 ```bash
 git clone https://github.com/Oz-Co-two/nlm-oz-co2.git
@@ -185,6 +194,7 @@ python3 serve.py
 - **Chromium 系ブラウザが必要です。** Firefox には必要な API がないため、ファイルの保存・読込ができません。
   Brave も設定によっては API が無効になっている場合があります。
 - **ffmpeg**: `song.egg` の書き出しに必要です（`sudo apt install ffmpeg` などで導入。元の音源が OGG で、無音追加・音量補正を使わないなら不要）。
+  「曲を解析」で m4a などの形式を読む時にも使います。
 - **機能の制限**: 出力フォルダやカバー画像の「自動再接続」はデスクトップ版専用です。ブラウザでは、
   プロジェクトを開くたびに選び直す必要があります。
 - **「難易度を測る」は使えません。** 追加プラグイン（nlm-rating）が Windows 用の exe しか無いためです。

@@ -102,6 +102,69 @@ def right_click(ed, x, y, step):
     hide_menu(ed)
 
 
+def edit_only_switch_xy(ed, track):
+    """NLE のノーツのレーン track の溝の2段目にある単独編集の帯（帯全体が押せる）のスイッチのあたり"""
+    b = next(b for b in nle(ed)["eo"] if b["t"] == track)
+    return b["x"] + 14, b["y"] + b["h"] / 2
+
+
+def edit_only_tour(ed):
+    """単独編集（2026-10-19）: 溝のスイッチ（文字はキャンバス・ツールチップ）・3Dの隅の表示・他のレーンのノーツをクリックした時の帯。最後にオフへ戻す"""
+    objs = [o for o in ed.js("window._dbgApp.objScreen()") if o["kind"] == "note" and o["inView"]]
+    if not objs:
+        return
+    o = max(objs, key=lambda o: o["sy"])   # 手前のノーツ（帯に重ならない所）
+    x, y = edit_only_switch_xy(ed, 1 if o["tr"] != 1 else 0)
+    ed.click(x, y)
+    wait_until(ed, "document.getElementById('eoInd').classList.contains('on')", label="単独編集の隅の表示")
+    ed.move(x + 20, y); ed.wait(0.3); scan(ed, "単独編集のスイッチ（ツールチップ）・隅の表示")
+    ed.move(o["sx"], o["sy"]); ed.wait(0.15); ed.click(o["sx"], o["sy"])
+    wait_until(ed, "document.getElementById('eoBand').classList.contains('on')", label="単独編集の帯")
+    scan(ed, "単独編集の帯（他のレーンのノーツをクリック）")
+    ed.js("(()=>{const b=document.querySelector('#eoBand .eoOff'); if(b) b.click(); return 1})()"); ed.wait(0.3)
+
+
+def link_tour(ed):
+    """リンクしたクリップ（2026-10-19）: 親を選ぶ画面・🔗の数（キャンバス）・リンクしたクリップの右クリック・分割できない帯・難易度間コピーの確認の画面"""
+    cs = ed.js("window._dbgApp.nle().clips.filter(c=>c.lk==='n')")
+    if not cs:
+        return
+    c0 = cs[0]
+    def at(beat, tr):   # レーンの本体（表示窓の下に半分隠れたレーンでも見えている所）
+        g = nle(ed, beat)
+        v1 = ed.js("window._dbgApp.nle().vp.n[1]")
+        return g["x"], min(g["notes"][tr] + g["laneH"] * 0.7, v1 - 3)
+    g0 = nle(ed)
+    ed.move(g0["left"] + g0["gut"] + 4, g0["marker"] - 4); ed.key("a"); ed.wait(0.2)
+    ed.click(*at(c0["beat"] + c0["len"] / 2, c0["track"])); ed.wait(0.2)
+    ed.key("c", ctrl=True); ed.key("v", ctrl=True); ed.wait(0.3)
+    to = c0["beat"] + c0["len"]
+    x, y = at(to, c0["track"]); ed.move(x, y); ed.wait(0.3); ed.click(x, y); ed.wait(0.4)   # 貼った直後は貼った物だけが選ばれている
+    ed.click(*at(c0["beat"] + c0["len"] / 2, c0["track"]), shift=True); ed.wait(0.2)   # 元も足す
+    ed.move(g0["left"] + g0["gut"] + 4, g0["marker"] - 4); ed.wait(0.1)
+    ed.key("k")
+    wait_until(ed, "!!document.querySelector('#dirtyDlg[data-lk]')", label="リンクの親を選ぶ画面")
+    scan(ed, "リンクの親を選ぶ画面")
+    click_sel(ed, "#dirtyDlg .ddBtns button.pri", "リンクする")
+    wait_until(ed, "window._dbgApp.nle().clips.filter(c=>c.link).length===2", label="リンク")
+    scan(ed, "リンクした NLE（🔗の数）")
+    right_click(ed, *at(to + 1, c0["track"]), "リンクした子のクリップの右クリック")
+    ed.click(*at(to + 1, c0["track"])); ed.wait(0.2)
+    ed.move(*at(to + 2, c0["track"])); ed.wait(0.2); ed.key("c"); ed.wait(0.3)
+    scan(ed, "リンク中は分割できない帯")
+    ed.js("(e=>{ if(e) e.classList.remove('on'); return 1; })(document.getElementById('lkBand'))")
+    for _ in range(2):   # 直前にメニューを使っていると、同じボタンの1回目は「閉じる」扱い（トグル）になる
+        click_sel(ed, "#diffBar .dfSeg.on", "選択中の難易度"); ed.wait(0.4)
+        if ed.js("document.getElementById('ctxmenu').style.display==='block'"):
+            break
+    ed.js("(b=>{ b.click(); return 1; })(document.querySelector('#ctxmenu > button'))"); ed.wait(0.3)
+    ed.js("(b=>{ if(b) b.click(); return 1; })(document.querySelector('#ctxmenu .ctxsub button'))"); ed.wait(0.4)
+    if ed.js("!!document.querySelector('#dirtyDlg[data-lk=copy]')"):
+        scan(ed, "難易度間コピーの確認の画面")
+        click_sel(ed, "#dirtyDlg .ddBtns button:not(.pri)", "キャンセル"); ed.wait(0.3)
+    hide_menu(ed)
+
+
 def tour(ed):
     """主な画面・メニュー・パネルを順に開いて scan する"""
     g = nle(ed)
@@ -172,15 +235,17 @@ def tour(ed):
         right_click(ed, gc["x"], gc["notes"][c0["track"]] + gc["laneH"] * 0.7, "クリップの右クリック")
     g = nle(ed, 40)
     right_click(ed, g["x"], g["notes"][-1] + g["laneH"] * 0.5, "空きの右クリック")
-    right_click(ed, g["left"] + 10, g["notes"][0] + 6, "レーン左端の右クリック")
+    right_click(ed, g["left"] + 20, g["notes"][0] + 6, "レーン左端の右クリック")   # 溝のレーン名の所（溝の 2〜11px は左のスクロールバー）
     right_click(ed, g["x"], g["tempo"] + 7, "テンポの帯の右クリック")
     g4 = nle(ed, 4)
     right_click(ed, g4["x"] + 2, g4["marker"] + 6, "マーカーの右クリック")
     mus = ed.js("window._dbgApp.musicScreen?window._dbgApp.musicScreen(2):null")
     if mus:
         right_click(ed, mus["x"], mus["top"] + mus["h"] / 2, "Musicの右クリック")
+    edit_only_tour(ed)
     # 難易度のメニュー（選択中のボタンをもう一度）
     click_sel(ed, "#diffBar .dfSeg.on", "選択中の難易度"); ed.wait(0.4); scan(ed, "難易度のメニュー"); hide_menu(ed)
+    link_tour(ed)   # 難易度のメニューを使うので、上の点検の後に
     # 譜面チェック（2つのタブ）・自動ライティング・難易度を測る
     click_sel(ed, "#mFileBtn", "ファイル"); ed.wait(0.3); click_sel(ed, "#mFileMenu button[data-act=mapcheck]", "譜面チェック")
     wait_until(ed, "!!document.querySelector('#mcPanel .mcSum, #mcPanel .mcOk')", label="譜面チェックの結果")
@@ -202,3 +267,6 @@ def tour(ed):
     scan(ed, "INFO 書き出し")
     take_errors(ed, "Cannot export: missing")   # 想定どおりのエラー表示（showErr は console.error も出す）
     ed.move(1200, 300); ed.key("Tab"); ed.wait(0.6)
+    # 曲の解析（2026-10-19）: 解析中の帯・テンポの画面・帯・右クリック・⋯・ツールチップ・目盛りが変わった知らせ（応答は偽物）
+    from analysis_helpers import analysis_tour
+    analysis_tour(ed, scan)

@@ -3,9 +3,9 @@
 # Tutorial (advanced): faster work and maps ready to publish
 
 For those who have finished the [basic tutorial](tutorial.en.md). This tutorial explains faster ways to work,
-the checks before publishing a map, and how to measure the difficulty (★).
+song analysis (tempo and structure), the checks before publishing a map, and how to measure the difficulty (★).
 
-> The screenshots show the English UI (v1.6.0-oz). The numbers (①, ②, …) in the screenshots match the tables in the text.
+> The screenshots show the English UI (v2.0.0-oz). The numbers (①, ②, …) in the screenshots match the tables in the text.
 
 ## Contents
 
@@ -14,11 +14,12 @@ the checks before publishing a map, and how to measure the difficulty (★).
 3. [Making the most of the NLE](#3-making-the-most-of-the-nle)
 4. [Making several difficulties efficiently](#4-making-several-difficulties-efficiently)
 5. [Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets)
-6. [Advanced lighting](#6-advanced-lighting)
-7. [More about the INFO nodes](#7-more-about-the-info-nodes)
-8. [Checks before publishing](#8-checks-before-publishing)
-9. [Customizing the settings](#9-customizing-the-settings)
-10. [Troubleshooting](#10-troubleshooting)
+6. [Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure)
+7. [Advanced lighting](#7-advanced-lighting)
+8. [More about the INFO nodes](#8-more-about-the-info-nodes)
+9. [Checks before publishing](#9-checks-before-publishing)
+10. [Customizing the settings](#10-customizing-the-settings)
+11. [Troubleshooting](#11-troubleshooting)
 
 ---
 
@@ -107,7 +108,7 @@ You can change the key assignments in the **Shortcuts** tab of **Preferences**.
 - The assignments are saved with your preferences, so they are kept after restarting the app
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
@@ -163,7 +164,7 @@ they are checked together **when you deselect them**.
 
 If you don't need the warning, turn off **Same-direction warning** in Preferences.
 
-> This warning is a rough guide while placing and is not as strict as the map check in [chapter 8](#8-checks-before-publishing).
+> This warning is a rough guide while placing and is not as strict as the map check in [chapter 9](#9-checks-before-publishing).
 > Use the map check before publishing as well.
 
 ### JD / RT display
@@ -199,8 +200,13 @@ The song in the image is a click track made for the explanation, so vertical lin
 Thick parts like the chorus look bright and quiet parts look dark, so you can grasp the structure of the song at a glance.
 It helps you decide where to make the notes dense and where to give the player a rest.
 
+The spectrogram in the NLE follows the Music placement (start position, splits and trims), showing the sound as it is actually played.
+When you move or cut the Music clip, it moves together with the waveform (nothing is drawn where there is no sound).
+
+Press the purple **🎼 Analyze song** at the left of the spectrogram in the NLE to show the structure of the song (sections such as intro, verse and chorus) as a band ([chapter 6](#6-analyzing-the-song-tempo-and-structure)).
+
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
@@ -223,9 +229,13 @@ From top to bottom, these rows are shown.
 | ③ | Marker band | Move and rename markers ([chapter 1](#marking-sections-of-the-song-with-markers)) |
 | ④ | Notes lanes | Clips (colored bands) of notes, bombs, walls, arcs and chains |
 | ⑤ | Light lanes | Clips of lights |
-| ⑥ | Music | The waveform of the song, with the spectrogram below it. You can change the song volume at its left end ([chapter 5](#song-volume-volume-adjustment)) |
+| ⑥ | Music | The waveform of the song, with the spectrogram below it. You can change the song volume at its left end ([chapter 5](#song-volume-volume-adjustment)). For **🎼 Analyze song** at the left of the spectrogram, see [chapter 6](#6-analyzing-the-song-tempo-and-structure) |
 
 The **L / S / M** buttons at the left end of each lane are lock, solo and mute (see "Adding lanes, lock, solo and mute" below).
+Note lanes also have an **Edit only** strip (switch) below them (see "[Edit only](#edit-only)" below).
+
+A new project starts with one notes lane and three light lanes (as in the image).
+You can add lanes by right-clicking, and a lane is also added at the top automatically when you put a clip where there is no free space (see "[Adding lanes, lock, solo and mute](#adding-lanes-lock-solo-and-mute)" below).
 
 **Clips are separate for each difficulty.** When you switch difficulties, the clips of that difficulty are shown instead.
 How to copy content to another difficulty is explained in [chapter 4](#4-making-several-difficulties-efficiently).
@@ -255,7 +265,7 @@ Clips cannot overlap within the same lane.
 
 - The clip after the split gets "'" added to its name and a different color
 - **Ctrl + G** joins note clips with note clips and light clips with light clips, even if they are on different lanes or far apart.
-  Notes where the clips overlapped in time stay overlapped, so check them with the map check in [chapter 8](#8-checks-before-publishing)
+  Notes where the clips overlapped in time stay overlapped, so check them with the map check in [chapter 9](#9-checks-before-publishing)
 
 If you put markers at the sections of the song (such as the start of each chorus) and then use "Cut at markers", the clips are split to match the structure of the song.
 
@@ -266,7 +276,9 @@ If you put markers at the sections of the song (such as the start of each chorus
 3. **Click** where you want to paste them (Esc or right-click to cancel)
 
 If you copy several clips, they are pasted keeping their arrangement.
-You can copy only within the difficulty that is open.
+
+- **Ctrl + Shift + V** is "Paste linked". The pasted clips are linked to the copied ones, so editing the copied clip also changes the pasted one (see "[Linked clips](#linked-clips)" below)
+- You can also switch to another difficulty before pasting. Then a dialog asks whether to **Link** to the copied clips or **Don't link (normal paste)**
 
 ### The right-click menu of a clip
 
@@ -276,12 +288,15 @@ You can copy only within the difficulty that is open.
 |---|---|
 | Edit label… | Rename the clip ("Chorus 1", etc.) |
 | Edit color… | Change the color of the clip (you can also click the small color square at the top left of the clip) |
+| 🔗 Link with clips at the same position in other difficulties… | See "[Linking across difficulties](#linking-across-difficulties)" below |
 | **Flip horizontally** | Mirror the content left-right and swap red and blue |
 | Cut at markers | See "Splitting and joining" above |
 | **📦 Save to assets** | See "Assets" below |
 | Delete clip | Delete the clip |
 
-Right-click an empty spot to get **Create empty clip** (16 beats) and **Create marker**.
+When two or more clips are selected, the menu also has **🔗 Link**, and linked clips have items such as **Unlink** (see "Linked clips" below).
+
+Right-click an empty spot to get **Create empty clip** (16 beats) and **Create marker** (and **🔗 Paste linked** if you have copied clips).
 
 > **Example: making the second chorus**
 > Ctrl + C the clip of the first chorus → Ctrl + V at the second chorus → right-click → "Flip horizontally".
@@ -289,11 +304,33 @@ Right-click an empty spot to get **Create empty clip** (16 beats) and **Create m
 
 ### Adding lanes, lock, solo and mute
 
+A new project starts with one notes lane and three light lanes.
+You can change the number of notes lanes for new projects with "**Note lanes**" in Preferences ([chapter 10](#application)).
+
 Right-click an empty spot at the left end of the lanes to **add or remove a lane at the top**, for notes and for lights.
 
 - Up to 10 lanes
 - You can remove a lane only when the top lane is empty (including in the other difficulties)
 - The number of lanes is shared by all difficulties
+- Adding or removing a lane can be undone with **one Ctrl + Z** (the clip positions in all difficulties are restored too)
+
+**When there is no free space, a lane is added at the top**
+
+In the following cases, if the lanes where the clip would go are full, one lane is added at the top and the clip goes there (the existing clips move down one lane).
+
+- When you place notes and so on in the 3D view (when there is neither a clip to put them in at that beat nor room to create a one-bar clip)
+- When you drag a map or an asset clip from MEDIA into the NLE
+- When you paste clips in the NLE (the clips that will go into the added lane show "＋" before their names while you move them)
+
+If there are already 10 lanes, no lane is added and a message at the bottom of the screen tells you. An added lane is undone with Ctrl + Z together with the operation.
+
+**Vertical scroll bars**
+
+When there are too many lanes to show at once, vertical scroll bars appear for the notes lanes and the light lanes, at the **right end** and at the **left end** of the NLE (the thin strip to the left of the lane names).
+The left and right scroll bars always point to the same position, so you can use either.
+
+- Drag the thumb, or click an empty part of the scroll bar, to move there
+- Turn the wheel over a scroll bar to move about one lane at a time
 
 Point at a lane and press one of these keys (or click the buttons at the left end of the lane) to change its state.
 
@@ -302,10 +339,173 @@ Point at a lane and press one of these keys (or click the buttons at the left en
 | **L** | Lock | The content is dimmed and cannot be selected or edited in the 3D view |
 | **M** | Mute | The content is not shown in the 3D view |
 | **S** | Solo | Only that lane is shown in the 3D view |
+| **E** | Edit only | Note lanes only. Notes you place in the 3D view go only into that lane, and other lanes cannot be edited (see "[Edit only](#edit-only)" below) |
 
 Mute and solo **only change what is shown**. The export always includes the content of every lane.
 Locking the note lanes while making lights prevents you from moving notes by accident.
 Lane states are saved with the project.
+
+### Edit only
+
+Makes only one note lane editable.
+When you build up patterns in separate lanes, it prevents you from moving notes in another lane by accident, or placing notes in a different lane than you meant.
+A new project has only one notes lane, so to use separate lanes, [add lanes](#adding-lanes-lock-solo-and-mute) first.
+
+![① Edit only switch ② The Edit only lane](images/tutorial-advanced-en/03-2b-edit-only-lane.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Edit only switch | The strip at the left end of a note lane, below the name and L / S / M. Click anywhere on the strip to switch it. It turns green when on; click again to turn it off |
+| ② | Edit only lane | Everything you place in the 3D view goes into this lane |
+
+The image shows a notes lane added at the top (Notes 2), set to Edit only, with notes placed around beat 4.
+Notes 1 below has the clips of the notes placed earlier.
+
+- You can also point at a note lane in the NLE and press **E** to turn it on or off (**Ctrl + E** adds a marker, which is a different action)
+- Only one lane can be Edit only at a time. Turning it on for another lane turns it off for the previous one
+- While it is on, everything you place or paste in the 3D view (notes, bombs, walls, arcs and chains) goes into that lane.
+  If that lane has no clip where you place it, a one-bar clip is created for it
+- Notes in other lanes are dimmed as if locked, and cannot be selected or moved
+- Lanes are shared by all difficulties, so the same lane stays Edit only when you switch difficulties
+- Light lanes don't have it (it has no effect in LIGHTING mode)
+
+**When you click a note in another lane**
+
+Clicking a note in another lane in the 3D view changes nothing by itself; a band (①) appears at the top of the view.
+
+![① The band shown when you click a note in another lane ② The Edit only indicator](images/tutorial-advanced-en/03-2c-edit-only-band.png)
+
+| Button | What it does |
+|---|---|
+| **Edit only Notes 1** | Make the lane of the clicked note Edit only |
+| **Turn off Edit only** | Stop Edit only (you can place notes in any lane again) |
+| **Keep** | Close the band |
+
+- While Edit only is on, the bottom left of the 3D view shows "✎ Edit only: Notes 2" (②)
+- When you select by dragging a box, notes in other lanes are left out of the selection without the band (the number left out is shown briefly in the indicator at the bottom left)
+- Turning on Edit only for a locked lane unlocks it
+- If the Edit only lane is locked or muted, or hidden by another lane's solo, nothing is placed when you try; a message at the bottom of the screen tells you why
+- Which lane is Edit only is saved with the project (just switching it doesn't mark the project as unsaved, and it is not part of Ctrl + Z)
+
+### Linked clips
+
+When you **link** clips that should have the same content, editing one place changes all of the linked clips.
+Use it for repeated choruses, or for patterns you want to keep the same across difficulties.
+
+- Of the linked clips, only the **parent** can be edited. The others are **children** and always have the same content as the parent
+- Edits to the parent, such as placing, deleting or moving notes or flipping it horizontally, go into the children as well
+- The name and color are the same for all linked clips (changing them on any clip changes all of them)
+- You can also link with clips in other difficulties (see "[Linking across difficulties](#linking-across-difficulties)" below)
+- Note clips can be linked with note clips, and light clips with light clips (notes and lights can't be mixed)
+
+#### Linking
+
+1. Select the two clips you want to link (click → **Shift + click**)
+2. Press **K** (or right-click → "**🔗 Link (K)**")
+3. In the dialog, choose which one is the parent and press **Link**
+
+![The dialog for choosing the parent. ① Parent candidates ② Link](images/tutorial-advanced-en/03-2d-link-dialog.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Parent candidates | The clip name, plus difficulty, lane, beat range (song time) and the number of notes. The earlier clip is selected at first |
+| ② | Link | Link the clips with the selected one as the parent |
+
+- The current content of the clip that becomes the child is replaced by the parent's. If the two have different content, red text such as "If this is the parent: Notes lost: Hard 8" appears under the candidate
+- Two clips can be linked even if their positions from the start of the bar differ (for example, beat 8 and beat 21); the dialog mentions it
+- Only two clips can be newly linked at a time. To add more, select them together with a linked clip (parent or child) and press K; they join that link as children
+- Selecting clips of two separate links and pressing K lets you choose a parent and merge them into one link (all clips of the other link, parent and children, become children of the chosen parent)
+
+**Paste linked**
+
+Select a clip, press **Ctrl + C** → **Ctrl + Shift + V**, and **click** where you want to paste it; the pasted clip is linked to the copied one
+(right-clicking an empty spot → "**🔗 Paste linked**" does the same).
+
+- If the copied clip is not linked yet, the copied clip becomes the parent and the pasted one its child
+- If the copied clip is a child, the pasted clip becomes a child of its parent
+- Clips cut with **Ctrl + X** can't be pasted linked, because the original no longer exists
+
+> **Example: fixing every chorus in one place**
+> Select the clip of the first chorus and press Ctrl + C → Ctrl + Shift + V at the second and third choruses.
+> When you later edit the first chorus (the parent), the same edits go into the second and third.
+> If you want to change only the second one, unlink that clip first and then edit it.
+
+#### Telling parents and children apart
+
+![Linked clips. ① Parent ② Children](images/tutorial-advanced-en/03-2e-link-clips.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Parent | 🔗 and the number of linked clips appear to the right of the name. If there are children in other difficulties too, something like "also in other diffs: 1" follows |
+| ② | Children | Drawn with a dashed border. Same content as the parent; they can't be edited here |
+
+The image shows the "Chorus" at beat 8 as the parent, with children at beats 20 and 28 (🔗3 = three clips are linked).
+
+#### Children can't be edited
+
+The notes and lights inside a child can't be selected or moved in the 3D view (they are dimmed like a locked lane).
+If you click a note of a child, or try to place a note inside a child, nothing changes by itself; a band (①) appears at the top of the view.
+
+![The band shown when you click a note of a child](images/tutorial-advanced-en/03-2f-link-kid-band.png)
+
+| Button | What it does |
+|---|---|
+| **Jump to parent** | Select the parent clip and move the playback position to its start (if the parent is in another difficulty, switch to it) |
+| **Unlink** | Unlink this clip and make it a normal clip (its content stays) |
+| **Keep** | Close the band |
+
+- In the NLE, you also can't **flip** a child horizontally or **trim its left edge** (the same band appears). You can drag its right edge to change its length
+- The part of a child that is longer than the parent is drawn with diagonal lines and has no content
+- When you edit a parent that has children in other difficulties, a band tells you that the clip "is also linked to other difficulties (Expert). Editing the parent changes every linked clip" (once per link)
+
+#### The right-click menu of linked clips
+
+![The right-click menu of a child clip](images/tutorial-advanced-en/03-2g-link-menu.png)
+
+| No. | Item | What it does |
+|---|---|---|
+| ① | Jump to parent | Shown only for children. Same as the band above |
+| ② | Make this the parent | Shown only for children. Makes this clip the new parent (the previous parent becomes a child) |
+| ③ | Unlink | Unlink this clip. If several linked clips are selected, unlinks them all (shown as "Unlink (2)") |
+| ④ | 🔗 Link with clips at the same position in other difficulties… | See "Linking across difficulties" below |
+
+#### Unlinking and deleting clips
+
+- An unlinked clip becomes a normal clip with a copy of the parent's content at that moment
+- When only one clip is left in a link, the link is removed automatically
+- **If you delete the parent or unlink it and two or more clips remain, a dialog asks you to choose the next parent** (they all have the same content; see the image below)
+- While clips are linked, they can't be **split** (C, split mode, Cut at markers) or **joined** (Ctrl + G).
+  When you try to split, a band appears; press [Unlink] and then split
+- A difficulty that has clips linked with other difficulties can't be emptied with "Delete all notes" and the like in the difficulty menu (unlink them first)
+
+![The dialog for choosing the next parent. ① Next parent candidates ② OK ③ Cancel](images/tutorial-advanced-en/03-2h-link-next-parent.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Next parent candidates | The remaining clips. The top candidate is selected at first |
+| ② | OK | Make the selected clip the next parent (Enter does the same) |
+| ③ | Cancel | Undo the whole operation that brought up the dialog (Esc does the same) |
+
+The image shows the parent (Chorus) at beat 8 selected and deleted with Delete. Two children remain, so the dialog asks for the next parent.
+
+Press **Cancel**, and the operation that brought up the dialog (deleting or cutting the parent clip, unlinking, or a Send / Receive between difficulties that removed a parent in the destination) is cancelled as a whole, and everything returns exactly to how it was before (clips and links in other difficulties too).
+
+- The cancelled operation does not come back with redo (Shift + Ctrl + Z) either
+- If dialogs appear one after another for two links, pressing Cancel in either one cancels the whole operation
+
+#### Linking across difficulties
+
+Links can span difficulties. For example, if an Expert+ clip is the parent and the same clip in Expert is its child,
+editing Expert+ also changes Expert. There are three ways to make such links.
+
+| Method | Description |
+|---|---|
+| **Send / Receive** in the difficulty menu | If you copy with "**Link to the parent difficulty**" (on by default) left on in the confirmation dialog, each clip in the destination becomes a child of the same clip in the source ([chapter 4](#opening-the-send--receive-menu)) |
+| **Pasting** into another difficulty | Pasting clips copied in another difficulty with Ctrl + V shows a dialog to choose **Link** or **Don't link (normal paste)**. Link makes them children of the copied clips. Ctrl + Shift + V links without the dialog |
+| Right-click → "**🔗 Link with clips at the same position in other difficulties…**" | Lists the clips in other difficulties with the same beat, lane and length. The clips in the checked difficulties become children of this clip (or of its parent, if it is linked) |
+
+- If the source or copied clip is a child, the new clips are linked to its parent
+- When linking or unlinking changes other difficulties too, **one Ctrl + Z** undoes it in all difficulties
 
 ### The Music clip
 
@@ -319,7 +519,7 @@ Split Music clips can be joined again by selecting two or more and pressing Ctrl
 
 Right-click a clip → "**📦 Save to assets**" to save its content as a reusable part.
 
-- Saved assets appear in the **MEDIA** list. Drag one onto a lane in the NLE to place it there as a clip
+- Saved assets appear in the **MEDIA** list. Drag one onto a lane in the NLE to place it there as a clip (if there is no free space, a lane is added at the top)
 - You can use them in other projects and other songs
 - Right-click an asset in MEDIA to rename it
 - Assets are saved as `.nlmclip` files in the `asset` folder of the app
@@ -434,6 +634,7 @@ A song (a card in the grid or a row in the detail view) is used as follows, depe
   Even when several rows are selected, only the row you grabbed goes in
 - A card in the grid puts in the map with the same name as the difficulty you have open. While you filter, it is chosen from the matching difficulties
   (if there is no difficulty with the same name, the hardest matching one. The message at the bottom of the screen tells you which one went in)
+- When you drop on a Notes or Light lane and the lanes are full where it would go, a lane is added at the top for it ([adding lanes](#adding-lanes-lock-solo-and-mute))
 - When you drop on a Notes lane, the NJS and offset of the current difficulty also become those of the map you put in
 - Right-click a song → "**📥 Load song data**" loads the audio, BPM, song info, cover image and the maps of all Standard difficulties at once
   (if a song is already loaded, the audio and BPM stay as they are)
@@ -452,7 +653,7 @@ The upload date, rating, ranked status, ★ (BeatLeader and ScoreSaber) and tags
 - Songs are matched by an identifier (hash) made from the map files. If your copy differs from the current version on BeatSaver (an older version before an update, for example),
   the ★ and ranked status are not shown (they belong to another version)
 - While the song data is in use, its name and date appear below the catalog (④ in the detail view screenshot)
-- Turn off "Download the song data" in the **MEDIA** tab of Preferences to stop downloading it and hide it from the list ([chapter 9](#media))
+- Turn off "Download the song data" in the **MEDIA** tab of Preferences to stop downloading it and hide it from the list ([chapter 10](#media))
 
 Songs that are not in the song data (songs uploaded very recently, for example) show "**Unmatched 🔍**" in the upload date column.
 Press 🔍 to see a confirmation; only when you press **Send** is the identifier (hash) of that one song sent to BeatSaver (api.beatsaver.com) to look it up.
@@ -471,13 +672,13 @@ In the desktop version, NLM reads the play records (`PlayerData.dat`) that Beat 
 and shows the play count, best score, full combo and favorites in the list (best score, full combo and favorite are hidden columns at first).
 
 - NLM only reads the play records; it never changes them and never sends them to the internet
-- They are usually found automatically. If not, choose the file with **Choose file…** in the **MEDIA** tab of Preferences ([chapter 9](#media))
+- They are usually found automatically. If not, choose the file with **Choose file…** in the **MEDIA** tab of Preferences ([chapter 10](#media))
 - They are read again when the library is loaded and on "Reload", if the file has been updated
 
 #### Calculating ★ (NLM estimate)
 
 Maps that are not ranked on BeatLeader have no ★.
-If you have installed the add-on plugin (nlm-rating) used by "Estimate difficulty" in [chapter 8](#the-first-time-install-the-plugin),
+If you have installed the add-on plugin (nlm-rating) used by "Estimate difficulty" in [chapter 9](#the-first-time-install-the-plugin),
 NLM can calculate an approximate ★ and show it in the ★ column.
 
 Right-click a row in the detail view and choose one of the following.
@@ -496,14 +697,14 @@ Right-click a row in the detail view and choose one of the following.
 - The results appear in the ★ column in a different color, such as "**NLM est. 7.12**". They are also used for sorting and filtering by ★
 - The results are recorded and still shown after you restart the app (after you update the plugin, the results of the old version are no longer used and can be calculated again)
 - Difficulties with fewer than 20 notes cannot be calculated ("–"). Hover over the cell to see why a calculation failed
-- The number of songs calculated at the same time can be changed in the **MEDIA** tab of Preferences ([chapter 9](#media))
+- The number of songs calculated at the same time can be changed in the **MEDIA** tab of Preferences ([chapter 10](#media))
 - If the plugin is not installed, NLM tells you how to install it (with **Install from GitHub** in the "Estimate difficulty" panel)
 
 > **The NLM-estimated ★ is not the official BeatLeader ★.** It is an approximation that NLM calculates with the plugin, and it can differ from the value on the BeatLeader site.
 > It is labeled "NLM est." and shown in a different color so that you don't mistake it for the official ★.
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
@@ -520,33 +721,50 @@ Among the difficulty buttons at the top of the screen (EASY to EXPERT+), **click
 
 | Item | What it does |
 |---|---|
-| **Send notes** → destination | Copy the notes of this difficulty to the chosen difficulty |
-| **Receive notes** ← source | Copy the notes of the chosen difficulty to this difficulty |
-| Send lighting / Receive lighting | The same for lights |
-| Send everything (notes + lights) | Copy both notes and lights |
+| **Send notes** → destination | Copy the notes and the note clips of this difficulty to the chosen difficulty |
+| **Receive notes** ← source | Copy the notes and the note clips of the chosen difficulty to this difficulty |
+| Send lighting / Receive lighting | The same for lights and light clips |
+| Send everything (notes + lights) | Copy both notes and lights (and the clips of both) |
 | Delete all notes / Delete all lighting / Delete all contents | Delete the content of this difficulty |
 
 - "Notes" also include bombs, walls, arcs and chains
-- Copying **replaces the content of the same kind in the destination** (it does not add to it). If the destination has content, you are asked to confirm
-- The arrangement of clips in the NLE is copied too
+- Only the chosen kind is copied. For example, "Send lighting" doesn't touch the notes and note clips of the destination (also when the destination has never been opened)
+- Copying **replaces the content and clips of the same kind in the destination** (it does not add to them). The arrangement of those clips in the NLE becomes the same as in the source
 - Only the content is copied. NJS and offset keep each difficulty's own values
-- The delete items ask for confirmation first. Only the content is deleted; the clip frames in the NLE stay
+- Every Send and Receive can be undone with **one Ctrl + Z** (see "Can it be undone?" below)
+- The delete items ask for confirmation first. Only the content is deleted; the clip frames in the NLE stay (can be undone with Ctrl + Z)
 
-> **We recommend "Receive".**
-> Operations on the difficulty that is open (receive, delete) **can be undone with Ctrl + Z**.
-> On the other hand, operations on another difficulty that is not on screen (send) **cannot be undone**.
-> If you use send, save the project first (Ctrl + S) to be safe.
+### The confirmation before copying (link to the parent difficulty)
+
+When you choose the destination or source of Send / Receive, a confirmation dialog appears before copying. If the destination has content, it says something like "⚠ The current Notes in Expert will be replaced".
+
+![The Send / Receive confirmation. ① Link to the parent difficulty](images/tutorial-advanced-en/04-2-diff-copy-link.png)
+
+If you press **Copy** with **Link to the parent difficulty** (①, on by default) left on, each clip in the destination becomes a **child** of the same clip in the source
+([Linked clips](#linked-clips)).
+
+- After that, editing the source (the parent) also changes the destination. The destination clips can't be edited there
+- Empty clips also become children in the destination when linked (notes you later place in the parent go into the destination too)
+- To change only some parts in the destination, unlink just those clips and then edit them
+- If you plan to rework the whole destination, uncheck ① before pressing **Copy** (it becomes a normal copy)
+
+> **Can it be undone?**
+> For both Send and Receive, whether ① is on or off, **one Ctrl + Z** undoes the copy in all difficulties, including the destination and the source (the links added to it).
+> The same applies when you send to a difficulty that is not on screen (if the destination had no content yet, it becomes empty again).
 
 ### Example: making Expert from Expert+
 
 1. Finish Expert+
 2. Switch to Expert with the **4 key** (or the EXPERT button)
 3. Click the EXPERT button again → "**Receive notes**" → "**← Expert+**"
-4. Thin out the notes and make the hard parts easier for Expert (if it goes wrong, Ctrl + Z returns to before receiving)
-5. Set Expert's **NJS and offset** in the header (while watching JD / RT in [chapter 2](#jd--rt-display))
-6. Continue the same way to the lower difficulties: Expert to Hard, Hard to Normal, …
+4. In the confirmation dialog, uncheck "**Link to the parent difficulty**" and press **Copy** (because you will rework most clips in Expert)
+5. Thin out the notes and make the hard parts easier for Expert (if it goes wrong, Ctrl + Z returns to before receiving)
+6. Set Expert's **NJS and offset** in the header (while watching JD / RT in [chapter 2](#jd--rt-display))
+7. Continue the same way to the lower difficulties: Expert to Hard, Hard to Normal, …
 
-Finally, use "Estimate difficulty" in [chapter 8](#8-checks-before-publishing) to check that higher difficulties have higher ★.
+> If, on the other hand, many parts (such as the intro) should stay the same between difficulties, you can copy with the link on and unlink only the clips you change.
+
+Finally, use "Estimate difficulty" in [chapter 9](#9-checks-before-publishing) to check that higher difficulties have higher ★.
 
 ### Copy the lights at the end
 
@@ -554,18 +772,21 @@ Lights often don't need to differ between difficulties, so finish them in one di
 copy them to the others with "**Send lighting**" to save effort.
 Only the lights are copied, so the notes of the destination stay as they are.
 
-You don't need to copy the lights again every time you edit the notes. Send them again only when you change the lights.
+If you send them with "**Link to the parent difficulty**" left on in the confirmation dialog, the lights in the destination become children of the source lights.
+When you later edit the source lights, the other difficulties change automatically, so you don't need to send them again.
+(If you sent them with the link off, send them again whenever you change the lights. Editing only the notes doesn't require copying the lights again.)
 
-Lights made with [auto lighting](#auto-lighting-making-lights-from-the-notes) (chapter 6) are added to every difficulty from the start, so no sending is needed.
+Lights made with [auto lighting](#auto-lighting-making-lights-from-the-notes) (chapter 7) are added to every difficulty from the start, so no sending is needed.
 
 ### Emptying difficulties you won't publish
 
 Every difficulty with content (notes or lights) is exported.
 If you don't want to publish an unfinished difficulty, open it and empty it with "**Delete all contents**".
 If you might continue it later, keep it first as a separate project with "Save As…" before emptying it.
+If it has clips linked with other difficulties, it can't be emptied; unlink them first ([Linked clips](#unlinking-and-deleting-clips)).
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
@@ -584,6 +805,9 @@ Turn on the metronome to the right of the BPM, play, and compare the clicks with
 
 If the top of the **Detect BPM** candidates says "⚠ The song tempo may not be constant",
 the tempo may differ between the first and second half of the song. Use tempo parts.
+
+**Analyze song** ([chapter 6](#6-analyzing-the-song-tempo-and-structure)) also gives you a good starting point for the BPM and the lead-in.
+Its confirmation dialog also tells you where the beats shift once partway through the song, or where the tempo wavers.
 
 ### Using tempo parts
 
@@ -630,7 +854,7 @@ For example, in a song at BPM 120 (1 beat = 500 ms) whose first beat is 300 ms f
 adding 200 ms of silence puts the first beat at 500 ms (on the line of beat 1).
 
 - You can only add silence (you cannot cut the start of the song)
-- The silence is written into the audio of song.egg itself when exporting, so ffmpeg is needed for the conversion ([chapter 10](#a-message-says-ffmpeg-was-not-found))
+- The silence is written into the audio of song.egg itself when exporting, so ffmpeg is needed for the conversion ([chapter 11](#a-message-says-ffmpeg-was-not-found))
 - The song preview section (the part played on the song select screen) is corrected automatically for the added silence when exporting
 - When the time to the first note is short ("Hot start" in the map check), adding silence also gives you room
 
@@ -664,16 +888,236 @@ In this example the peak reached -1 dB, so it stopped a little short of the -9 L
 
 - It is shared by all difficulties. It is saved with the project and can be undone with Ctrl + Z
 - It applies as-is to playback with Space and to **▶ Preview** on the **Song Preview** node of INFO
-- When exporting, it is written into the audio of song.egg itself, so ffmpeg is needed for the conversion even for an ogg song ([chapter 10](#a-message-says-ffmpeg-was-not-found))
-- It is different from **Music volume** in Preferences ([chapter 9](#volume)). Music volume only changes what you hear while editing and is not included in the exported song
+- When exporting, it is written into the audio of song.egg itself, so ffmpeg is needed for the conversion even for an ogg song ([chapter 11](#a-message-says-ffmpeg-was-not-found))
+- It is different from **Music volume** in Preferences ([chapter 10](#volume)). Music volume only changes what you hear while editing and is not included in the exported song
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
 
-## 6. Advanced lighting
+## 6. Analyzing the song (tempo and structure)
+
+NLM can analyze the audio of the song and give you its **tempo** (a suggested BPM and lead-in) and its **structure** (sections such as intro, verse and chorus).
+Using it right after loading a song makes it faster to set the BPM and to plan what kind of patterns go where.
+You can also create NLE clips that follow the sections ([Creating clips from the analysis](#creating-clips-from-the-analysis)).
+
+- Analysis takes about 30 seconds to a minute per song. You can keep editing meanwhile
+- The analysis runs on your PC. The song is not sent to the internet
+- mp3, ogg, wav, flac and similar formats can be analyzed as they are. Formats such as m4a need ffmpeg ([chapter 11](#analyze-song-shows-an-error))
+- The results are **estimates** from the sound of the song. Check the BPM with the metronome and the structure by ear in the end
+
+### Starting the analysis
+
+Start it in one of these ways.
+
+- **Analyze** in "**Analyze this song?**", which appears when you load a song (see "[When you load a song](#when-you-load-a-song)" below)
+- The purple **🎼 Analyze song** at the left of the spectrogram, below the Music row of the NLE (shown only while there are no analysis results)
+- **Analyze song (tempo & structure)…** in the File menu
+
+![The display while analyzing. ① Progress ② Stop](images/tutorial-advanced-en/06-1-analyze-running.png)
+
+While analyzing, a dark purple message appears at the left of the band.
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Progress | Goes like "estimating tempo 40%" → "waiting for the tempo choice" → "analyzing structure 60%". The bar on the right shows the progress; while its stripes are moving, the analysis is running |
+| ② | Stop | Stop the analysis |
+
+One button takes it all the way: tempo estimate → (if it differs from the current settings) tempo confirmation → structure analysis.
+
+### When you load a song
+
+When you load a new song, NLM asks "**Analyze this song?**". It also tells you what the analysis can do.
+
+!["Analyze this song?" ① What the analysis can do ② Don't ask again ③ Analyze ④ Not now](images/tutorial-advanced-en/06-1b-ask-dialog.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | What the analysis can do | A suggested tempo (BPM and lead-in), the structure band, creating clips from the structure, and how long it takes |
+| ② | Don't ask again | Check it and close the dialog to stop being asked (you can turn it back on in Preferences; [chapter 10](#application)) |
+| ③ | Analyze | Start the analysis right away |
+| ④ | Not now | Close without doing anything (Esc does the same). To analyze later, use 🎼 Analyze song or the File menu |
+
+- You are asked when you bring in a new song: with "Load music file…" in the File menu, by putting a song from MEDIA into the Music row, or with "Load song data"
+- You are not asked when the song is loaded automatically as you open a project, or when you reconnect the song. You are also not asked if that song already has analysis results
+- Because this dialog pops up right after loading a song, the Enter key doesn't press any button
+
+### Confirming the tempo
+
+If the estimated tempo differs from the current BPM and lead-in, a confirmation dialog appears. **Nothing is changed automatically.**
+
+![The tempo confirmation dialog](images/tutorial-advanced-en/06-2-tempo-dialog.png)
+
+| No. | Line | Description |
+|---|---|---|
+| ① | Suggested | The estimated BPM and lead-in |
+| ② | Current | The current BPM and lead-in |
+| ③ | Notes | That double and half the BPM follow the same beat flow, that the BPM was rounded to a whole number, how much the beats spread around the grid, the second BPM candidate, and so on |
+| ④ | Beat shift | Shown when, from some point in the song, the beats are off the grid by a constant amount. Check by ear and fix it with a tempo part ([chapter 5](#using-tempo-parts)) if needed |
+| ⑤ | Tempo variation | Shown when the tempo differs between parts of the song (possibly a live recording or a changing tempo). The BPM of each part is listed too |
+| ⑥ | Possible off-beat | Shown when the strong hits sit half a beat off. Lists the lead-in of the suggestion (A) and of candidate B, shifted by half a beat |
+| ⑦ | Buttons | Apply suggestion / Apply B (half-beat shift) / Don't apply |
+
+The image is a sample made for the explanation and shows every warning (④–⑥). With a normal song, warnings that don't apply are not shown.
+
+| Button | What it does |
+|---|---|
+| **Apply suggestion** | Set the BPM and lead-in to the suggested values |
+| **Apply B (half-beat shift)** | Set the BPM to the suggested value and the lead-in to the value shifted by half a beat. When "possible off-beat" (⑥) is shown, NLM can't tell which one is on the beat, so compare both with the metronome and pick the one that fits |
+| **Don't apply** | Keep the current settings |
+
+- Whichever you press, the structure is then analyzed with the BPM and lead-in at that point
+- Applying can be undone with **one Ctrl + Z**. Placed notes and lights stay on their beats (their timing against the song changes)
+- If the project has tempo parts, only the starting BPM and the lead-in change
+- Because this dialog can pop up in the middle of your work, the Enter key doesn't press any button (so that an Enter while editing doesn't apply it by accident). Esc means "Don't apply"
+- If the current settings are the same as the suggestion, no dialog appears; the bottom of the screen says "Tempo estimate: same as the current BPM and lead-in silence".
+  If the current settings follow the same beat flow as the suggestion (double or half the BPM, etc.), the dialog says so (you don't need to apply it)
+- For songs with few strong hits (such as quiet songs), the tempo can't be estimated, and the structure is analyzed with the current BPM and lead-in
+- You can open this dialog again later with "**Tempo estimate…**" in the band menu (and apply from there)
+
+### The structure band
+
+When the structure analysis is done, a "Sections / Segments" band appears between the Music row and the spectrogram.
+
+![The structure band. ① Sections with the same number ② Chorus candidates ③ Segments ④ Menu ⑤ Create clips](images/tutorial-advanced-en/06-3-structure-band.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Sections (upper row) | The large sections of the song, with a tentative name and a number, such as "Verse S2". **The same number means the same content repeated**, shown in the same color (two "Verse S2" in the image) |
+| ② | Chorus candidates | Sections with a **★** after the number |
+| ③ | Segments (lower row) | Shorter sections. The same letter (A, B, C, …) means similar content |
+| ④ | ⋯ | The band menu (same as right-clicking the band) |
+| ⑤ | 🧩 Create clips | In the left gutter of the band (below "Sections / Segments"). Creates clips that follow the band (see "[Creating clips from the analysis](#creating-clips-from-the-analysis)" below). Shown only while there are analysis results |
+
+- The tentative names (Intro, Verse, Pre-chorus, Chorus, Interlude, Bridge, Outro) are guesses from the order of the sections. If they don't fit, rename them as described below
+- **Click** the band to move the playback position to the start of that section (the visible range doesn't move)
+- Hover over the band to see the beat range and how many times the same number appears; for segments, also where the most similar segment is (%)
+- The wheel over the band moves in time, as in the NLE (Ctrl + wheel to zoom)
+- The band is shown only while there are analysis results or an analysis is running (the spectrogram moves down meanwhile)
+
+### The guide after the analysis
+
+When the structure analysis started with [Analyze song] finishes and the band appears, a guide "**Analysis complete — what to do next**" is shown.
+
+![The guide after the analysis. ① What to do next ② Where the button is ③ Don't show this again ④ Got it](images/tutorial-advanced-en/06-3b-analysis-guide.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | What to do next | 1. Play the song and check by ear whether the band's divisions match it　2. Decide which divisions (sections / segments) you map with　3. Press **🧩 Create clips** at the left of the band |
+| ② | Where the button is | A picture showing where **🧩 Create clips** is in the left gutter of the band (red frame) |
+| ③ | Don't show this again | Check it and close the guide to stop showing it (you can turn it back on in Preferences; [chapter 10](#application)) |
+| ④ | Got it | Close the guide (Esc does the same). When it closes, **🧩 Create clips** at the left of the band glows for a moment to show where it is |
+
+- The guide never creates clips by itself. Check that the divisions match the song first, then press the button yourself
+- It is also shown when you analyze again. It is not shown when you open saved results, stop the analysis, or get an error
+- Because the guide pops up at the end of the analysis, the Enter key doesn't close it
+
+### Renaming sections
+
+**Double-click** a section to get a box for its name. The name is given to **all sections with the same number**
+(for example, naming S3 "Guitar solo" turns both S3 sections into "Guitar solo S3"; see ② in the image under "Exporting to markers" below).
+
+- Clear the name and press Enter to go back to the automatic name
+- Renaming can be undone with Ctrl + Z
+
+### The band menu
+
+Right-click the band (or press **⋯** in the gutter) to open the menu.
+
+![The right-click menu of the band](images/tutorial-advanced-en/06-4-band-menu.png)
+
+| No. | Item | What it does |
+|---|---|---|
+| ① | Rename S2 "Verse"… | Rename the section you right-clicked (shown only when you right-click a section) |
+| ② | Create clips… | Create empty clips that follow the band (same as **🧩 Create clips** in the gutter; see "[Creating clips from the analysis](#creating-clips-from-the-analysis)" below) |
+| ③ | Export section starts as markers | See "Exporting to markers" below |
+| ④ | Tempo estimate… | Show the tempo confirmation dialog again (you can apply from here too) |
+| ⑤ | Analyze again | Analyze again with the current BPM, lead-in and Music placement ("Stop analyzing" while it is running) |
+| ⑥ | Clear analysis results | Remove the band (can be undone with Ctrl + Z) |
+
+### Exporting to markers
+
+"**Export section starts as markers**" puts a marker with the name and number (such as "Verse S2") at the start of each section.
+As markers, you can split clips to match the structure of the song with [Cut at markers](#splitting-and-joining),
+and jump to the start of each section with **Ctrl + [ / Ctrl + ]** ([chapter 1](#marking-sections-of-the-song-with-markers)).
+
+![① The exported markers ② A renamed section (Guitar solo S3)](images/tutorial-advanced-en/06-5-markers.png)
+
+- Positions that already have another marker are skipped
+- If you rename sections and export again, the markers exported earlier are renamed, unless you renamed them by hand
+- The exported markers are normal markers. They stay even if you clear the analysis results
+
+### When you change the BPM and so on
+
+If you change the BPM, lead-in, tempo parts or Music placement (or the song itself) after the analysis, the band may no longer match the current grid.
+Then the band is dimmed and "⚠ The beat grid has changed. Please analyze again" appears.
+
+![① The message when the grid has changed](images/tutorial-advanced-en/06-6-stale.png)
+
+- **🧩 Create clips** at the left of the band is dimmed too, and pressing it doesn't create clips (analyze again first)
+- Press **Analyze again** to analyze with the current settings. Names you gave are carried over, as far as possible, to the sections at the same position
+- If you change the settings back to the values at the time of the analysis, the message disappears
+
+### Saving the results
+
+The analysis results (tempo estimate, structure and the names you gave) are saved in the project (`.nlmf`). You don't need to analyze again after reopening it.
+
+- When the results arrive, when you rename sections and when you clear the results, the project is marked as unsaved (you are asked to confirm if you try to close it without saving)
+- The BPM and other settings at the time of the analysis are saved too, so if you change the settings after reopening, the "Please analyze again" message above still appears
+
+### Creating clips from the analysis
+
+You can create empty clips in the NLE that follow the sections of the structure band. Placing notes clip by clip makes it easier to build a map that follows the structure of the song.
+Sections with the same number (repeats) are [linked](#linked-clips) automatically, so the notes you place in the first one also go into the later ones.
+
+Press **🧩 Create clips** in the left gutter of the band (or right-click the band or press **⋯** in the gutter → "**Create clips…**") to open the confirmation dialog.
+
+![The Create clips dialog. ① What to create clips for ② Difficulties ③ Link ④ Summary](images/tutorial-advanced-en/06-7-clips-dialog.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Create clips for | **Sections** (the default) / **Segments** / **Both**. With Both, two lanes are created (upper = sections, lower = segments), and you choose which lane is set to Edit only (the one you map on) |
+| ② | Difficulties | Clips are always created in the open difficulty. Check other difficulties to create the same clips there too (the number of notes or "empty" is shown next to each difficulty name) |
+| ③ | Link | "**Link clips with the same number automatically**" (on by default). The parent is the first clip of each number (in the open difficulty). Clips created in other difficulties are linked to this parent too |
+| ④ | Summary | The number of lanes to add, clips and link groups |
+
+Press **Create**, and the result looks like this.
+
+![The NLE after creating the clips. ① The new lane and its clips ② Edit only](images/tutorial-advanced-en/06-8-clips-made.png)
+
+- One new notes lane (two with Both) is added at the top, with empty clips that follow the band (①). Existing notes and the content of existing clips are not touched
+- Clips are named "band name S number" (such as "Verse S2"; names you gave are used too) and get the band's colors. For segments, the clips are named after the groups (A, B, …)
+- From the second clip of the same number on, the clips become children of the first one (🔗 and a dashed border; [Linked clips](#linked-clips)).
+  A number that appears only once is linked only when clips are also created in other difficulties (to the clips there)
+- The new lane is set to [Edit only](#edit-only) (②). Notes you place in the 3D view go into the clips of that lane
+- Because a lane is added, lane solo and mute are cleared
+- **One Ctrl + Z** undoes everything: the lanes, clips and links (in other difficulties too). Edit only is turned off as well
+- Once you have created clips, **🧩 Create clips** at the left of the band turns dark purple (a sign that clips were created from these results).
+  Pressing it again creates another set on a new lane. Analyzing again returns it to the normal purple
+
+> **Example: mapping section by section**
+> After analyzing the song, checking the divisions by listening to the song and renaming the sections, create section clips with **🧩 Create clips** at the left of the band.
+> Place notes in the first clip of each number (the parent), and the repeated sections get the same pattern.
+> If you want to change only the second chorus, [unlink](#unlinking-and-deleting-clips) that clip first and then edit it.
+
+**When clips can't be created**
+
+- If there are no structure analysis results, press [Analyze song] first
+- If the message "The beat grid (BPM, lead-in silence, tempo parts, Music placement) has changed since the analysis…" appears (when **🧩 Create clips** in the gutter is dimmed), the band may not match the current beats.
+  Press **Analyze again** first and then create the clips ([When you change the BPM and so on](#when-you-change-the-bpm-and-so-on))
+- If the notes lanes are at the maximum (10), delete an empty lane first. "Both" can be selected only when two lanes can be added
+
+The created clips are normal clips that are not tied to the analysis. They stay as they are even if you analyze again or clear the analysis results (their names are in the display language at the time you created them).
+
+<!-- chapter-nav -->
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
+<!-- /chapter-nav -->
+
+---
+
+## 7. Advanced lighting
 
 For the basics of placing lights, see [chapter 6](tutorial.en.md#6-lighting) of the basic tutorial. This chapter explains how to work faster and in more detail.
 
@@ -697,7 +1141,7 @@ In LIGHTING mode, you place lights on these 10 lanes.
 | **F** | Cycle through the colors to place |
 | **1 / 2 / 3** (over the 3D view) | Choose a color (in vanilla: ①, ② and White; in Chroma: left, right and White). Here the number keys do not switch the difficulty |
 
-![The behavior pie menu of the W key](images/tutorial-advanced-en/06-1-light-pie.png) ![The color pie menu of the C key](images/tutorial-advanced-en/06-2-color-pie.png)
+![The behavior pie menu of the W key](images/tutorial-advanced-en/07-1-light-pie.png) ![The color pie menu of the C key](images/tutorial-advanced-en/07-2-color-pie.png)
 
 On the left is the behavior pie menu of the W key, on the right the color pie menu of the C key (the screenshot is in vanilla mode, so it shows ①, ② and White).
 Hold the key, move the mouse toward the item you want, and release the key to choose it.
@@ -726,7 +1170,7 @@ Choose how lights are colored with **Light color mode** in Preferences.
 | **Vanilla** (the default) | Red, blue, white, and boost colors switched with the BOOST lane | No mods; everyone sees the same colors |
 | **Chroma** | Any color for each light | Players need the Chroma mod to see the colors |
 
-The base light colors and boost colors are set on the **Settings** node of the INFO screen ([chapter 7](#7-more-about-the-info-nodes)).
+The base light colors and boost colors are set on the **Settings** node of the INFO screen ([chapter 8](#8-more-about-the-info-nodes)).
 If you are thinking of a ranked submission, or want many people to see the same look, vanilla is the safe choice.
 
 ### Auto lighting (making lights from the notes)
@@ -740,13 +1184,13 @@ You can start it from any of these:
 
 - **Auto light** on the LIGHTING mode toolbar (①)
 - **Auto lighting…** in the File menu
-- **💡 Auto lighting…**, shown next to map check items about too few lights ([chapter 8](#common-items-and-how-to-fix-them))
+- **💡 Auto lighting…**, shown next to map check items about too few lights ([chapter 9](#common-items-and-how-to-fix-them))
 
-![The Auto light button on the toolbar](images/tutorial-advanced-en/06-3-auto-light-button.png)
+![The Auto light button on the toolbar](images/tutorial-advanced-en/07-3-auto-light-button.png)
 
 A confirmation shows the source difficulty, the difficulties that get the lights, the stage, and the number of lights to be made. Press **Create** to make them.
 
-![The auto lighting confirmation](images/tutorial-advanced-en/06-4-auto-light-dialog.png)
+![The auto lighting confirmation](images/tutorial-advanced-en/07-4-auto-light-dialog.png)
 
 #### The lights it makes
 
@@ -763,7 +1207,7 @@ A confirmation shows the source difficulty, the difficulties that get the lights
 
 #### Where they go
 
-![The auto light clip](images/tutorial-advanced-en/06-5-auto-light-lane.png)
+![The auto light clip](images/tutorial-advanced-en/07-5-auto-light-lane.png)
 
 - One light lane is added at the top, with an "**Auto light**" clip (①) from the start to the end of the song
 - The lights are made from **the difficulty with the most notes**, and the same lights go into **every difficulty** that has content (notes, bombs, walls, etc.)
@@ -785,22 +1229,22 @@ A confirmation shows the source difficulty, the difficulties that get the lights
   and the ambient light (brightens the structures so you can see the motion)
 - Choose the stage (environment) in the field at the top of the NLE, to the left of the BPM field ("Default" at first). How the lights look depends on the stage
 - Finishing the lights in one difficulty and then copying them with "Send lighting" is faster ([chapter 4](#copy-the-lights-at-the-end))
-- Before publishing, check that "Insufficient light events" and "Unlit bomb" do not appear in the map check ([chapter 8](#8-checks-before-publishing)).
+- Before publishing, check that "Insufficient light events" and "Unlit bomb" do not appear in the map check ([chapter 9](#9-checks-before-publishing)).
   If they do, you can fix them quickly with [auto lighting](#auto-lighting-making-lights-from-the-notes)
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
 
-## 7. More about the INFO nodes
+## 8. More about the INFO nodes
 
 On the INFO screen (Tab over the NLE), the information of the exported song is defined by combining **nodes**.
 
 ### Kinds of nodes
 
-![The INFO screen. ① Song info ② Cover image ③ Settings ④ Song Preview ⑤ Export (two)](images/tutorial-advanced-en/07-1-info-nodes.png)
+![The INFO screen. ① Song info ② Cover image ③ Settings ④ Song Preview ⑤ Export (two)](images/tutorial-advanced-en/08-1-info-nodes.png)
 
 | Node | Color | What it sets |
 |---|---|---|
@@ -852,12 +1296,12 @@ To make exporting faster, the song.egg conversion is skipped if the song is the 
 If the song sounds wrong or you want to re-create it, check "**Force re-convert song.egg**" on the export node and export.
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
 
-## 8. Checks before publishing
+## 9. Checks before publishing
 
 Before publishing a map, you can check these three things inside NLM.
 
@@ -889,7 +1333,7 @@ The judgement is the same as [BS Map Check](https://github.com/KivalEvan/BeatSab
 
 #### Reading the results
 
-![The map check panel](images/tutorial-advanced-en/08-1-mapcheck.png)
+![The map check panel](images/tutorial-advanced-en/09-1-mapcheck.png)
 
 The image shows the check of a short map made for the explanation (16 seconds, few lights).
 
@@ -898,7 +1342,7 @@ The image shows the check of a short map made for the explanation (16 seconds, f
 | ① | Tabs | Switch between "Same as BS Map Check" and "NLM BL criteria list" |
 | ② | Summary | The number of items for each mark |
 | ③ | ↻ Check again | Refresh the results after fixing the map |
-| ④ | 💡 Auto lighting… | Shown only on items about too few lights. Starts [auto lighting](#auto-lighting-making-lights-from-the-notes) (chapter 6) and checks again afterwards. On cover image items, [🖼 Fix cover image…](#fixing-the-cover-image) appears in the same place |
+| ④ | 💡 Auto lighting… | Shown only on items about too few lights. Starts [auto lighting](#auto-lighting-making-lights-from-the-notes) (chapter 7) and checks again afterwards. On cover image items, [🖼 Fix cover image…](#fixing-the-cover-image) appears in the same place |
 
 The results are split into "General (audio, cover, preview)" and a section for each difficulty. The mark at the start of each item shows how serious it is.
 
@@ -942,7 +1386,7 @@ If an image is only slightly off, like 512×510, you can fix it inside NLM witho
 When the map check shows a cover image item (not square / too small), or R1.A.4 (cover image) of the NLM BL criteria list is a violation,
 **🖼 Fix cover image…** appears on that row. Press it to open a confirmation.
 
-![The cover image fix confirmation. ① How to fix ② Preview of the result](images/tutorial-advanced-en/08-5-cover-fit-dialog.png)
+![The cover image fix confirmation. ① How to fix ② Preview of the result](images/tutorial-advanced-en/09-5-cover-fit-dialog.png)
 
 | No. | Name | Description |
 |---|---|---|
@@ -966,7 +1410,7 @@ The map check also judges the fixed image.
 
 The cover image node on the INFO screen shows what is fixed (①) and **Stop fixing** (②).
 
-![The fix display on the cover image node. ① What is fixed ② Stop fixing](images/tutorial-advanced-en/08-6-cover-fit-card.png)
+![The fix display on the cover image node. ① What is fixed ② Stop fixing](images/tutorial-advanced-en/09-6-cover-fit-card.png)
 
 - Press **Stop fixing** to export the original image. **Ctrl + Z** also undoes it
 - The fix setting is saved in the project
@@ -985,7 +1429,7 @@ The colors are different from the map check so they are not mistaken for each ot
 
 #### Marks and kinds
 
-![The NLM BL criteria list](images/tutorial-advanced-en/08-2-bl-criteria.png)
+![The NLM BL criteria list](images/tutorial-advanced-en/09-2-bl-criteria.png)
 
 | No. | Name | Description |
 |---|---|---|
@@ -1010,7 +1454,7 @@ How NLM interpreted an item is written in the "＊" note under the item.
 Check **Show only violations / to check** at the top to narrow the list down to the items that probably need fixing.
 
 When R10.A (at least one light per beat) or R7.B (bomb lighting) is a violation or "Check", **💡 Auto lighting…** appears on that row.
-It starts [auto lighting](#auto-lighting-making-lights-from-the-notes) (chapter 6) and checks again afterwards.
+It starts [auto lighting](#auto-lighting-making-lights-from-the-notes) (chapter 7) and checks again afterwards.
 When R1.A.4 (size, shape and format of the cover image) is a violation, **🖼 Fix cover image…** appears ([Fixing the cover image](#fixing-the-cover-image)).
 
 #### The items that use ★ and Tech (R5.A, R11.H.5)
@@ -1019,7 +1463,7 @@ R5.A (whether notes are visible long enough to react) is judged with a formula t
 The item has fields for each difficulty (②). If the plugin of "Estimate difficulty" below is installed,
 the values are calculated and filled in automatically when you open the BL criteria list (①). After you fix the map, they are measured again when you re-check.
 
-![The ★ and Tech fields of R5.A](images/tutorial-advanced-en/08-3-bl-stars.png)
+![The ★ and Tech fields of R5.A](images/tutorial-advanced-en/09-3-bl-stars.png)
 
 - If the plugin is not installed yet, ① shows **📥 Install the plugin and auto-calculate…**.
   Pressing it shows an explanation; press **Install from GitHub** to install the plugin and calculate right away
@@ -1049,7 +1493,7 @@ If you have installed two or more versions, a field to choose the version appear
 
 #### Reading the results
 
-![The Estimate difficulty panel](images/tutorial-advanced-en/08-4-rating.png)
+![The Estimate difficulty panel](images/tutorial-advanced-en/09-4-rating.png)
 
 | No. | Name | Description |
 |---|---|---|
@@ -1099,19 +1543,21 @@ If you fix the map with the panel open, press **↻ Measure again**. Results mea
 - [ ] **Project saved**: saved the `.nlmf` (you need it to make fixes later)
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
 
-## 9. Customizing the settings
+## 10. Customizing the settings
 
 In **Preferences** in the menu, you can adjust how the app feels and looks.
 The settings are divided into six tabs.
 
-![Preferences. ① Tabs ② Reset to defaults](images/tutorial-advanced-en/09-1-settings.png)
+![Preferences. ① Tabs ② Reset to defaults ③ Note lanes ④ Song analysis](images/tutorial-advanced-en/10-1-settings.png)
 
-> Slider changes take effect after restarting the app (the Preview settings take effect when you open PREVIEW).
+The image shows the Application tab scrolled down.
+
+> Slider changes take effect after restarting the app (the Preview settings take effect when you open PREVIEW; Note lanes takes effect immediately).
 
 ### Application
 
@@ -1120,10 +1566,11 @@ The settings are divided into six tabs.
 | 言語 / Language | Switch between Japanese and English |
 | UI font size | The size of the text on screen (80–120%) |
 | Show shortcuts | Show or hide the floating shortcut windows by kind (Standard, NOTES, LIGHTING, NLE, INFO) |
-| Lane layout | The ratio of note lanes to light lanes in the NLE (6 in total). Applied to the current project and used as the default for new projects (it cannot be set if the top lane has a clip) |
-| Light color mode | How lights are colored ([chapter 6](#6-advanced-lighting)) |
+| Note lanes (③) | The number of notes lanes in the NLE (1–5; 1 at first). Applied to the current project immediately and used for new projects (it can't be reduced while the top lane has a clip). There are always three light lanes to start with ([chapter 3](#adding-lanes-lock-solo-and-mute)) |
+| Light color mode | How lights are colored ([chapter 7](#7-advanced-lighting)) |
 | Previous notes display | Whether to show the helper display of [chapter 2](#previous-notes-display) (also toggled with the H key) |
 | Same-direction warning | Whether to show the warning of [chapter 2](#same-direction-warning) |
+| Song analysis (④) | "**Ask whether to analyze when a song is loaded**" ([chapter 6](#when-you-load-a-song)) and "**Show the next steps when an analysis finishes**" ([chapter 6](#the-guide-after-the-analysis)). Both are on at first. If you turned them off with "Don't ask again" / "Don't show this again", turn them back on here |
 | Update check | Whether to check for a new version at startup (connects to GitHub) |
 
 Once you have learned the shortcuts, hiding the floating windows gives you more room on screen.
@@ -1167,7 +1614,7 @@ Change the key assignments ([chapter 1](#customizing-shortcuts)).
 
 Settings for the MEDIA library ([chapter 3](#media-library-record-song-folders-then-list-and-search-them)).
 
-![The MEDIA tab of Preferences. ① Song data ② ★ calculations ③ Play records](images/tutorial-advanced-en/09-2-settings-media.png)
+![The MEDIA tab of Preferences. ① Song data ② ★ calculations ③ Play records](images/tutorial-advanced-en/10-2-settings-media.png)
 
 | No. | Item | Content |
 |---|---|---|
@@ -1182,12 +1629,12 @@ Projects, assets, plugins, the folders recorded in MEDIA and the location of the
 (the names shown in the catalog and the columns, sort order and filter of the detail view return to their initial state).
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### The song, output folder or cover image is not connected after opening a project
 
@@ -1213,7 +1660,7 @@ Once you have selected them again, they are connected automatically from the nex
 
 Some "Required" items in the export node's checklist have a ✕.
 
-![① The checklist of the export node. "Required" items with a ✕ are missing](images/tutorial-advanced-en/10-1-export-blocked.png)
+![① The checklist of the export node. "Required" items with a ✕ are missing](images/tutorial-advanced-en/11-1-export-blocked.png)
 
 | Item | Fix |
 |---|---|
@@ -1236,6 +1683,24 @@ ffmpeg is not installed together with NLM.
 2. **Close NLM and start it again** (otherwise the newly installed ffmpeg is not found)
 3. Export again
 
+ffmpeg is also needed to analyze songs such as m4a with "Analyze song" (see the next section, '"Analyze song" shows an error'). The installation steps are the same.
+
+### "Analyze song" shows an error
+
+| Message | Fix |
+|---|---|
+| Analyzing this audio format needs ffmpeg… | Songs such as m4a, aac, wma and mp4 are read with ffmpeg before analysis. Install ffmpeg as described above, **restart NLM**, then press [Analyze song] again (songs converted to mp3, ogg, wav or flac can be analyzed without ffmpeg) |
+| The song is too short to analyze | Songs shorter than 5 seconds can't be analyzed. The structure also can't be analyzed if the part with sound is shorter than 6 beats |
+| The audio file is too large to analyze | Files larger than 300 MB can't be analyzed. Convert it to a compressed format such as mp3 or ogg and load it again |
+| Could not read the audio (it may be damaged or in an unsupported format) | Check that the file is not damaged. Convert it to mp3, ogg or wav and load it again |
+| Load a song first | Load a song, then press it |
+| The audio file was not found (load the song again) | The song file was moved or deleted. Load the song again |
+| Another analysis is running. Try again when it finishes | Wait until the analysis finishes (press Stop on the band to stop it) |
+| The analysis job was not found / The audio sent for analysis was not found | This appears after restarting the app, for example. Press [Analyze song] again |
+
+If the results look wrong (the BPM doesn't fit, or the sections are in the wrong place), read the warnings in the confirmation dialog of [chapter 6](#6-analyzing-the-song-tempo-and-structure) (beat shift, tempo variation, possible off-beat) and check with the metronome.
+After fixing the BPM or lead-in, analyze the structure again with **Analyze again** in the band menu.
+
 ### The exported song sounds wrong although you haven't changed it
 
 To make exporting faster, the song.egg conversion is skipped if the song is the same as last time.
@@ -1246,11 +1711,43 @@ If it still sounds wrong, check "**Force re-convert song.egg**" on the export no
 - Shortcuts apply to **the area under the mouse** (3D view, NLE, PREVIEW, etc.). Put the mouse over the area you want to operate, then press the key
 - If you changed shortcut assignments, check them in the **Shortcuts** tab of **Preferences**. **Reset all to default** returns them to the defaults
 - Note operations in the 3D view do not work if the lane is **locked** ([chapter 3](#adding-lanes-lock-solo-and-mute))
+- While **Edit only** is on, notes outside the Edit only lane can't be edited ([chapter 3](#edit-only)). The bottom left of the 3D view shows something like "✎ Edit only: Notes 2"
+- Notes and lights inside a **linked child** clip can't be edited. Edit the parent instead ([chapter 3](#children-cant-be-edited))
 
 ### An operation cannot be undone
 
-Most operations can be undone with Ctrl + Z, but **"Send" to another difficulty cannot** ([chapter 4](#4-making-several-difficulties-efficiently)).
+Most operations can be undone with Ctrl + Z. Send / Receive between difficulties is undone in all difficulties with **one Ctrl + Z**, whether "Link to the parent difficulty" is on or off ([chapter 4](#the-confirmation-before-copying-link-to-the-parent-difficulty)).
+
+The following are not part of Ctrl + Z.
+
+- Switching Edit only ([chapter 3](#edit-only))
+- Changes in Preferences
+- An operation cancelled with **Cancel** in "Choose the next parent" (redo doesn't bring it back either; [chapter 3](#unlinking-and-deleting-clips))
+
 Save with Ctrl + S before big changes to be safe.
+
+### A new project has only one notes lane
+
+Since v2.0.0-oz, a new project starts with one notes lane and three light lanes.
+Projects saved with an earlier version open with the number of lanes they were saved with.
+
+- To add one, right-click an empty spot at the left end of the lanes → "**＋ Add Notes lane (at top)**" ([chapter 3](#adding-lanes-lock-solo-and-mute))
+- When you put a clip where there is no free space, a lane is added at the top automatically
+- The number for new projects can be changed with **Preferences → Application → Note lanes** ([chapter 10](#application))
+
+### "Analyze this song?" or the guide after the analysis doesn't appear (or you don't want it)
+
+Turn them on or off with the two checkboxes in **Preferences → Application → Song analysis** ([chapter 10](#application)).
+If you checked "Don't ask again" or "Don't show this again" in the dialogs, you can turn them back on here.
+
+- "Analyze this song?" appears only when you bring in a new song, and not if that song already has analysis results ([chapter 6](#when-you-load-a-song))
+- Even without the guide, you can create clips with **🧩 Create clips** at the left of the band ([chapter 6](#creating-clips-from-the-analysis))
+
+### "Unlinked … clips" appears when opening a project
+
+A linked child clip had different content from its parent, so its link was removed.
+This happens, for example, when the project was opened in a version before v2.0.0-oz and a child clip was edited and saved.
+The content of the unlinked clips stays, and they can be edited as normal clips. To link them again, see [chapter 3](#linking).
 
 ### Resetting the preferences
 
@@ -1286,8 +1783,8 @@ Update it manually as described in the [README](../README.en.md).
 ### If nothing helps
 
 Please let us know on [GitHub Issues](https://github.com/Oz-Co-two/nlm-oz-co2/issues) (English is fine).
-It helps if you include the **version number** shown at the top right of the screen (for example, v1.4.0-oz) and what happened after which operation.
+It helps if you include the **version number** shown at the top right of the screen (for example, v2.0.0-oz) and what happened after which operation.
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Advanced lighting](#6-advanced-lighting) ｜ [7. More about the INFO nodes](#7-more-about-the-info-nodes) ｜ [8. Checks before publishing](#8-checks-before-publishing) ｜ [9. Customizing the settings](#9-customizing-the-settings) ｜ [10. Troubleshooting](#10-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
