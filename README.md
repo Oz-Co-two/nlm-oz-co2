@@ -13,17 +13,46 @@ English: [README.en.md](README.en.md)
 
 はじめて使う方は、まず **[チュートリアル](docs/tutorial.md)** をどうぞ。曲の読み込みからノーツ配置、
 Beat Saber で遊べる形への書き出し・保存までを、画像付きで順番に説明しています。
-慣れてきたら **[上級編チュートリアル](docs/tutorial-advanced.md)** もどうぞ。作業を速くする操作や、曲の解析（テンポ・構成）、単独編集、リンクしたクリップ、MEDIA ライブラリ、公開前のチェック・★の測定などを説明しています。
+慣れてきたら **[上級編チュートリアル](docs/tutorial-advanced.md)** もどうぞ。作業を速くする操作や、曲の解析（テンポ・構成）、単独編集、リンクしたクリップ、MEDIA ライブラリ、公開前のチェック・★の測定、ランク審査の指摘への対応などを説明しています。
 各パネルの細かい操作は、原作サイトのリファレンスマニュアルが詳しいです。
 
 - **チュートリアル（画像付き・基本の流れ）**: [docs/tutorial.md](docs/tutorial.md)
-- **上級編チュートリアル（作業を速くする操作・曲の解析・単独編集・リンクしたクリップ・MEDIA ライブラリ・公開前のチェック・★の測定など）**: [docs/tutorial-advanced.md](docs/tutorial-advanced.md)
+- **上級編チュートリアル（作業を速くする操作・曲の解析・単独編集・リンクしたクリップ・MEDIA ライブラリ・公開前のチェック・★の測定・審査の指摘への対応など）**: [docs/tutorial-advanced.md](docs/tutorial-advanced.md)
 - **原作 / 公式ドキュメント**: https://helba.flashhub.net/nlm/
 - **リファレンスマニュアル**: https://helba.flashhub.net/nlm/manual/
 - **原作の修正履歴**: https://helba.flashhub.net/nlm/changelog.html
 
 note のコメント欄にて helba さんご本人から、本フォークとしての公開・改変・再配布について
 快諾をいただいています。
+
+## 主な機能
+
+- **動画編集ソフトのようなタイムライン（NLE）**: ノーツとライトはレーンの上のクリップに入っているので、譜面の一部をまとめて分割・コピー・移動・左右反転できます。
+  マーカー・テンポパート（BPM の変化）・波形・スペクトログラムも同じタイムラインに出ます。
+- **曲の解析**: BPM と無音追加を提案し（裏拍・拍のずれ・テンポの揺れの知らせつき）、曲の構成を NLE に出します。
+  セクションには仮の名前（イントロ・Aメロ・サビ…）と番号が付き、同じ番号は同じ中身です。番号ごとに名前を付け直す・マーカーへ書き出す・
+  空のクリップを作る（番号ごとにリンクし、新しい単独編集のレーンに）ことができます。
+- **単独編集**: 3D での編集をノーツのレーン 1 つに限ります。他のレーンのノーツをうっかり変えません。
+- **リンクしたクリップ**: 同じ中身のクリップ（全部のサビなど。難易度をまたいでも）をリンクすると、親を直せば全部が直ります。
+- **3D のノーツ編集ビュー**と、環境・ライトつきの**ゲームに近い 3D プレビュー**（[ArcViewer](https://github.com/AllPoland/ArcViewer/) の移植）
+- **INFO 画面**: 曲の情報・難易度・カバー画像・選曲画面の試聴区間・書き出しの設定をノードで繋ぎます
+- **譜面チェック（BeatLeader基準）**: Kival Evan さんの [BS Map Check](https://github.com/KivalEvan/BeatSaber-MapCheck)（BeatLeader の設定）の移植です。
+  結果の拍をクリックすると、そのノーツへ移動します。
+- **NLM版 BL評価リスト**: BeatLeader のランク基準の文章を、項目の番号どおりに並べた NLM 独自の確認表です。
+  目安であり、公式の判定ではありません。BeatLeader のランク譜面 189 譜面で、審査を通った難易度の 99% に違反が出ないことを確かめています。
+- **AutoModder の判定**: 審査の人がよく使う AutoModder（ChroMapper の追加機能）の自動の確かめを、改変せずに既定の設定のまま、
+  譜面チェックのパネルのタブで動かします（追加プラグイン [nlm-automodder](https://github.com/Oz-Co-two/nlm-automodder)）。**BeatLeader・AutoModder の公式ツールではありません。**
+- **ランク審査の指摘**: 審査の指摘（「拍 - 文」の .txt や Discord の本文）を読み込み、指摘の位置へ移動し、済みの印と返事を付けて同じ形で書き出せます。
+  NLM の確かめの結果も、同じ形で書き出せます。
+- **難易度を測る（BeatLeader の★の近似）**: 追加プラグイン [nlm-rating](https://github.com/Oz-Co-two/nlm-rating) で、★と Pass / Tech / Acc を出します。
+  近似値で、**BeatLeader の公式ツールではありません**。
+- **他の人の譜面の取り込み**: v2・v3・v4 の譜面を（テンポの変化・環境ごと）「曲データを読み込む」か MEDIA からのドラッグで読み込めます。書き出しは v3 の形式です。
+- **MEDIA ライブラリ**: 曲のフォルダ（CustomLevels など）を記録し、グリッドか、1 行＝1 難易度の表（★・NJS・NPS・長さ・アップロード日・ダウンロード日・プレイ回数…）で一覧にします。
+  どの列でも並べ替えられ、★・長さ・NJS・NPS・難易度・モードなどで絞り込めます。ランクでない譜面の★は nlm-rating で推定できます（「NLM推定」と出ます。公式の値ではありません）。
+- **自動ライティング**: ノーツから基本のライト（バニラ）を新しいレーンに作ります。自分のライトはそのまま残ります
+- **カバー画像の補正**: 書き出す時に、元のファイルを変えずに、正方形・256×256 以上・png にします
+- **song.egg の書き出し**: OGG 以外の音源を ffmpeg で変換し、無音追加・Music のクリップの配置・曲の音量補正を音に焼き込みます
+- **アプリ内の自動更新**（v1.3.0-oz から）
 
 ## インストール・アップデート
 
@@ -89,6 +118,8 @@ v1.1.0-oz 以前から v1.2.0-oz 以降へ更新した場合は、既存プロ�
   変わっていないかを自動で確かめる（追加ライブラリ不要。使い方は [tests/README.md](tests/README.md)）
 - 譜面チェックの突き合わせテスト（`mapcheck_difftest.py`）: 譜面チェック（BeatLeader基準）が原作 BS Map Check と同じ結果になるかを確認する
 - NLM版 BeatLeader評価リストの自己テスト（`blcriteria_test.py`）: 基準の違反を1つずつ仕込んだ譜面で、該当項目が指摘されるかを確認する
+- ランク譜面での誤検出の数え上げ（`bl_ranked_check.py`）: 手元にある BeatLeader のランク譜面に BL評価リストと譜面チェックをかけて、審査を通った譜面に出る違反を数える
+- 審査の指摘の読み取りの確認（`review_txt_check.py`）: 手元にある審査の指摘の .txt をまとめて読み、読めない行・読み落としの疑いを出す
 - リリース用ファイルの作成（`make_release.py`）: 配布 zip と、アプリ内の自動更新が読む `update.json` を作る
 - 自動更新の自己テスト（`update_test.py`）: ローカルの偽の配布元で、確認・ダウンロード・照合・差し替え・復元を通しで確かめる
 - チュートリアルの画像の撮影（`make_tutorial_shots.py`・`make_advanced_shots.py`）: エディタを実際に操作して、基本編・上級編の画像を撮り直す
@@ -113,6 +144,10 @@ Kival Evan 作の [BS Map Check](https://github.com/KivalEvan/BeatSaber-MapCheck
 「難易度を測る」で使う追加プラグイン [nlm-rating](https://github.com/Oz-Co-two/nlm-rating) は NLM 本体に含まれない
 別配布のプログラム（MIT）で、BeatLeader の [RatingAPI](https://github.com/BeatLeader/RatingAPI)・
 [beatleader-analyzer](https://github.com/BeatLeader/beatleader-analyzer)（MIT）を使っています。
+
+譜面チェックの「AutoModder」のタブで使う追加プラグイン [nlm-automodder](https://github.com/Oz-Co-two/nlm-automodder) も NLM 本体に含まれない
+別配布のプログラム（MIT）で、LightAi39 さんの [AutoModder](https://github.com/LightAi39/ChroMapper-AutoModder)（MIT）の自動の確かめを、改変せずに使っています。
+BeatLeader・AutoModder の公式ツールではありません。
 
 MEDIA ライブラリの詳細表示のアップロード日・評価・ランク状態・★は、Kinsi さんが公開している
 [BeatSaberScrappedData](https://github.com/kinsi55/BeatSaberScrappedData) の全曲データ（元のデータは BeatSaver・BeatLeader・ScoreSaber。
@@ -198,6 +233,7 @@ python3 serve.py
 - **機能の制限**: 出力フォルダやカバー画像の「自動再接続」はデスクトップ版専用です。ブラウザでは、
   プロジェクトを開くたびに選び直す必要があります。
 - **「難易度を測る」は使えません。** 追加プラグイン（nlm-rating）が Windows 用の exe しか無いためです。
+- **譜面チェックの「AutoModder」のタブも使えません。** 追加プラグイン（nlm-automodder）が Windows 用の exe しか無いためです。
 - **MEDIA のライブラリ**: ブラウザで追加したフォルダは記録されず、詳細表示も `Info.dat` に書かれている値だけです
   （NPS・長さ・アップロード日・プレイ記録などはデスクトップ版だけ）。
 - **ターミナルは開いたままにしてください。** 閉じるとサーバーが止まります。また、`file://` で

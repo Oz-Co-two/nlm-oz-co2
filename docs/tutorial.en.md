@@ -371,7 +371,7 @@ If you moved the files, select them again with "Reconnect output folder / cover 
 ## 10. Where to go next
 
 Once you are used to the basics, try these features too. They are explained in the [advanced tutorial](tutorial-advanced.en.md)
-(faster workflows, making the most of the NLE, the MEDIA library, building several difficulties, analyzing the song, checks before publishing, measuring ★, and more).
+(faster workflows, making the most of the NLE, the MEDIA library, building several difficulties, analyzing the song, checks before publishing, measuring ★, responding to review notes, and more).
 
 - **Clip editing in the NLE**: move, copy, split (C key) and join (Ctrl + G) clips to build repeated choruses and so on efficiently
 - **Linked clips**: link clips that should have the same content, such as repeated choruses, and editing the parent clip gives the other linked clips (children) the same content (children cannot be edited directly).
@@ -390,3 +390,4 @@ Once you are used to the basics, try these features too. They are explained in t
   Click a band to jump there, or place markers at the start of each part (see chapter 6 of the advanced tutorial, [Analyzing the song (tempo and structure)](tutorial-advanced.en.md#6-analyzing-the-song-tempo-and-structure)).
   Press **🧩 Create clips** at the left of the band to create empty NLE clips that follow the bands (repeats of the same part are linked automatically; see [Creating clips from the analysis](tutorial-advanced.en.md#creating-clips-from-the-analysis) in the advanced tutorial)
 - **Markers**: place a marker with Ctrl + E and jump between markers with Ctrl + [ / ]
+- **Review notes**: load ranking review notes in the "beat - text" form (.txt files or Discord messages) with **Load review notes…** in the File menu, then click a row in the list to jump to that spot. Mark fixed notes as done, add replies, and export them in the same form (see chapter 10 of the advanced tutorial, [Responding to review notes](tutorial-advanced.en.md#10-responding-to-review-notes))

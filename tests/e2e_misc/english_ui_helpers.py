@@ -252,6 +252,8 @@ def tour(ed):
     scan(ed, "譜面チェック")
     click_sel(ed, "#mcPanel .mcTab[data-tab=bl]", "BL評価リスト"); ed.wait(0.6); scan(ed, "BL評価リスト")
     click_sel(ed, "#mcPanel .mcTab[data-tab=mc]", "BS Map Check"); click_sel(ed, "#mcPanel .mcClose", "閉じる"); ed.wait(0.3)
+    from automodder_helpers import am_tour   # 譜面チェックの AutoModder のタブ（未導入・取り込みの説明・結果。応答は偽物）
+    am_tour(ed, scan)
     click_sel(ed, "#mFileBtn", "ファイル"); ed.wait(0.3); click_sel(ed, "#mFileMenu button[data-act=autolight]", "自動ライティング")
     wait_until(ed, "!!document.getElementById('dirtyDlg')", label="自動ライティングの確認"); scan(ed, "自動ライティングの確認")
     ed.key("Escape"); ed.wait(0.3)
@@ -270,3 +272,22 @@ def tour(ed):
     # 曲の解析（2026-10-19）: 解析中の帯・テンポの画面・帯・右クリック・⋯・ツールチップ・目盛りが変わった知らせ（応答は偽物）
     from analysis_helpers import analysis_tour
     analysis_tour(ed, scan)
+    from review_helpers import review_tour   # 審査の指摘（2026-10-27）: 読み込みの確認・一覧・飛んだ知らせ・書き出し・貼り付け・消すの確認
+    review_tour(ed, scan)
+    import_tour(ed)
+
+
+def import_tour(ed):
+    """曲データを読み込む（2026-10-27）: 読み込み中の画面・ライトがとても多い時の警告・知らせ（Standard 以外のモード・ライトボックス）・
+    3Dプレビューに無い環境の印のツールチップ。合成の譜面（ライト合計15万）を読むので最後に回る"""
+    from e2e_helpers import synth_load_js
+    ed.js(synth_load_js(lights=150000, diffs=("Hard", "Expert"), modes=[("OneSaber", ["Expert"])], boxes=3, gate=True))
+    wait_until(ed, "(b=>!!b&&b.classList.contains('on'))(document.getElementById('busyDlgBg'))", label="読み込み中の画面")
+    scan(ed, "曲データを読み込む（読み込み中）")
+    ed.js("window.__gateOpen()")
+    wait_until(ed, "window.__bulkDone&&!!document.querySelector('#dirtyDlg[data-dlg=lightHeavy]')", timeout=60, label="ライトがとても多い時の警告")
+    scan(ed, "ライトがとても多い時の警告")
+    click_sel(ed, "#dirtyDlg[data-dlg=lightHeavy] .ddBtns button", "OK"); ed.wait(0.3)
+    ed.js("(()=>{ const nd=window._dbg.rt.quickSetNode(); nd.data.env='WeaveEnvironment'; window._dbg.rt.applyInfoGraph(); return 1; })()")
+    wait_until(ed, "!document.getElementById('sqEnvNoPv').hidden", label="プレビューに無い環境の印")
+    scan(ed, "プレビューに無い環境")

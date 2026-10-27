@@ -15,7 +15,7 @@ helba kindly gave permission (in the comments on note) to publish, modify and re
 - **Reference manual**: https://helba.flashhub.net/nlm/manual/ (Japanese)
 - **Original changelog**: https://helba.flashhub.net/nlm/changelog.html (Japanese)
 - **Tutorials for this fork** (with screenshots): [basic](docs/tutorial.en.md) — from loading a song to placing notes, exporting and saving /
-  [advanced](docs/tutorial-advanced.en.md) — faster workflows, song analysis (tempo & structure), Edit only, linked clips, the MEDIA library, tempo, lights, the INFO screen and the checks before publishing
+  [advanced](docs/tutorial-advanced.en.md) — faster workflows, song analysis (tempo & structure), Edit only, linked clips, the MEDIA library, tempo, lights, the INFO screen, the checks before publishing and responding to ranking review notes
 
 The English tutorials show the English UI; the Japanese tutorials ([basic](docs/tutorial.md) / [advanced](docs/tutorial-advanced.md)) show the Japanese UI.
 
@@ -33,9 +33,15 @@ The English tutorials show the English UI; the Japanese tutorials ([basic](docs/
 - **Map check (BeatLeader criteria)**: a port of [BS Map Check](https://github.com/KivalEvan/BeatSaber-MapCheck) by Kival Evan (BeatLeader preset).
   Click a beat in the results to jump to those notes.
 - **NLM BL criteria list**: NLM's own checklist that follows the written BeatLeader Ranking Criteria in their numbered order.
-  It is only a guide, not an official judgement.
+  It is only a guide, not an official judgement. Checked against 189 BeatLeader ranked maps: 99% of the difficulties that passed the review show no violation.
+- **AutoModder checks**: runs the automatic checks of AutoModder (a ChroMapper extension that reviewers often use) unchanged, with its default settings,
+  in a tab of the map check panel, using the optional plugin [nlm-automodder](https://github.com/Oz-Co-two/nlm-automodder). **Not an official BeatLeader or AutoModder tool.**
+- **Ranking review notes**: load review notes ("beat - text" .txt files or the text of a Discord message), jump to each note on the map,
+  mark notes as done, add replies and export them in the same form. NLM's check results can be exported in that form too.
 - **Estimate difficulty (approx. BeatLeader stars)**: shows ★ and Pass / Tech / Acc with the optional plugin [nlm-rating](https://github.com/Oz-Co-two/nlm-rating).
   The values are approximations and this is **not an official BeatLeader tool**.
+- **Bring in existing maps**: load v2, v3 and v4 maps (tempo changes and environment included) with "Load song data" or by dragging them from MEDIA.
+  NLM exports in the v3 format.
 - **MEDIA library**: remembers your song folders (e.g. CustomLevels) and lists them as a grid or as a table with one row per difficulty
   (★, NJS, NPS, length, upload date, download date, play count, ...). Sort by any column and filter by ★, length, NJS, NPS, difficulty, mode and more.
   ★ for unranked maps can be estimated with nlm-rating (shown as "NLM est.", not official).
@@ -133,6 +139,10 @@ The map check (BeatLeader criteria) is a port of [BS Map Check](https://github.c
 The add-on plugin [nlm-rating](https://github.com/Oz-Co-two/nlm-rating) used by "Estimate difficulty" is a separate program (MIT) that is not included in NLM.
 It uses BeatLeader's [RatingAPI](https://github.com/BeatLeader/RatingAPI) and [beatleader-analyzer](https://github.com/BeatLeader/beatleader-analyzer) (MIT).
 
+The add-on plugin [nlm-automodder](https://github.com/Oz-Co-two/nlm-automodder) used by the "AutoModder" tab of the map check is also a separate program (MIT)
+that is not included in NLM. It uses the automatic checks of [AutoModder](https://github.com/LightAi39/ChroMapper-AutoModder) (MIT) by LightAi39 without modification.
+It is not an official BeatLeader or AutoModder tool.
+
 The upload date, rating, ranked status and ★ in the MEDIA library come from the song data published by Kinsi's
 [BeatSaberScrappedData](https://github.com/kinsi55/BeatSaberScrappedData) (originally from BeatSaver, BeatLeader and ScoreSaber; the same data some Beat Saber mods use).
 Your PC downloads it from jsDelivr at most once a day; nothing about you or your songs is sent (you can turn this off in Preferences → MEDIA).
@@ -168,7 +178,7 @@ in your default browser (use `--no-browser` to skip that). The access key change
 
 `tools/` contains scripts used during development (tempo / beat grid analysis, song structure analysis reports — the calculation is the same `song_analysis/`
 as "Analyze song" in the app —, build and deploy, JS syntax check, automated tests,
-map check comparison tests, release file creation, tutorial screenshots). They are not meant for regular users,
+map check comparison tests, counting false findings on ranked maps, checking how review note files are read, release file creation, tutorial screenshots). They are not meant for regular users,
 and their documentation ([tools/README.md](tools/README.md), [tests/README.md](tests/README.md)) is in Japanese.
 
 ## Using it on Linux and other non-Windows systems (for reference, untested)
@@ -205,6 +215,7 @@ the server starts, so a bookmarked URL will not work after a restart. Press `Ctr
 - **Limitations**: automatic reconnection of the output folder and cover image is desktop-only. In the browser you need to select them
   again each time you open a project.
 - **"Estimate difficulty" is not available**, because the add-on plugin (nlm-rating) is a Windows exe only.
+- **The "AutoModder" tab of the map check is not available either**, because the add-on plugin (nlm-automodder) is a Windows exe only.
 - **MEDIA library**: folders added in the browser are not remembered, and the table only shows what is in each `Info.dat`
   (NPS, length, upload date, play data, etc. are desktop-only).
 - **Keep the terminal open.** Closing it stops the server. Opening `editor.html` directly with `file://` does not work either.

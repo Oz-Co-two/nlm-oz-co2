@@ -12,7 +12,7 @@ make_tutorial_shots.py のものを使う。NLE の帯の位置は _dbgApp.nleSc
 「曲を解析しますか？」(06-1b)と、解析が終わった時の「次にやること」の案内(06-3b)は、テストの環境（tools/cdp.py の Editor.TEST_SETTINGS）では
 出ない設定なので、撮る時だけ localStorage の bsnm_anaAsk / bsnm_anaGuide を消して出し（基本編と同じ analysis_helpers の ask_on・guide_on）、
 撮った後に '0' へ戻す。
-環境設定(10-1)の「曲の解析」の2つのチェックも、初めて使う人と同じ（オン）に見せて撮る。
+環境設定(11-1)の「曲の解析」の2つのチェックも、初めて使う人と同じ（オン）に見せて撮る。
 
 「曲を解析」(6章)は、解析の応答を自動テストと同じ偽物（tests/_lib/analysis_helpers.py の ana_mock）にして、見本の結果
 （TEMPO_SHOT・STRUCT_SHOT。曲名の無い、イントロ・Aメロ・Bメロ・サビが繰り返す形）で撮る。合成音を本当に解析しても中身が乏しいため。
@@ -24,14 +24,28 @@ make_tutorial_shots.py のものを使う。NLE の帯の位置は _dbgApp.nleSc
 環境変数 NLM_RATING_DIR で指定する。省略時は配布フォルダ NLM-app/plugins/rating を探し、
 無ければ「プラグイン未導入」の画面を撮る。
 
-MEDIA ライブラリ（3章・10章の MEDIA タブ）は、自動テストと同じ素材 tools/fixtures/media_lib（架空の曲）を一時フォルダの
+3章の「曲データを読み込んだ時の知らせ」(03-9〜03-11) も別の起動で撮る（曲データを読み込むと音源・BPM・環境・クリップが変わるため）。
+読み込み中の画面(03-9)は 0.25 秒より早く終わると出ないので、合成の譜面の .dat を読む所で止めて撮る（tests/_lib/e2e_helpers.py の synth_load_js と同じ作り）。
+読み込んだ後の知らせ(03-10)は作り物の v4 の見本（NJS の変化・ライトボックス・難易度ごとに違う環境）で、数秒で消えるので写しを作って撮る。
+3D プレビューに無い環境の印(03-11)の説明はツールチップ（ブラウザの吹き出し）で撮れないので、同じ文の写しの吹き出しを置いて撮る。
+
+10章「審査の指摘に対応する」(10-1〜10-5) も別の起動で、素材 tools/fixtures/rich.nlmf（Hard・Expert）を開き、作り物の指摘の文（RV_PASTE・RV_FILE・
+RV_NOHEAD。実物の審査の文は使わない）を読み込んで撮る。10-5 の★/Tech は「難易度を測る」の結果を使うので、プラグイン（NLM_RATING_DIR）があれば先に測る。
+
+9章の AutoModder のタブ（09-7・09-8）は追加プラグイン nlm-automodder が要る。最初はプラグインの無い状態で取り込みの案内(09-8)を撮り、
+次に一時のデータフォルダへプラグインを置いて［GitHub から取り込む］を押す（取り込みの要求は状態の問い合わせに差し替える＝ネットへは出ない）。
+プラグインは、取り込み済みのフォルダ（plugins/automodder。中に current.json と版のフォルダ）を環境変数 NLM_AUTOMODDER_DIR で、
+または配布の zip を NLM_AUTOMODDER_ZIP で指定する。省略時は配布フォルダ NLM-app/plugins/automodder を探し、無ければ 09-7 は撮らない。
+
+MEDIA ライブラリ（3章・11章の MEDIA タブ）は、自動テストと同じ素材 tools/fixtures/media_lib（架空の曲）を一時フォルダの
 「CustomLevels」へ写し、撮影用のデータフォルダの config/library.json に記録してから読み直させる（exe 版のフォルダ選択で
 選んだのと同じ状態。JS から記録を増やす口は無い）。部品は tests/_lib/e2e_helpers.py の media_lib_*（tests/ 側は変えない）。
 ネットへは出ない（tools/cdp.py が NLM_NO_NET=1）。全曲データ・NLM推定の★は見本の値（SAMPLE_DETAILS・media_lib_sample_extra）、
 プレイ記録は見本の PlayerData.dat を書いて使う。
 
-使い方: .venv-build/Scripts/python.exe tools/make_advanced_shots.py [--en] [章番号...]
-        例: make_advanced_shots.py 03 09 で3章と9章の画像だけ保存（操作は最初から全部行う）
+使い方: .venv-build/Scripts/python.exe tools/make_advanced_shots.py [--en] [章番号 or 画像の番号...]
+        例: make_advanced_shots.py 03 09 で3章と9章の画像だけ保存（操作は最初から全部行う。別の起動で撮る章は、要らなければ起動しない）
+            make_advanced_shots.py 03-9 09-7 で、その番号の画像だけ保存
         --en: 英語表示で撮って docs/images/tutorial-advanced-en/ へ保存する（英語版 docs/tutorial-advanced.en.md 用）
 """
 import json
@@ -50,6 +64,7 @@ from cdp import Editor  # noqa: E402
 import e2e_helpers as lib_h  # noqa: E402
 import analysis_helpers as ana_h  # noqa: E402
 import nle_helpers as nh  # noqa: E402
+import review_helpers as rv_h  # noqa: E402
 
 mts.OUT = HERE.parent / "docs" / "images" / ("tutorial-advanced-en" if mts.LANG == "en" else "tutorial-advanced")
 # 上級編だけで文言から要素を探す所の、英語表示での文言（lang/en.json と同じ。基本編の表 mts.TEXT_EN に足す）
@@ -66,6 +81,8 @@ mts.TEXT_EN.update({
 W, H = mts.W, mts.H
 RIGHT = mts.RIGHT
 PLUGIN_DIR = Path(os.environ.get("NLM_RATING_DIR") or HERE.parent / "NLM-app" / "plugins" / "rating")
+AM_DIR = Path(os.environ.get("NLM_AUTOMODDER_DIR") or HERE.parent / "NLM-app" / "plugins" / "automodder")   # 取り込み済みの AutoModder のプラグイン
+AM_ZIP = os.environ.get("NLM_AUTOMODDER_ZIP")   # または配布の zip（中に plugin.json と exe）
 VIEW3D = (400, 560, 1120, 520)   # 3Dビューの中央下（基本編と同じ切り取り）
 
 
@@ -535,7 +552,7 @@ def clip_link(ed, t):
 
 
 def media_library(ed, t):
-    """3章「MEDIA ライブラリ」と10章の環境設定の MEDIA タブ（03-3〜03-8・10-2）"""
+    """3章「MEDIA ライブラリ」と11章の環境設定の MEDIA タブ（03-3〜03-8・11-2）"""
     # 素材（架空の曲）を一時フォルダの CustomLevels へ写して記録する（カタログに「CustomLevels」と出る）。
     # Extras の画像・音楽は名前だけ分かりやすくする（見本の値は曲のフォルダ名で引くので影響しない）
     tmp = Path(tempfile.mkdtemp(prefix="nlm_shots_lib_"))
@@ -625,7 +642,7 @@ def media_library(ed, t):
                clip=box(ed, ["#ctxmenu", [x - 60, y - 40, 120, 80], [x2 - 60, y2 - 14, 120, 28]], pad=50))
         hide_menu(ed)
 
-        # ---- 10-2: 環境設定の MEDIA タブ ----
+        # ---- 11-2: 環境設定の MEDIA タブ ----
         # exe 版の画面（［ファイルを選ぶ…］がある）で撮るため、exe 版の窓口（pywebview）のプレイ記録の選択だけを置く。撮った後に外す
         ed.js("window.pywebview={api:{lib_pick_playdata:async()=>null}};true")
         t.click_el("#mbSettings"); ed.wait(0.6)
@@ -639,7 +656,7 @@ def media_library(ed, t):
           const a=document.getElementById('libRatePar').closest('.slRow'), b=a.nextElementSibling;
           const r1=a.getBoundingClientRect(), r2=b.getBoundingClientRect();
           return [r1.left, r1.top, Math.max(r1.right,r2.right)-r1.left, r2.bottom-r1.top]; })()""")
-        t.shot("10-2-settings-media", marks=json.dumps([{"t": "#tutSetNet", "n": 1, "at": "l"}, {"t": rate, "n": 2, "at": "l"},
+        t.shot("11-2-settings-media", marks=json.dumps([{"t": "#tutSetNet", "n": 1, "at": "l"}, {"t": rate, "n": 2, "at": "l"},
                                                          {"t": "#tutSetPlay", "n": 3, "at": "l"}]),
                clip=box(ed, ["#settingsBox"], pad=40))
         t.click_el("#settingsBox .setTab[data-tab=app]"); ed.wait(0.3)
@@ -647,6 +664,317 @@ def media_library(ed, t):
         ed.js("delete window.pywebview;true")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+# ---- 3章「曲データを読み込んだ時の知らせ」（03-9〜03-11）。曲名・作者は作り物 ----
+BULK_NAME = "Sample Song"
+# 合成の譜面（v3）の「曲データを読み込む」を始める（終わりを待たない。終われば window.__bulkDone）。O.gateAt の .dat を読む所で止まり、
+# window.__gateOpen() で続く（読み込み中の画面を撮るため。tests/_lib/e2e_helpers.py の synth_load_js と同じ作りで、止める難易度を選べる）
+_BULK_GATE_JS = r"""(()=>{
+  const O=__OPTS__;
+  const bm=(d,i)=>({_difficulty:d,_difficultyRank:1+2*i,_beatmapFilename:d+'Standard.dat',_noteJumpMovementSpeed:16,_noteJumpStartBeatOffset:0});
+  const info={_version:'2.1.0',_songName:O.name,_songSubName:'',_songAuthorName:'NLM Tutorial',_levelAuthorName:'YourName',_beatsPerMinute:120,
+    _songTimeOffset:0,_shuffle:0,_shufflePeriod:0,_previewStartTime:1,_previewDuration:2,_songFilename:'song.egg',_coverImageFilename:'',
+    _environmentName:O.env,_difficultyBeatmapSets:[{_beatmapCharacteristicName:'Standard',_difficultyBeatmaps:O.diffs.map(bm)}]};
+  const dat=()=>JSON.stringify({version:'3.3.0',bpmEvents:[],
+    colorNotes:Array.from({length:16},(_,k)=>({b:4+k,x:1+(k%2),y:0,c:k%2,d:1,a:0})),bombNotes:[],obstacles:[],sliders:[],burstSliders:[],
+    basicBeatmapEvents:Array.from({length:32},(_,k)=>({b:k,et:k%5,i:1,f:1}))});
+  let open=null; const gate=new Promise(r=>{ open=r; }); window.__gateOpen=()=>{ open(); return true; };
+  window.__bulkDone=false;
+  (async()=>{
+    const wav=await (await fetch('tools/fixtures/basic.wav',{cache:'no-store'})).blob();
+    const dir={name:O.name, getFileHandle:async nm=>{
+      if(nm===info._songFilename) return {name:nm,getFile:async()=>new File([wav],'basic.wav',{type:'audio/wav'})};
+      if(!/\.dat$/.test(nm)) throw new DOMException('not found','NotFoundError');
+      if(nm===O.gateAt) await gate;
+      return {name:nm,getFile:async()=>new File([dat()],nm,{type:'application/json'})}; }};
+    await window._dbg.rt.bulkLoadSongData({name:O.name,info,dir});
+    window.__bulkDone=true; })();
+  return true; })()"""
+# v4 の曲の「曲データを読み込む」（tests/e2e/test_bulk_import.py の _LOAD_V4_JS と同じ。終わるまで待つ）
+_LOAD_V4_JS = r"""(async()=>{
+  const files=%s;
+  const wav=await (await fetch('tools/fixtures/basic.wav',{cache:'no-store'})).blob();
+  const dir={name:'v4_map', getFileHandle:async nm=>{
+    if(nm==='song.ogg') return {name:nm,getFile:async()=>new File([wav],'basic.wav',{type:'audio/wav'})};
+    if(!(nm in files)) throw new DOMException('not found','NotFoundError');
+    return {name:nm,getFile:async()=>new File([JSON.stringify(files[nm])],nm,{type:'application/json'})}; }};
+  await window._dbg.rt.bulkLoadSongData({name:'v4_map',native:true,entry:{},_v4:true,info:{},dir});
+  return true; })()"""
+
+
+def _v4_sample():
+    """v4 の見本（03-10）: 3つの難易度（Hard だけ別の環境）・全難易度で共有するライトショーにライトボックス 3 グループ・Expert に NJS の変化 2 回。
+    中身の番号はすべて合う（知らせに出したい物だけを入れる）。テンポは 120 BPM の区間 1 つ＝テンポの知らせは出ない"""
+    def diff(beats, njs=()):
+        return {"version": "4.1.0", "colorNotes": [{"b": b, "i": k % 2} for k, b in enumerate(beats)],
+                "colorNotesData": [{"x": 1, "y": 0, "c": 0, "d": 1}, {"x": 2, "y": 0, "c": 1, "d": 1}],
+                "bombNotes": [], "bombNotesData": [], "obstacles": [], "obstaclesData": [], "arcs": [], "arcsData": [], "chains": [], "chainsData": [],
+                "njsEvents": [{"b": b, "i": k} for k, (b, _, _) in enumerate(njs)],
+                "njsEventData": [{"p": 0, "e": e, "d": d} for _, e, d in njs]}
+    names = (("Hard", 1), ("Expert", 0), ("ExpertPlus", 0))
+    info = {"version": "4.0.1", "song": {"title": "Sample V4 Song", "subTitle": "", "author": "NLM Tutorial"},
+            "audio": {"songFilename": "song.ogg", "songDuration": 16, "audioDataFilename": "AudioData.dat", "bpm": 120, "lufs": 0,
+                      "previewStartTime": 1, "previewDuration": 2},
+            "songPreviewFilename": "song.ogg", "coverImageFilename": "", "environmentNames": ["DefaultEnvironment", "KaleidoscopeEnvironment"],
+            "colorSchemes": [],
+            "difficultyBeatmaps": [{"characteristic": "Standard", "difficulty": d, "beatmapAuthors": {"mappers": ["YourName"], "lighters": []},
+                                    "environmentNameIdx": e, "beatmapColorSchemeIdx": 0, "noteJumpMovementSpeed": 16, "noteJumpStartBeatOffset": 0,
+                                    "beatmapDataFilename": d + ".beatmap.dat", "lightshowDataFilename": "Lightshow.dat"} for d, e in names],
+            "customData": {}}
+    n = round(32 * 60 / 120 * 44100)
+    return {"Info.dat": info,
+            "AudioData.dat": {"version": "4.0.0", "songChecksum": "", "songSampleCount": n, "songFrequency": 44100,
+                              "bpmData": [{"si": 0, "ei": n, "sb": 0, "eb": 32}], "lufsData": []},
+            "Lightshow.dat": {"version": "4.0.0", "basicEvents": [{"b": b, "i": 0} for b in range(0, 32, 2)], "basicEventsData": [{"t": 0, "i": 1, "f": 1}],
+                              "colorBoostEvents": [], "colorBoostEventsData": [], "waypoints": [], "waypointsData": [], "indexFilters": [],
+                              "lightColorEventBoxes": [], "lightColorEvents": [], "eventBoxGroups": [{"b": i, "g": i, "t": 1, "e": []} for i in range(3)],
+                              "basicEventTypesWithKeywords": {"d": []}, "useNormalEventsAsCompatibleEvents": True},
+            "Hard.beatmap.dat": diff([4, 6, 8, 10, 12, 14]),
+            "Expert.beatmap.dat": diff([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], njs=((0, -1, 2), (8, 3, -2))),
+            "ExpertPlus.beatmap.dat": diff([b / 2 for b in range(8, 32)])}
+
+
+def tooltip_copy(ed, sel, tid="tutTip"):
+    """sel の title（ツールチップ）の写しを、要素のすぐ下に吹き出しとして置く（本物のツールチップはブラウザが描くので撮れない）。画面の右端に入るよう左へ寄せる"""
+    ed.js(f"""(()=>{{ const b=document.querySelector({sel!r}), r=b.getBoundingClientRect();
+      const tip=document.createElement('div'); tip.id={tid!r}; tip.textContent=b.title;
+      Object.assign(tip.style,{{position:'fixed',left:Math.round(r.left+10)+'px',top:Math.round(r.bottom+8)+'px',maxWidth:'460px',padding:'5px 9px',
+        background:'#2b2b2b',color:'#f2f2f2',border:'1px solid #6e6e6e',borderRadius:'4px',font:'12px/1.45 "Segoe UI","Yu Gothic UI",sans-serif',
+        whiteSpace:'pre-wrap',zIndex:99997,boxShadow:'1px 2px 6px rgba(0,0,0,.55)',pointerEvents:'none'}});
+      document.body.appendChild(tip);
+      const tr=tip.getBoundingClientRect(); if(tr.right>{RIGHT - 12}) tip.style.left=Math.max(8,{RIGHT - 12}-tr.width)+'px';
+      return 1; }})()""")
+    ed.wait(0.2)
+
+
+def toast_copy(ed, tid="tutToast"):
+    """画面の下の知らせ（数秒で消える）の写しを同じ位置に作り、本物を隠す"""
+    ed.js(f"""(()=>{{ const e=document.getElementById('errToast'), r=e.getBoundingClientRect(), c=e.cloneNode(true); c.id={tid!r};
+      Object.assign(c.style,{{left:r.left+'px',top:r.top+'px',bottom:'auto',transform:'none',width:r.width+'px'}});
+      document.body.appendChild(c); e.style.display='none'; return 1; }})()""")
+    ed.wait(0.2)
+
+
+def bulk_notices(ed, t):
+    """3章「曲データを読み込んだ時の知らせ」（03-9 読み込み中の画面・03-11 プレビューに無い環境の印・03-10 v4 の見本を読み込んだ後の知らせ）"""
+    # ---- 03-9: 読み込み中の画面（Expert（2/3）の .dat を読む所で止める）。環境は 3D プレビューに無い Weave ----
+    opts = {"name": BULK_NAME, "env": "WeaveEnvironment", "diffs": ["Hard", "Expert", "ExpertPlus"], "gateAt": "ExpertStandard.dat"}
+    ed.js(_BULK_GATE_JS.replace("__OPTS__", json.dumps(opts)))
+    wait_until(ed, "(b=>!!b&&b.classList.contains('on'))(document.getElementById('busyDlgBg'))", "読み込み中の画面が出ません")
+    wait_until(ed, "/Expert\\b/.test(document.querySelector('#busyDlg .bdMsg').textContent)",
+               lambda: "読み込み中の画面が Expert で止まりません: " + str(ed.js("document.querySelector('#busyDlg .bdMsg').textContent")))
+    ed.move(1700, 1060); ed.wait(0.4)
+    t.shot("03-9-bulk-loading", clip=box(ed, ["#busyDlg"], pad=40))
+    ed.js("window.__gateOpen()")
+    wait_until(ed, "window.__bulkDone&&!document.getElementById('busyDlgBg')", "曲データの読み込みが終わりません", timeout=60)
+
+    # ---- 03-11: トップバーの環境の名前の横の ⚠ と、その説明（ツールチップの写し） ----
+    hide_toast(ed)
+    wait_until(ed, "!document.getElementById('sqEnvNoPv').hidden", "プレビューに無い環境の印（⚠）が出ません")
+    ed.move(1700, 1060); ed.wait(0.3)
+    tooltip_copy(ed, "#sqEnvBtn")
+    t.shot("03-11-env-nopv", marks="[{t:'#sqEnvNoPv',pad:2}]", clip=box(ed, ["#diffTools", "#tutTip"], pad=24))
+    ed.js("document.getElementById('tutTip').remove();true")
+
+    # ---- 03-10: v4 の見本を、曲の無い新しい状態で読み込んだ後の知らせ ----
+    ed.reload(clear_storage=False)   # 言語の設定は残す
+    t = mts.Tut(ed)
+    ed.js(_LOAD_V4_JS % json.dumps(_v4_sample()))
+    wait_until(ed, "(e=>e.style.display==='block'&&/NJS/.test(e.textContent))(document.getElementById('errToast'))",
+               lambda: "v4 の見本を読み込んだ後の知らせが出ません: " + str(ed.js("document.getElementById('errToast').textContent")))
+    toast_copy(ed)
+    ed.move(1700, 1060); ed.wait(0.3)
+    t.shot("03-10-bulk-notice", clip=box(ed, ["#tutToast"], pad=30))
+    ed.js("document.getElementById('tutToast').remove();true")
+
+
+# ---- 10章「審査の指摘に対応する」（10-1〜10-5）。指摘の文は作り物（実物の審査の文は使わない）。
+# 素材 rich の Expert: ノーツ 1〜6（2個ずつ）・7.5・10・12…／ボム 8・21／アーク 14・18 ----
+RV_PASTE = """Expert
+4 - the first notes come in a bit suddenly, consider more lead time
+7.5 - slightly early compared to the drum?
+(S) 13-15 - this part feels a little cramped
+    maybe spread the notes out
+(X) 21 - this bomb is hard to see
+nice flow overall"""
+RV_FILE = ("Hard.txt", """Hard
+2 - parity feels awkward here
+6, 8 - these swings could flow better
+12.g - typo in the beat""")   # 最後の行は拍として読めない（「読み方の注意」に出る）
+RV_NOHEAD = """3 - double check this note
+5 - small vision block?"""
+RV_REPLY = "Moved them half a beat later"
+
+
+def load_rich(ed):
+    """素材 rich（Hard・Expert）を開き、basic.wav を音源にする（tools/cdp.py の load_fixture と同じ）。
+    英語で撮る時は、素材の日本語の曲名・クリップの名前（リッチ テスト曲）を英語にする（英語版の画像に日本語を写さない）"""
+    text = (HERE / "fixtures" / "rich.nlmf").read_text(encoding="utf-8")
+    if mts.LANG == "en":
+        text = text.replace("リッチ テスト曲", "Rich Test Song")
+    ed.js("""(async()=>{ const rt=window._dbg.rt; const pj=%s;
+      await rt.applyProject(pj);
+      const blob=await (await fetch('tools/fixtures/basic.wav',{cache:'no-store'})).blob();
+      const file=new File([blob],'basic.wav',{type:'audio/wav'});
+      await rt.loadSongFromItem({isMusic:true,name:'rich',songFh:{getFile:async()=>file},info:{_beatsPerMinute:pj.bpm}},pj.musicBeat||0);
+      return true; })()""" % text)
+    ed.wait(1.5)
+
+
+def _rv_mark_row(ed, text, sel, tid):
+    """一覧の、文に text を含む行の中の sel に撮影用の id を付ける"""
+    ok = ed.js(f"""(()=>{{ const row=[...document.querySelectorAll('#rvPanel .rvItem')].find(r=>(r.querySelector('.rvText')||{{textContent:''}}).textContent.includes({json.dumps(text)}));
+      const e=row&&row.querySelector({sel!r}); if(e) e.id={tid!r}; return !!e; }})()""")
+    if not ok:
+        raise SystemExit(f"一覧の「{text}」の行に {sel} がありません")
+
+
+def review_notes(ed, t):
+    """10章「審査の指摘に対応する」: 10-2 貼り付けの画面 → 読み込む → 10-3 2回目の読み込みの確認（ファイル＋見出しの無い文・足すか置き換えるか）→
+    10-1 一覧（1行へ飛び、返事を書き、別の行を済みに）→ 10-4 NLE の数字の帯の印 → 10-5 書き出し（NLM の確かめの結果）"""
+    # ★/Tech（10-5 の R5.A）は「難易度を測る」の結果を使うので、プラグインがあれば先に測っておく
+    if (PLUGIN_DIR / "current.json").exists():
+        shutil.copytree(PLUGIN_DIR, Path(ed.data_dir) / "plugins" / "rating")
+        t.click_el("#mFileBtn"); ed.wait(0.5)
+        t.click_el("#mFileMenu button[data-act=rating]")
+        wait_until(ed, "!!document.querySelector('#rtPanel .rtTable, #rtPanel .rtErr')", "難易度を測るの結果が出ません", timeout=90)
+        t.click_el("#rtPanel .rtClose"); ed.wait(0.4)
+
+    # ---- 10-2: 貼り付けの画面（Discord の本文の例） ----
+    t.click_el("#mFileBtn"); ed.wait(0.5)
+    t.click_el("#mFileMenu button[data-act=reviewpaste]")
+    wait_until(ed, "!!document.querySelector('#dirtyDlg[data-rv=rvPasteDlg] .rvPasteText')", "貼り付けの画面が出ません")
+    ed.js(f"(a=>{{ a.value={json.dumps(RV_PASTE)}; a.dispatchEvent(new Event('input',{{bubbles:true}})); a.scrollTop=0; return 1; }})(document.querySelector('#dirtyDlg .rvPasteText'))")
+    ed.move(1700, 1060); ed.wait(0.3)
+    t.shot("10-2-review-paste", clip=box(ed, ["#dirtyDlg"], pad=30))
+    t.click_el("#dirtyDlg[data-rv=rvPasteDlg] .ddBtns button[data-v=ok]")
+    wait_until(ed, "!!document.querySelector('#dirtyDlg[data-rv=rvImport] .ddBtns button.pri')", "貼り付けた文の読み込みの確認が出ません")
+    t.click_el("#dirtyDlg[data-rv=rvImport] .ddBtns button.pri")
+    wait_until(ed, "window._dbgApp.review().open&&window._dbgApp.review().items.length===4",
+               lambda: "貼り付けた指摘を読み込めません: " + json.dumps(rv_h.rv(ed), ensure_ascii=False)[:600])
+
+    # ---- 10-3: 2回目の読み込みの確認（今ある指摘に足すか置き換えるかが出る）。ファイル（Hard.txt）＋見出しの無い貼り付けた文 ----
+    rv_h.rv_open_import(ed, [RV_FILE, (None, RV_NOHEAD)])
+    ed.js("""(()=>{ const d=document.querySelector('#dirtyDlg .rvWarns'); if(d) d.open=true;
+      const st=[...document.querySelectorAll('#dirtyDlg .rvSrcStat')]; st.forEach((e,i)=>e.id='tutRvStat'+i); return st.length; })()""")
+    for sel, what in (("#dirtyDlg .rvWarns", "読み方の注意"), ("#dirtyDlg .rvPick", "難易度を選ぶ欄"), ("#dirtyDlg .rvExisting", "足すか置き換えるか")):
+        if not ed.js(f"!!document.querySelector({sel!r})"):
+            raise SystemExit(f"読み込みの確認に「{what}」が出ません")
+    ed.move(1700, 1060); ed.wait(0.3)
+    t.shot("10-3-review-import", marks="""[{t:'#tutRvStat0',n:1,at:'l'},{t:'#tutRvStat1'},{t:'#dirtyDlg .rvWarns',n:2,at:'l'},
+      {t:'#dirtyDlg .rvPick',n:3,at:'l'},{t:'#dirtyDlg .rvExisting',n:4,at:'l'},{t:'#dirtyDlg .rvISum',n:5,at:'l'}]""",
+           clip=box(ed, ["#dirtyDlg"], pad=50))
+    t.click_el("#dirtyDlg[data-rv=rvImport] .ddBtns button.pri")
+    wait_until(ed, "!document.querySelector('#dirtyDlg[data-rv=rvImport]')&&window._dbgApp.review().items.length===8",
+               lambda: "2回目の指摘を読み込めません: " + str(len(rv_h.rv(ed)["items"])))
+
+    # ---- 10-1: 一覧。Expert の拍4の指摘へ飛び、返事を書く。Hard の1つを済みにする ----
+    ed.js("(()=>{ document.querySelectorAll('#rvPanel details').forEach(d=>d.open=true); return 1; })()")
+    done_id = rv_h.rv_row(ed, "parity feels awkward")["id"]
+    ed.js(f"(c=>{{ c.click(); return 1; }})(document.querySelector('#rvPanel .rvItem[data-id={json.dumps(done_id)}] .rvDone'))")
+    wait_until(ed, f"window._dbgApp.review().items.some(x=>x.id==={json.dumps(done_id)}&&x.done)", "指摘を済みにできません")
+    rv_h.rv_click_row(ed, "first notes")
+    wait_until(ed, "Math.abs(window._dbgApp.state().cur-4)<1e-6", "指摘の拍4へ移動しません")
+    _rv_mark_row(ed, "first notes", ".rvReply", "tutRvReply")
+    t.click_el("#tutRvReply"); ed.wait(0.2); t.type(RV_REPLY); ed.key("Enter"); ed.wait(0.4)
+    wait_until(ed, f"window._dbgApp.review().items.some(x=>x.reply==={json.dumps(RV_REPLY)})", "返事を書けません")
+    _rv_mark_row(ed, "first notes", ".rvReply", "tutRvReply")
+    _rv_mark_row(ed, "first notes", ".rvBeat", "tutRvBeat")
+    _rv_mark_row(ed, "first notes", ".rvText", "tutRvText")
+    _rv_mark_row(ed, "parity feels awkward", ".rvDone", "tutRvDone")
+    u = ed.js("""(()=>{ const p=document.getElementById('rvPanel'); const a=p.querySelector('.rvLoad').getBoundingClientRect(), b=p.querySelector('.rvExport').getBoundingClientRect();
+      const f=p.querySelector('.rvFilt').getBoundingClientRect(), h=p.querySelector('.rvHideDone').getBoundingClientRect();
+      return [[a.left,a.top,b.right-a.left,Math.max(a.bottom,b.bottom)-a.top],[f.left,Math.min(f.top,h.top),h.right-f.left,Math.max(f.bottom,h.bottom)-Math.min(f.top,h.top)]]; })()""")
+    ed.move(1700, 1060); ed.wait(0.4)
+    t.shot("10-1-review-panel", marks=json.dumps([
+        {"t": u[0], "n": 1, "at": "r"}, {"t": u[1], "n": 2, "at": "r"}, {"t": "#tutRvDone", "n": 3, "at": "l"},
+        {"t": "#tutRvBeat", "n": 4, "at": "r"}, {"t": "#tutRvText", "n": 5, "at": "r"}, {"t": "#tutRvReply", "n": 6, "at": "r"}]),
+        clip=box(ed, ["#rvPanel"], pad=46))
+
+    # ---- 10-4: NLE の拍の数字の帯の印（①▼＝拍7.5・②範囲の帯＝13〜15・③選んでいる指摘（範囲 13〜15）の点線と薄い帯） ----
+    # 行をクリックすると再生位置もその拍へ動き、点線が再生位置の線に隠れるので、選んだ後に再生位置を拍9へ離す
+    rv_h.rv_click_row(ed, "cramped")
+    mts.seek_to(ed, 9)
+    g = nle(ed)
+    x = {b: nle(ed, b)["x"] for b in (4, 7.5, 13, 15, 21)}
+    if not all(g["left"] + g["gut"] < x[b] < g["left"] + g["w"] for b in x):
+        raise SystemExit(f"指摘の印が NLE に見えていません: {x}")
+    bot = g["tempo"]   # 印は数字の帯の下端（テンポの帯の上）に描かれる
+    lanes_bot = g["lanes"] + g["laneH"] * 2
+    t.shot("10-4-review-marks", marks=json.dumps([
+        {"t": [x[7.5] - 6, bot - 11, 12, 12], "n": 1, "at": "b", "pad": 2},
+        {"t": [x[13] - 4, bot - 11, x[15] - x[13] + 8, 12], "n": 2, "at": "b", "pad": 2},
+        {"t": [x[13] - 3, g["lanes"] + 2, x[15] - x[13] + 6, lanes_bot - g["lanes"] - 6], "n": 3, "at": "r", "pad": 1}]),
+        clip=(round(g["left"]), round(g["ruler"]) - 30, round(min(x[21] + 160, g["left"] + g["w"]) - g["left"]), round(lanes_bot - g["ruler"]) + 40))
+
+    # ---- 10-5: 書き出し（NLM の確かめの結果） ----
+    t.click_el("#rvPanel .rvExport")
+    wait_until(ed, "!!document.querySelector('#dirtyDlg[data-rv=rvExportDlg]')", "書き出しの画面が出ません")
+    t.click_el("#dirtyDlg input[name=rvXKind][value=check]")
+    wait_until(ed, "(p=>!!p&&p.value.length>0)(document.querySelector('#dirtyDlg .rvXPre'))", "NLM の確かめの結果が出ません", timeout=40)
+    ed.js("""(()=>{ const o=[...document.querySelectorAll('#dirtyDlg .rvXOpts')].find(e=>e.offsetParent); if(o) o.id='tutRvXOpts'; return !!o; })()""")
+    ed.move(1700, 1060); ed.wait(0.3)
+    t.shot("10-5-review-export", marks="""[{t:'#dirtyDlg .lkOpts',n:1,at:'l'},{t:'#tutRvXOpts',n:2,at:'l'},{t:'#dirtyDlg .rvXPre',n:3,at:'l'},
+      {t:'#dirtyDlg .ddBtns',n:4,at:'l'}]""", clip=box(ed, ["#dirtyDlg"], pad=50))
+    t.click_el("#dirtyDlg .ddBtns button[data-v=cancel]"); ed.wait(0.3)
+
+
+def am_install_plugin(ed):
+    """AutoModder のプラグインを一時のデータフォルダへ置く（取り込み済みのフォルダ AM_DIR か配布の zip AM_ZIP から）。置けたら True"""
+    import zipfile
+    dst = Path(ed.data_dir) / "plugins" / "automodder"
+    if (AM_DIR / "current.json").exists():
+        shutil.copytree(AM_DIR, dst)
+        return True
+    if AM_ZIP and Path(AM_ZIP).exists():
+        with zipfile.ZipFile(AM_ZIP) as z:
+            ver = json.loads(z.read("plugin.json").decode("utf-8"))["version"]
+            z.extractall(dst / ver)
+        (dst / "current.json").write_text(json.dumps({"version": ver}), encoding="utf-8")
+        return True
+    return False
+
+
+def automodder_shots(ed, t):
+    """9章 AutoModder のタブ（09-8 取り込みの案内・09-7 結果）。譜面チェックを開き、プラグインの無い状態で取り込みの案内を撮り、
+    プラグインを置いて［GitHub から取り込む］→ 結果を撮る。曲の情報がそろった書き出しノードがアクティブな間に撮る（Info.dat の欄に
+    曲名が空のエラーが並ばないように）。撮った後はタブを BS Map Check へ戻して閉じる"""
+    t.click_el("#mFileBtn"); ed.wait(0.5)
+    t.click_el("#mFileMenu button[data-act=mapcheck]")
+    wait_until(ed, "!!document.querySelector('#mcPanel .mcSum')", "譜面チェックが開きません")
+    move_panel(ed, "#mcPanel")
+    t.click_el("#mcPanel .mcTab[data-tab=am]")
+    wait_until(ed, "!!document.querySelector('#mcPanel .amOpen')", "AutoModder のタブの［プラグインを取り込む…］が出ません")
+    t.click_el("#mcPanel .amOpen")
+    wait_until(ed, "!!document.querySelector('#mcPanel .amInstall')", "AutoModder の取り込みの説明が出ません")
+    ed.move(1700, 1060); ed.wait(0.3)
+    t.shot("09-8-automodder-install", marks="[{t:'#mcPanel .amInstall',pad:3}]", clip=box(ed, ["#mcPanel"], pad=44))
+    if am_install_plugin(ed):
+        ed.js(_AM_INSTALL_AS_STATUS_JS)
+        t.click_el("#mcPanel .amInstall")
+        wait_until(ed, "!!document.querySelector('#mcPanel .amMeta')", "AutoModder の結果が出ません", timeout=120)
+        t.click_el("#mcPanel .amRun")   # 取り込んだ時の知らせ（v… を取り込みました）を消すため、もう一度確かめる
+        wait_until(ed, "!!document.querySelector('#mcPanel .amMeta')&&!document.querySelector('#mcPanel .amRun').disabled",
+                   "AutoModder の確かめ直しが終わりません", timeout=120)
+        ok = ed.js("""(()=>{ const p=document.getElementById('mcPanel');
+          const sec=[...p.querySelectorAll('.amSec')].find(s=>s.querySelector('.mcBeat')); if(!sec) return false; sec.id='tutAmSec';
+          sec.querySelector('.mcBeat').id='tutAmBeat'; return true; })()""")
+        if not ok:
+            raise SystemExit("AutoModder の結果に拍のある項目がありません")
+        ed.move(1700, 1060); ed.wait(0.3)
+        t.shot("09-7-automodder", marks="""[{t:'#mcPanel .amBanner',n:1,at:'l'},{t:'#tutAmSec summary',n:2,at:'l'},
+          {t:'#tutAmBeat',n:3,at:'r'},{t:'#mcPanel .amCtl',n:4,at:'l'}]""", clip=box(ed, ["#mcPanel"], pad=44))
+    else:
+        print("AutoModder のプラグインが見つからないので、09-7 は撮りません:", AM_DIR, AM_ZIP)
+    t.click_el("#mcPanel .mcTab[data-tab=mc]"); ed.wait(0.3)   # 次回開いた時のタブを元へ戻す
+    t.click_el("#mcPanel .mcClose"); ed.wait(0.5)
+
+
+# ［GitHub から取り込む］の要求（/__automodder/install）を状態の問い合わせ（status）に差し替える＝ネットへ出ず、置いたプラグインを取り込んだのと同じ応答になる
+_AM_INSTALL_AS_STATUS_JS = r"""(()=>{ const of=window.fetch.bind(window);
+  window.fetch=async function(url,opt){ return String(url).startsWith('__automodder/install') ? of('__automodder/status',opt) : of(url,opt); };
+  return true; })()"""
 
 
 def ask_dialog(ed, t):
@@ -690,11 +1018,34 @@ def setup(ed, ask=False):
     return t
 
 
+# 本編と別の起動で撮る3章・4章の画像（番号の頭）。画像の番号で指定した時に、要らない起動を省く判定に使う
+SEP_03_04 = ("03-2b", "03-2c", "03-2d", "03-2e", "03-2f", "03-2g", "03-2h", "04-2")   # 単独編集・リンク・難易度間コピーの確認
+BULK_03 = ("03-9", "03-10", "03-11")                                                    # 曲データを読み込んだ時の知らせ
+
+
+def want_any(heads):
+    """番号の頭 heads のどれかの画像を保存するか"""
+    return any(mts.wanted(h + "-") for h in heads)
+
+
+def want_main():
+    """本編の起動で撮る画像を1枚でも保存するか（3章・4章は、別の起動で撮る番号だけを指定した時は起動しない）"""
+    if not mts.ONLY:
+        return True
+    for o in mts.ONLY:
+        ch = o.split("-")[0]
+        if ch in ("01", "02", "05", "07", "08", "09", "11", "12"):
+            return True
+        if ch in ("03", "04") and (o == ch or o not in SEP_03_04 + BULK_03):
+            return True
+    return False
+
+
 def main():
     mts.OUT.mkdir(parents=True, exist_ok=True)
     # 3章の単独編集・リンク、4章の難易度間コピーの確認、6章の曲を解析は、別の起動で撮る
     # （クリップの色・名前・マーカーの番号の続きなど、他の画像の状態を変えないため）
-    if not mts.ONLY or {"03", "04", "06"} & mts.ONLY:
+    if mts.want_ch("06") or want_any(SEP_03_04):
         with Editor(width=W, height=H) as ed:
             t = setup(ed, ask=True)
             ed.move(960, 800); ed.key("ArrowRight"); ed.key("ArrowRight"); ed.wait(1.0)   # 本編と同じ拍16へ
@@ -702,7 +1053,23 @@ def main():
             song_analysis(ed, t)
             clip_link(ed, t)   # リンクは元へ戻さないので最後
             print(ed.errors())
-    if mts.ONLY and not mts.ONLY - {"06"}:
+    # 3章の曲データを読み込んだ時の知らせ（音源・BPM・環境・クリップが変わるので別の起動）
+    if want_any(BULK_03):
+        with Editor(width=W, height=H) as ed:
+            mts.use_lang(ed)
+            bulk_notices(ed, mts.Tut(ed))
+            print(ed.errors())
+    # 10章の審査の指摘（素材 rich を開いて撮る）
+    if mts.want_ch("10"):
+        with Editor(width=W, height=H) as ed:
+            mts.use_lang(ed)
+            load_rich(ed)
+            t = mts.Tut(ed)
+            mts.stub_pickers(ed)
+            review_notes(ed, t)
+            print(ed.errors())
+    # 本編（下）の画像が要らなければここで終わる
+    if not want_main():
         return
     with Editor(width=W, height=H) as ed:
         t = setup(ed)
@@ -832,7 +1199,7 @@ def main():
             raise SystemExit("自動ライトを取り消せません")
         ed.move(960, 800); ed.key("Tab"); ed.wait(1.0)   # NOTESへ戻す
 
-        # ---- 8章・11章: INFO（曲情報を入れ、書き出しノードをもう1つ作る） ----
+        # ---- 8章・12章: INFO（曲情報を入れ、書き出しノードをもう1つ作る） ----
         ed.move(1200, 300); ed.wait(0.3); ed.key("Tab"); ed.wait(1.5)
         for f, text in (("name", "My First Map"), ("artist", "NLM Tutorial"), ("author", "YourName")):
             t.click_el(f"#infoWorld input[data-f={f}]"); ed.wait(0.2); t.type(text); ed.wait(0.2)
@@ -853,17 +1220,17 @@ def main():
         t.shot("08-1-info-nodes", marks="""[
           {t:'#tutN_meta',n:1,at:'tr'},{t:'#tutN_cover',n:2,at:'tr'},{t:'#tutN_set',n:3,at:'tr'},{t:'#tutN_prev',n:4,at:'tr'},
           {t:'#tutOut0',n:5,at:'tr'},{t:'#tutOut1',n:5,at:'tl'}]""", clip=box(ed, ["#nodecol"], pad=0))
-        # 11章: 新しい書き出しノード（アクティブ）は出力フォルダ未設定＝必須項目に ✕。拡大して枠の中だけを撮る
+        # 12章: 新しい書き出しノード（アクティブ）は出力フォルダ未設定＝必須項目に ✕。拡大して枠の中だけを撮る
         c = t.rect("#tutOut1 .oChk")
         for _ in range(2):
             ed.wheel(c["x"] + c["w"] / 2, c["y"] + c["h"] / 2, -120); ed.wait(0.3)
         x, y, w, h = box(ed, ["#tutOut1"], pad=40)
         x1, y1 = min(x + w, nr["x"] + nr["w"]), min(y + h, nr["y"] + nr["h"])
         x, y = max(x, nr["x"]), max(y, nr["y"])
-        t.shot("11-1-export-blocked", marks="[{t:'#tutOut1 .oChk',n:1,at:'l'}]", clip=(round(x), round(y), round(x1 - x), round(y1 - y)))
+        t.shot("12-1-export-blocked", marks="[{t:'#tutOut1 .oChk',n:1,at:'l'}]", clip=(round(x), round(y), round(x1 - x), round(y1 - y)))
         ed.move(1200, 300); ed.key("Tab"); ed.wait(1.0)   # NLEへ戻す
 
-        # ---- 10章・1章: 環境設定 ----
+        # ---- 11章・1章: 環境設定 ----
         t.click_el("#mbSettings"); ed.wait(0.6)
         # 「曲の解析」の2つのチェックは、テストの環境（聞かない・案内しない）でなく初めて使う人と同じ（オン）に見せる（表示だけ・撮った後に戻す）
         # アプリケーション設定の欄は箱の中でスクロールする＝「ノーツのレーンの本数」が欄の上端に来るまでスクロールして、新しい項目（③④）を見せる
@@ -873,7 +1240,7 @@ def main():
           const p=document.querySelector('#settingsBox .setPanel.on');
           p.scrollTop+=lanes.getBoundingClientRect().top-p.getBoundingClientRect().top-6; return 1; })()""")
         ed.wait(0.3)
-        t.shot("10-1-settings", marks="""[{t:'#settingsBox .setTabs',n:1,at:'l'},{t:'#settingsReset',n:2,at:'l'},
+        t.shot("11-1-settings", marks="""[{t:'#settingsBox .setTabs',n:1,at:'l'},{t:'#settingsReset',n:2,at:'l'},
           {t:'#tutSetLanes',n:3,at:'l'},{t:'#tutSetAna',n:4,at:'l'}]""",
                clip=box(ed, ["#settingsBox"], pad=40))
         ed.js("""(()=>{ for(const id of ['anaAskOn','anaGuideOn']) document.getElementById(id).checked=false;
@@ -895,7 +1262,7 @@ def main():
         t.click_el("#mFileMenu button[data-act=mapcheck]"); ed.wait(3.0)
         move_panel(ed, "#mcPanel")
         beat_chip = ed.js("(()=>{const b=document.querySelector('#mcPanel .mcBeat'); if(b) b.id='tutBeat'; return !!b})()")
-        marks = "{t:'#mcPanel .mcTabs',n:1,at:'l'},{t:'#mcPanel .mcSum',n:2,at:'l'},{t:'#mcPanel .mcRerun',n:3,at:'b'}"
+        marks = "{t:'#mcPanel .mcTabs',n:1,at:'l'},{t:'#mcPanel .mcSum',n:2,at:'l'},{t:'#mcPanel .mcRerun',n:3,at:'l'}"
         if ed.js("!!document.querySelector('#mcPanel .mcFix')"):   # ライトが足りない項目の「💡 自動ライティング…」
             marks += ",{t:'#mcPanel .mcFix',n:4,at:'l'}"
         if beat_chip:
@@ -968,6 +1335,11 @@ def main():
         x, y = max(x, nr["x"]), max(y, nr["y"])
         t.shot("09-6-cover-fit-card", marks="[{t:'#tutN_cover .nCovFit span',n:1,at:'l'},{t:'#tutN_cover .nCovFitOff',n:2,at:'r'}]",
                clip=(round(x), round(y), round(x1 - x), round(y1 - y)))
+        # AutoModder のタブ（09-8・09-7）は、曲の情報がそろった元の書き出しノードがアクティブな今のうちに撮る
+        if mts.wanted("09-7-") or mts.wanted("09-8-"):
+            ed.move(1200, 300); ed.key("Tab"); ed.wait(1.0)   # NLEへ
+            automodder_shots(ed, t)
+            ed.move(1200, 300); ed.key("Tab"); ed.wait(1.5)   # INFOへ戻す
         t.click_el("#tutOut1 h3"); ed.wait(0.5)   # アクティブな書き出しノードを元に戻す（難易度を測るの画像を前と同じ状態で撮る）
         ed.move(1200, 300); ed.key("Tab"); ed.wait(1.0)   # NLEへ戻す
 
@@ -986,7 +1358,7 @@ def main():
         print("測定結果あり" if has_table else "未導入の画面")
         t.click_el("#rtPanel .rtClose"); ed.wait(0.4)
 
-        # ---- 3章・10章: MEDIA ライブラリ（MEDIA の幅を変えるので最後に撮る） ----
+        # ---- 3章・11章: MEDIA ライブラリ（MEDIA の幅を変えるので最後に撮る） ----
         media_library(ed, t)
         print(ed.errors())
 

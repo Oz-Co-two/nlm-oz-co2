@@ -3,9 +3,9 @@
 # Tutorial (advanced): faster work and maps ready to publish
 
 For those who have finished the [basic tutorial](tutorial.en.md). This tutorial explains faster ways to work,
-song analysis (tempo and structure), the checks before publishing a map, and how to measure the difficulty (★).
+song analysis (tempo and structure), the checks before publishing a map, how to measure the difficulty (★), and how to respond to ranking review notes.
 
-> The screenshots show the English UI (v2.0.0-oz). The numbers (①, ②, …) in the screenshots match the tables in the text.
+> The screenshots show the English UI (v2.1.0-oz). The numbers (①, ②, …) in the screenshots match the tables in the text.
 
 ## Contents
 
@@ -18,8 +18,9 @@ song analysis (tempo and structure), the checks before publishing a map, and how
 7. [Advanced lighting](#7-advanced-lighting)
 8. [More about the INFO nodes](#8-more-about-the-info-nodes)
 9. [Checks before publishing](#9-checks-before-publishing)
-10. [Customizing the settings](#10-customizing-the-settings)
-11. [Troubleshooting](#11-troubleshooting)
+10. [Responding to review notes](#10-responding-to-review-notes)
+11. [Customizing the settings](#11-customizing-the-settings)
+12. [Troubleshooting](#12-troubleshooting)
 
 ---
 
@@ -108,7 +109,7 @@ You can change the key assignments in the **Shortcuts** tab of **Preferences**.
 - The assignments are saved with your preferences, so they are kept after restarting the app
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Responding to review notes](#10-responding-to-review-notes) ｜ [11. Customizing the settings](#11-customizing-the-settings) ｜ [12. Troubleshooting](#12-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
@@ -206,7 +207,7 @@ When you move or cut the Music clip, it moves together with the waveform (nothin
 Press the purple **🎼 Analyze song** at the left of the spectrogram in the NLE to show the structure of the song (sections such as intro, verse and chorus) as a band ([chapter 6](#6-analyzing-the-song-tempo-and-structure)).
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Responding to review notes](#10-responding-to-review-notes) ｜ [11. Customizing the settings](#11-customizing-the-settings) ｜ [12. Troubleshooting](#12-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
@@ -305,7 +306,7 @@ Right-click an empty spot to get **Create empty clip** (16 beats) and **Create m
 ### Adding lanes, lock, solo and mute
 
 A new project starts with one notes lane and three light lanes.
-You can change the number of notes lanes for new projects with "**Note lanes**" in Preferences ([chapter 10](#application)).
+You can change the number of notes lanes for new projects with "**Note lanes**" in Preferences ([chapter 11](#application)).
 
 Right-click an empty spot at the left end of the lanes to **add or remove a lane at the top**, for notes and for lights.
 
@@ -640,8 +641,38 @@ A song (a card in the grid or a row in the detail view) is used as follows, depe
   (if a song is already loaded, the audio and BPM stay as they are)
 - Right-click a song → "**📁 Open folder location**" opens the song folder in Explorer (only for folders added in the desktop version)
 
-> Songs with **v4 maps** (Info.dat in the newer format) can be listed, sorted, filtered and have their audio placed,
-> but their maps cannot be put into the NLE yet (dragging or Load song data).
+> Songs with **v4 maps** (Info.dat in the newer format) can also be put into the NLE (dragging or Load song data).
+> NLM still exports in the v3 format, so **NJS events** (which v3 doesn't have) and **light boxes** (which NLM can't read) are lost on export
+> (NLM tells you when loading and when exporting). The map check uses the NJS events, and skips the lighting checks for difficulties that had light boxes.
+
+#### Messages after loading song data
+
+"📥 Load song data" converts other people's maps (v2, v3 and v4 formats) into NLM's form as it loads them.
+Maps with many lights take a few seconds, and meanwhile the progress is shown, such as "Loading audio…" and "Loading map… Expert (2/3)".
+
+![The loading window (Loading map… Expert (2/3))](images/tutorial-advanced-en/03-9-bulk-loading.png)
+
+When the map has things NLM can't handle, or NLM changed how something is loaded, a message appears at the bottom of the screen after loading.
+
+![The message at the bottom after loading song data (the v4 sample: light boxes, NJS events, environments that differ per difficulty)](images/tutorial-advanced-en/03-10-bulk-notice.png)
+
+| Message | Meaning |
+|---|---|
+| The BPM changes differ between difficulties, so the beats of … were converted to the shared tempo | NLM uses one tempo for all difficulties. It uses the tempo shared by the most difficulties and converts the beats of the others so that their timing stays the same. The beats of converted difficulties differ from the original map's beats (review notes can still be loaded with the original beats; [chapter 10](#retimed-difficulties)) |
+| The environment differs per difficulty (…). NLM uses one environment, so it was set to … | NLM uses the environment shared by the most difficulties |
+| Not loaded: the difficulties other than Standard — OneSaber 2 … | NLM only makes Standard maps |
+| This map's light boxes (N groups) can't be read by NLM and will be lost on export… | Light boxes (the newer lighting system introduced in v3) can't be shown or edited in NLM. The lighting checks (R10.A, R7.B) of the NLM BL criteria list become manual checks |
+| The NJS events (…) can't be edited in NLM and will be lost on export… | NJS events of a v4 map. They can't be written in the exported v3 format, but the NLM BL criteria list still uses them |
+| Converting the tempo in AudioData.dat to NLM's tempo is off by up to … ms | The error when converting a v4 map's tempo to NLM's BPM. If it is large, check with the metronome ([chapter 5](#5-songs-with-tempo-changes-and-fixing-beat-offsets)) |
+| Not loaded: N object(s) of the v4 chart whose data index doesn't match | Data in the map file that points to nothing. It has to be fixed in the original map |
+
+- The environment (stage) of the loaded map is carried over to the export (if a song is already loaded, the current environment stays)
+- If the environment is not available in the 3D preview, **⚠** appears next to the environment name at the top of the screen and the preview shows Default (the export keeps the original environment)
+
+![The mark (⚠) for an environment that is not in the 3D preview, with its explanation](images/tutorial-advanced-en/03-11-env-nopv.png)
+
+- When exporting, NLM also tells you if things from the original map that NLM can't handle (light boxes, NJS events) were not exported
+- When all difficulties together have 150,000 lights or more, "This project has N lights in total" appears once when loading (and when opening the project) ([chapter 12](#a-message-says-there-are-many-lights))
 
 #### Data from the internet (song data and BeatSaver)
 
@@ -653,7 +684,7 @@ The upload date, rating, ranked status, ★ (BeatLeader and ScoreSaber) and tags
 - Songs are matched by an identifier (hash) made from the map files. If your copy differs from the current version on BeatSaver (an older version before an update, for example),
   the ★ and ranked status are not shown (they belong to another version)
 - While the song data is in use, its name and date appear below the catalog (④ in the detail view screenshot)
-- Turn off "Download the song data" in the **MEDIA** tab of Preferences to stop downloading it and hide it from the list ([chapter 10](#media))
+- Turn off "Download the song data" in the **MEDIA** tab of Preferences to stop downloading it and hide it from the list ([chapter 11](#media))
 
 Songs that are not in the song data (songs uploaded very recently, for example) show "**Unmatched 🔍**" in the upload date column.
 Press 🔍 to see a confirmation; only when you press **Send** is the identifier (hash) of that one song sent to BeatSaver (api.beatsaver.com) to look it up.
@@ -672,7 +703,7 @@ In the desktop version, NLM reads the play records (`PlayerData.dat`) that Beat 
 and shows the play count, best score, full combo and favorites in the list (best score, full combo and favorite are hidden columns at first).
 
 - NLM only reads the play records; it never changes them and never sends them to the internet
-- They are usually found automatically. If not, choose the file with **Choose file…** in the **MEDIA** tab of Preferences ([chapter 10](#media))
+- They are usually found automatically. If not, choose the file with **Choose file…** in the **MEDIA** tab of Preferences ([chapter 11](#media))
 - They are read again when the library is loaded and on "Reload", if the file has been updated
 
 #### Calculating ★ (NLM estimate)
@@ -697,14 +728,14 @@ Right-click a row in the detail view and choose one of the following.
 - The results appear in the ★ column in a different color, such as "**NLM est. 7.12**". They are also used for sorting and filtering by ★
 - The results are recorded and still shown after you restart the app (after you update the plugin, the results of the old version are no longer used and can be calculated again)
 - Difficulties with fewer than 20 notes cannot be calculated ("–"). Hover over the cell to see why a calculation failed
-- The number of songs calculated at the same time can be changed in the **MEDIA** tab of Preferences ([chapter 10](#media))
+- The number of songs calculated at the same time can be changed in the **MEDIA** tab of Preferences ([chapter 11](#media))
 - If the plugin is not installed, NLM tells you how to install it (with **Install from GitHub** in the "Estimate difficulty" panel)
 
 > **The NLM-estimated ★ is not the official BeatLeader ★.** It is an approximation that NLM calculates with the plugin, and it can differ from the value on the BeatLeader site.
 > It is labeled "NLM est." and shown in a different color so that you don't mistake it for the official ★.
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Responding to review notes](#10-responding-to-review-notes) ｜ [11. Customizing the settings](#11-customizing-the-settings) ｜ [12. Troubleshooting](#12-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
@@ -786,7 +817,7 @@ If you might continue it later, keep it first as a separate project with "Save A
 If it has clips linked with other difficulties, it can't be emptied; unlink them first ([Linked clips](#unlinking-and-deleting-clips)).
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Responding to review notes](#10-responding-to-review-notes) ｜ [11. Customizing the settings](#11-customizing-the-settings) ｜ [12. Troubleshooting](#12-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
@@ -854,7 +885,7 @@ For example, in a song at BPM 120 (1 beat = 500 ms) whose first beat is 300 ms f
 adding 200 ms of silence puts the first beat at 500 ms (on the line of beat 1).
 
 - You can only add silence (you cannot cut the start of the song)
-- The silence is written into the audio of song.egg itself when exporting, so ffmpeg is needed for the conversion ([chapter 11](#a-message-says-ffmpeg-was-not-found))
+- The silence is written into the audio of song.egg itself when exporting, so ffmpeg is needed for the conversion ([chapter 12](#a-message-says-ffmpeg-was-not-found))
 - The song preview section (the part played on the song select screen) is corrected automatically for the added silence when exporting
 - When the time to the first note is short ("Hot start" in the map check), adding silence also gives you room
 
@@ -888,11 +919,11 @@ In this example the peak reached -1 dB, so it stopped a little short of the -9 L
 
 - It is shared by all difficulties. It is saved with the project and can be undone with Ctrl + Z
 - It applies as-is to playback with Space and to **▶ Preview** on the **Song Preview** node of INFO
-- When exporting, it is written into the audio of song.egg itself, so ffmpeg is needed for the conversion even for an ogg song ([chapter 11](#a-message-says-ffmpeg-was-not-found))
-- It is different from **Music volume** in Preferences ([chapter 10](#volume)). Music volume only changes what you hear while editing and is not included in the exported song
+- When exporting, it is written into the audio of song.egg itself, so ffmpeg is needed for the conversion even for an ogg song ([chapter 12](#a-message-says-ffmpeg-was-not-found))
+- It is different from **Music volume** in Preferences ([chapter 11](#volume)). Music volume only changes what you hear while editing and is not included in the exported song
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Responding to review notes](#10-responding-to-review-notes) ｜ [11. Customizing the settings](#11-customizing-the-settings) ｜ [12. Troubleshooting](#12-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
@@ -905,7 +936,7 @@ You can also create NLE clips that follow the sections ([Creating clips from the
 
 - Analysis takes about 30 seconds to a minute per song. You can keep editing meanwhile
 - The analysis runs on your PC. The song is not sent to the internet
-- mp3, ogg, wav, flac and similar formats can be analyzed as they are. Formats such as m4a need ffmpeg ([chapter 11](#analyze-song-shows-an-error))
+- mp3, ogg, wav, flac and similar formats can be analyzed as they are. Formats such as m4a need ffmpeg ([chapter 12](#analyze-song-shows-an-error))
 - The results are **estimates** from the sound of the song. Check the BPM with the metronome and the structure by ear in the end
 
 ### Starting the analysis
@@ -936,7 +967,7 @@ When you load a new song, NLM asks "**Analyze this song?**". It also tells you w
 | No. | Name | Description |
 |---|---|---|
 | ① | What the analysis can do | A suggested tempo (BPM and lead-in), the structure band, creating clips from the structure, and how long it takes |
-| ② | Don't ask again | Check it and close the dialog to stop being asked (you can turn it back on in Preferences; [chapter 10](#application)) |
+| ② | Don't ask again | Check it and close the dialog to stop being asked (you can turn it back on in Preferences; [chapter 11](#application)) |
 | ③ | Analyze | Start the analysis right away |
 | ④ | Not now | Close without doing anything (Esc does the same). To analyze later, use 🎼 Analyze song or the File menu |
 
@@ -1007,7 +1038,7 @@ When the structure analysis started with [Analyze song] finishes and the band ap
 |---|---|---|
 | ① | What to do next | 1. Play the song and check by ear whether the band's divisions match it　2. Decide which divisions (sections / segments) you map with　3. Press **🧩 Create clips** at the left of the band |
 | ② | Where the button is | A picture showing where **🧩 Create clips** is in the left gutter of the band (red frame) |
-| ③ | Don't show this again | Check it and close the guide to stop showing it (you can turn it back on in Preferences; [chapter 10](#application)) |
+| ③ | Don't show this again | Check it and close the guide to stop showing it (you can turn it back on in Preferences; [chapter 11](#application)) |
 | ④ | Got it | Close the guide (Esc does the same). When it closes, **🧩 Create clips** at the left of the band glows for a moment to show where it is |
 
 - The guide never creates clips by itself. Check that the divisions match the song first, then press the button yourself
@@ -1112,7 +1143,7 @@ Press **Create**, and the result looks like this.
 The created clips are normal clips that are not tied to the analysis. They stay as they are even if you analyze again or clear the analysis results (their names are in the display language at the time you created them).
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Responding to review notes](#10-responding-to-review-notes) ｜ [11. Customizing the settings](#11-customizing-the-settings) ｜ [12. Troubleshooting](#12-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
@@ -1233,7 +1264,7 @@ A confirmation shows the source difficulty, the difficulties that get the lights
   If they do, you can fix them quickly with [auto lighting](#auto-lighting-making-lights-from-the-notes)
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Responding to review notes](#10-responding-to-review-notes) ｜ [11. Customizing the settings](#11-customizing-the-settings) ｜ [12. Troubleshooting](#12-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
@@ -1296,20 +1327,23 @@ To make exporting faster, the song.egg conversion is skipped if the song is the 
 If the song sounds wrong or you want to re-create it, check "**Force re-convert song.egg**" on the export node and export.
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Responding to review notes](#10-responding-to-review-notes) ｜ [11. Customizing the settings](#11-customizing-the-settings) ｜ [12. Troubleshooting](#12-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
 
 ## 9. Checks before publishing
 
-Before publishing a map, you can check these three things inside NLM.
+Before publishing a map, you can check the following inside NLM.
 
 | Feature | What it tells you |
 |---|---|
 | **Map check** (same as BS Map Check) | Mistakes, awkward patterns, and places that do not meet BeatLeader's ranking criteria |
 | **NLM BL criteria list** | A checklist that lists the written BeatLeader ranking criteria item by item |
+| **AutoModder checks** | The results of a tool reviewers often use (AutoModder), with an add-on plugin |
 | **Estimate difficulty** | An approximation of BeatLeader's ★ (stars) |
+
+Responding to the review notes you receive after submitting a map for ranking is explained in [chapter 10](#10-responding-to-review-notes).
 
 Even if you won't submit the map for ranking, the map check is useful for finding mistakes.
 
@@ -1320,7 +1354,8 @@ You can also keep the panel open while you fix the map and check again with one 
 
 1. Clear "🚧 Unrankable" and "❌ Error" in the **Map check**
 2. Look at the ★ of each difficulty with **Estimate difficulty**
-3. If you are thinking of a ranked submission, check the remaining items in the **NLM BL criteria list** (the ★ values are used here too)
+3. If you are thinking of a ranked submission, check the remaining items in the **NLM BL criteria list** (the ★ values are used here too).
+   The **AutoModder** tab shows how the map looks in the reviewers' tool
 4. Finally, check for anything you missed with the "Checklist before publishing" below
 
 ### Map check (same as BS Map Check)
@@ -1328,8 +1363,8 @@ You can also keep the panel open while you fix the map and check again with one 
 Open it from **Map check (BeatLeader criteria)…** in the File menu, or from
 **🔍 Map check (BeatLeader criteria)** on the export node of the INFO screen. The check starts as soon as it opens.
 
-The judgement is the same as [BS Map Check](https://github.com/KivalEvan/BeatSaber-MapCheck)
-(with the BeatLeader preset), which is used in BeatLeader's ranking review.
+The judgement is the same as the map check site [BS Map Check](https://github.com/KivalEvan/BeatSaber-MapCheck)
+with the BeatLeader preset.
 
 #### Reading the results
 
@@ -1339,7 +1374,7 @@ The image shows the check of a short map made for the explanation (16 seconds, f
 
 | No. | Name | Description |
 |---|---|---|
-| ① | Tabs | Switch between "Same as BS Map Check" and "NLM BL criteria list" |
+| ① | Tabs | Switch between "Same as BS Map Check", "NLM BL criteria list" and "AutoModder" |
 | ② | Summary | The number of items for each mark |
 | ③ | ↻ Check again | Refresh the results after fixing the map |
 | ④ | 💡 Auto lighting… | Shown only on items about too few lights. Starts [auto lighting](#auto-lighting-making-lights-from-the-notes) (chapter 7) and checks again afterwards. On cover image items, [🖼 Fix cover image…](#fixing-the-cover-image) appears in the same place |
@@ -1457,6 +1492,22 @@ When R10.A (at least one light per beat) or R7.B (bomb lighting) is a violation 
 It starts [auto lighting](#auto-lighting-making-lights-from-the-notes) (chapter 7) and checks again afterwards.
 When R1.A.4 (size, shape and format of the cover image) is a violation, **🖼 Fix cover image…** appears ([Fixing the cover image](#fixing-the-cover-image)).
 
+#### Tested on ranked maps, and what to keep in mind
+
+The NLM BL criteria list has been run on 189 BeatLeader ranked maps (the versions that passed the review) to check that it doesn't report violations there.
+99% of the difficulties that passed the review show no violation. If you get a violation, look at the map first, then fix it or be ready to explain it.
+
+The following items can't be judged exactly as written, so NLM handles them like this:
+
+- For maps brought in with "📥 Load song data", difficulties whose original map had **light boxes** (the newer lighting system introduced in v3)
+  get **☐ Manual check** for R10.A and R7.B, because NLM can't read light boxes. Check the lights in the game or in the official editor
+- R7.B (bomb lighting) judges the same way as the reviewers' tool (AutoModder): it checks whether a light is on 250 ms before the bomb.
+  Where this is more lenient than the written criteria is explained in the "＊" note of the item
+- R8.A (wall dodges) approximates whether your head really has to move, so going over the limits is shown as **⚠ Check**
+- Overlaps (R3.A.1) and short walls (R8.C) inside a time skip (the BPM briefly set very high) appear at almost the same moment in the game too,
+  so they are shown as **⚠ Check**
+- The **NJS events** of v4 maps are used for judging (they are lost on export, but the map is judged as loaded)
+
 #### The items that use ★ and Tech (R5.A, R11.H.5)
 
 R5.A (whether notes are visible long enough to react) is judged with a formula that uses BeatLeader's ★ and Tech values.
@@ -1526,6 +1577,52 @@ If you fix the map with the panel open, press **↻ Measure again**. Results mea
 - The measured ★ and Tech are filled in automatically in R5.A and R11.H.5 of the NLM BL criteria list (no need to copy them)
 - With the same plugin, you can also calculate the ★ of songs in the MEDIA library at once ([chapter 3](#calculating--nlm-estimate))
 
+### AutoModder checks (the third tab)
+
+The third tab of the map check panel. **Its frame turns amber.**
+
+AutoModder is a ChroMapper (map editor) extension that reviewers often use. This tab runs AutoModder's automatic checks unchanged inside NLM and shows the results
+(the same calculation as AutoModder, not an approximation remade by NLM). You can see how the map looks in the reviewers' tool before you submit it.
+
+![The AutoModder tab. ① Notice ② Results per difficulty ③ Beats ④ Plugin version, Check again, Check for updates](images/tutorial-advanced-en/09-7-automodder.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Notice band | Shows that these are AutoModder's checks (version, default settings) and that they differ from the current BeatLeader criteria in places |
+| ② | Results | Listed for the song info (Info.dat) and each difficulty, most severe first. Results with the same item and text are combined into one row with their beats |
+| ③ | Beats | Click one to switch to that difficulty and jump to that beat (same as the map check) |
+| ④ | Plugin | The version of the plugin in use, **↻ Check again** (check again after fixing the map) and **Check for updates** |
+
+| Mark | Meaning |
+|---|---|
+| ❌ Error (Unrankable) | AutoModder considers it unrankable |
+| ❗ Warning (Questionable) | AutoModder considers it questionable |
+| ❔ Inconclusive (Questionable) | AutoModder can't judge it automatically (the BPM is always shown like this) |
+| 💡 Suggestion, ℹ️ Info, 📊 Reference | For reference. Not a judgement against the criteria |
+
+- The check runs automatically when you open the tab. If the map has not changed since the last check, that result is shown as is
+- Passed items are combined into one row, "✓ N passed"
+- Each difficulty is checked with AutoModder's default settings
+- AutoModder uses the song length, so load the audio before checking
+- AutoModder does not check difficulties with fewer than 20 notes
+
+#### Installing the plugin (AutoModder)
+
+The add-on plugin nlm-automodder (about 12 MB, Windows only) is needed. It is not included in NLM.
+
+1. Press **📥 Install the plugin…** in the tab to see an explanation
+2. Press **Install from GitHub** to install it and run the check right away
+
+![The guide when the AutoModder plugin is missing, with Install from GitHub](images/tutorial-advanced-en/09-8-automodder-install.png)
+
+- The downloaded file is checked against the publisher's information (SHA-256) before use
+- The installed plugin is saved in the `plugins` folder of the app. It is kept when you update NLM
+- NLM connects to the internet only when you press the install or **Check for updates** button
+
+> **AutoModder differs from the current BeatLeader criteria in places** (the R5.A vision block time formula, the wall dodge rate and so on).
+> When its results differ from the NLM BL criteria list, check against the written BeatLeader criteria.
+> It is not an official BeatLeader or AutoModder tool, and the results are not ranking decisions.
+
 ### Checklist before publishing
 
 - [ ] **Song info**: entered the song name, subtitle, artist and mapper (your mapper name)
@@ -1543,17 +1640,170 @@ If you fix the map with the panel open, press **↻ Measure again**. Results mea
 - [ ] **Project saved**: saved the `.nlmf` (you need it to make fixes later)
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Responding to review notes](#10-responding-to-review-notes) ｜ [11. Customizing the settings](#11-customizing-the-settings) ｜ [12. Troubleshooting](#12-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
 
-## 10. Customizing the settings
+## 10. Responding to review notes
+
+When you submit a map to BeatLeader's ranking review, reviewers send you notes in the "beat - text" form, as a .txt file or in a Discord message.
+Load them into NLM to jump to each note and fix it, mark what you have fixed as "done", add replies, and send them back as a .txt in the same form.
+
+### Loading review notes
+
+Load them from these items in the File menu.
+
+| Menu | When to use it |
+|---|---|
+| **Load review notes…** | Choose the .txt files with the notes. You can choose files split by difficulty all at once |
+| **Paste review notes…** | Paste the text of a Discord message into the field that appears and press **Read** (or **Ctrl + Enter**) |
+| **Review notes list…** | Opens the list of loaded notes (shows the list again after you closed it) |
+
+You can also load them with **Load…** and **Paste…** at the top of the list.
+
+![The Paste review notes window](images/tutorial-advanced-en/10-2-review-paste.png)
+
+NLM reads **lines that start with a beat** as notes. Reviewers write them a little differently, but forms like these can be read:
+
+```
+Expert+
+12.5 - (comment)
+24, 25 - (comment)
+64-72 - (comment)
+```
+
+- The difficulty is taken from a heading line (`Expert+`, `Ex+`, `Hard:` and so on) or from the file name (such as `Expert.txt`).
+  If a map brought in with "Load song data" has its own difficulty names, headings with those names can be read too
+- Beats are read as the beats of the map file (the beats shown in editors). Lists such as `24, 25` and ranges such as `64-72` or `72 to 74` can be read too
+- Besides "beat - text", the forms "beat text" and "beat: text" can be read
+- Indented lines under a note are read as the rest of that note
+- You can paste Discord text as it is, including parts in `` ``` `` and heading lines
+- Lines without a beat (general comments and so on) are kept too, at the bottom of the list
+
+### The confirmation when loading
+
+A confirmation window appears before the notes are loaded.
+
+![The loading confirmation. ① Counts per file ② Notes on reading ③ Choosing the difficulty ④ Add or replace ⑤ Number of notes to load](images/tutorial-advanced-en/10-3-review-import.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Counts per file | For each file (or pasted text): the number of notes per difficulty, lines without beats and unreadable lines |
+| ② | Notes on how it was read | Places where NLM guessed (for example, it took a line ending in a colon as a difficulty heading). Open it to see the line numbers and contents |
+| ③ | Choosing the difficulty | For notes without a heading, or under a heading with an unknown name, choose which difficulty they belong to (the current difficulty at first) |
+| ④ | Add / replace | Shown only when notes are already loaded. Add to the current notes, or delete them (with their done marks and replies) and replace them |
+| ⑤ | Number of notes to load | Press **Load** to put them in the list |
+
+- If there are notes for a difficulty whose beats were converted by "Load song data", a checkbox for converting the beats also appears (see [Retimed difficulties](#retimed-difficulties) below)
+- Notes for modes other than Standard (such as One Saber) are loaded too, but NLM can't open them, so they are grouped at the bottom of the list
+
+### Reading the list
+
+After loading, the **📝 Review notes** list opens at the top left. Drag its heading to move it, so you can use it side by side with the map check panel.
+
+![The review notes list. ① Load / Paste / Export ② Filter and Hide done ③ Done mark ④ Beats ⑤ Text ⑥ Reply](images/tutorial-advanced-en/10-1-review-panel.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Load… / Paste… / Export… | Add notes or export them ([Exporting](#exporting-review-notes)) |
+| ② | Filter | **All difficulties** / **Current difficulty**, and **Hide done** (the selected row is never hidden) |
+| ③ | Done mark | Check the notes you have fixed or checked |
+| ④ | Beats | The beats of the note. Each number can be clicked |
+| ⑤ | Text | The reviewer's text (as loaded) and its continuation lines |
+| ⑥ | Reply | Shown only on the selected row and on rows that have a reply |
+
+- The list is split by difficulty (hardest first), and each group is in the order the notes were written. The number of notes and done notes is shown next to each difficulty
+- Notes with an unknown difficulty and notes for modes other than Standard are grouped below them (clicking them doesn't jump)
+- Lines without beats and unreadable lines are grouped in a closed section at the very bottom
+- **X**, **?**, **S** and **N** before the beats are severity marks written by the reviewer (unrankable, questionable, suggestion, note)
+- Marks after the beats: **…** means the note says "etc." or "repeats" (not every position is written), **range?** means "a - b text" was read as a range
+  (the "-" may be a separator), and **↑** means the same as the previous note. Point at a mark to see an explanation
+- The size of the list text (11–20 px) can be changed with the **Aa** slider at the left of the count row, or with **Ctrl + wheel** over the list
+
+### Jumping to a note
+
+Click a row to switch to that difficulty, jump to that beat, and select the notes, bombs, walls, arcs and chains there. You can fix them right away.
+
+- Click a beat number to jump to just that beat (for notes that list several beats)
+- For a range, the objects inside the range are selected
+- If nothing is exactly on that beat, the nearest objects within 1/16 beat are selected and the row gets **≈**
+- If nothing is found even then, only the playhead moves, NLM says "No objects at beat … (the note may be outdated)", and the row gets **⚠**
+  (this happens, for example, when you changed the map after receiving the notes and the objects moved)
+- At a beat that has only lights and no notes, the lights are selected
+- Objects on locked lanes, outside Edit only, or in linked child clips are not selected (NLM tells you how many)
+
+### Marks on the timeline
+
+The notes of the current difficulty are shown as **▼** on the NLE's beat ruler (below the numbers, above the tempo band); ranges are shown as bands.
+
+![The marks on the NLE's beat ruler. ① ▼ mark ② Range band ③ Dotted line and faint band of the selected note](images/tutorial-advanced-en/10-4-review-marks.png)
+
+- The color is the color of the severity mark (yellow for notes without one). Done notes are faded
+- The note selected in the list is shown as a dotted line over the lanes (a light band for a range)
+- Click a ▼ to select that note in the list (the playhead doesn't move). Point at it to see the beat and the start of the text
+
+### Done marks and replies
+
+- Mark a note you have fixed or checked as **done** with the checkbox at the left of the row (③). Check **Hide done** to see only the remaining notes
+- Write a reply in the field that appears when you select a row (⑥). Press **Enter** or click outside the field to confirm it; **Esc** goes back to what it was.
+  When exporting, the reply is added after the original line as " - reply"
+- **Ctrl + Z** undoes done marks and replies
+
+### Retimed difficulties
+
+When you bring in someone else's map with "📥 Load song data" and its BPM changes differ between difficulties, the beats of some difficulties are converted
+([chapter 3](#messages-after-loading-song-data)). The beats of those difficulties differ from the beats of the original map (the map the reviewer looked at).
+
+So when you load notes for such a difficulty, the confirmation window shows a checkbox: "Read the beats as the original map's beats and convert them to NLM beats" (on at first).
+
+- If you load with it on, the list shows both the original beats and "→ NLM beats". Jumping and the timeline marks use the NLM beats
+- When exporting replies, the beats are written as the reviewer wrote them
+- The beats are converted when loading. If you change the tempo or move clips afterwards, they can be off
+
+### Exporting review notes
+
+**Export…** in the list makes a .txt in the same form as the notes. Choose one of two kinds.
+
+![The export window (NLM's check results). ① What to export ② Options ③ Preview ④ Copy / save](images/tutorial-advanced-en/10-5-review-export.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | What to export | **The review notes with your replies** / **NLM's check results** |
+| ② | Options | Detailed settings for each kind (see the table below) |
+| ③ | Preview | The content to be written. You can also select and copy it here |
+| ④ | Copy / save | **Copy to clipboard** / **Save to output folder** |
+
+| What to export | Content | Options |
+|---|---|---|
+| The review notes with your replies | Each loaded line with " - reply" added after it. The beats stay as the reviewer wrote them. Lines without beats are also put under their difficulty heading | Write "fixed" for done notes without a reply; which file to reply to (when two or more were loaded) |
+| NLM's check results | The findings of the NLM BL criteria list in the same form as the notes (English, difficulty headings + "beat, beat - [rule] text (NLM)") | BL criteria list violations and needs review (on at first), BS Map Check (unrankable, error, warning), a severity mark at the start of each line |
+
+- **Save to output folder** saves a .txt whose name ends in `_review_reply.txt` (replies) or `_nlm_check.txt` (check results) in the folder chosen on INFO's export node
+  (such as CustomLevels; it is one level above the map folder, so it doesn't go into the map). If there is no output folder, the file is downloaded instead
+- AutoModder's "Import Mod" (in ChroMapper) can also read NLM's check results
+- R5.A (vision blocks) in NLM's check results needs ★ and Tech. The results of "Estimate difficulty" are used; without them, R5.A is left out ([chapter 9](#9-checks-before-publishing))
+
+### Saving and clearing notes
+
+- The loaded notes, done marks and replies are saved in the project (`.nlmf`). Loading notes, marking them done or writing replies turns on the unsaved lamp
+- Loading, replacing, done marks and replies can each be undone with a single **Ctrl + Z**
+- **Clear notes** at the bottom of the list deletes all loaded notes, done marks and replies (Ctrl + Z brings them back)
+- Creating a new project or opening another project empties the list
+- The filter and "Hide done" are not saved
+
+<!-- chapter-nav -->
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Responding to review notes](#10-responding-to-review-notes) ｜ [11. Customizing the settings](#11-customizing-the-settings) ｜ [12. Troubleshooting](#12-troubleshooting) ｜ [▲ Contents](#contents)
+<!-- /chapter-nav -->
+
+---
+
+## 11. Customizing the settings
 
 In **Preferences** in the menu, you can adjust how the app feels and looks.
 The settings are divided into six tabs.
 
-![Preferences. ① Tabs ② Reset to defaults ③ Note lanes ④ Song analysis](images/tutorial-advanced-en/10-1-settings.png)
+![Preferences. ① Tabs ② Reset to defaults ③ Note lanes ④ Song analysis](images/tutorial-advanced-en/11-1-settings.png)
 
 The image shows the Application tab scrolled down.
 
@@ -1614,7 +1864,7 @@ Change the key assignments ([chapter 1](#customizing-shortcuts)).
 
 Settings for the MEDIA library ([chapter 3](#media-library-record-song-folders-then-list-and-search-them)).
 
-![The MEDIA tab of Preferences. ① Song data ② ★ calculations ③ Play records](images/tutorial-advanced-en/10-2-settings-media.png)
+![The MEDIA tab of Preferences. ① Song data ② ★ calculations ③ Play records](images/tutorial-advanced-en/11-2-settings-media.png)
 
 | No. | Item | Content |
 |---|---|---|
@@ -1629,12 +1879,12 @@ Projects, assets, plugins, the folders recorded in MEDIA and the location of the
 (the names shown in the catalog and the columns, sort order and filter of the detail view return to their initial state).
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Responding to review notes](#10-responding-to-review-notes) ｜ [11. Customizing the settings](#11-customizing-the-settings) ｜ [12. Troubleshooting](#12-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->
 
 ---
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 ### The song, output folder or cover image is not connected after opening a project
 
@@ -1660,7 +1910,7 @@ Once you have selected them again, they are connected automatically from the nex
 
 Some "Required" items in the export node's checklist have a ✕.
 
-![① The checklist of the export node. "Required" items with a ✕ are missing](images/tutorial-advanced-en/11-1-export-blocked.png)
+![① The checklist of the export node. "Required" items with a ✕ are missing](images/tutorial-advanced-en/12-1-export-blocked.png)
 
 | Item | Fix |
 |---|---|
@@ -1733,11 +1983,11 @@ Projects saved with an earlier version open with the number of lanes they were s
 
 - To add one, right-click an empty spot at the left end of the lanes → "**＋ Add Notes lane (at top)**" ([chapter 3](#adding-lanes-lock-solo-and-mute))
 - When you put a clip where there is no free space, a lane is added at the top automatically
-- The number for new projects can be changed with **Preferences → Application → Note lanes** ([chapter 10](#application))
+- The number for new projects can be changed with **Preferences → Application → Note lanes** ([chapter 11](#application))
 
 ### "Analyze this song?" or the guide after the analysis doesn't appear (or you don't want it)
 
-Turn them on or off with the two checkboxes in **Preferences → Application → Song analysis** ([chapter 10](#application)).
+Turn them on or off with the two checkboxes in **Preferences → Application → Song analysis** ([chapter 11](#application)).
 If you checked "Don't ask again" or "Don't show this again" in the dialogs, you can turn them back on here.
 
 - "Analyze this song?" appears only when you bring in a new song, and not if that song already has analysis results ([chapter 6](#when-you-load-a-song))
@@ -1748,6 +1998,35 @@ If you checked "Don't ask again" or "Don't show this again" in the dialogs, you 
 A linked child clip had different content from its parent, so its link was removed.
 This happens, for example, when the project was opened in a version before v2.0.0-oz and a child clip was edited and saved.
 The content of the unlinked clips stays, and they can be edited as normal clips. To link them again, see [chapter 3](#linking).
+
+### "… will be lost on export" appears after loading song data
+
+The loaded map has things NLM can't handle (light boxes, or the NJS events of a v4 map).
+You can edit the loaded map in NLM, but those parts are lost on export ([chapter 3](#messages-after-loading-song-data)).
+
+- Lights made with light boxes are not shown in NLM. To keep lights, remake them in NLM ([auto lighting](#auto-lighting-making-lights-from-the-notes) in chapter 7 can make a base),
+  or add them again after exporting, in an editor that handles light boxes
+- NJS events are dropped from the exported map; only the NJS in the header remains
+
+### A message says there are many lights
+
+"This project has N lights in total. Editing may pause for a moment now and then (while checking for unsaved changes)" appears once
+when you open a project or load song data and all difficulties together have 150,000 lights or more.
+
+NLM checks every few seconds whether there are unsaved changes. With a huge number of lights this check takes time, and editing may pause for a moment.
+
+- Deleting light clips you don't use (such as lights borrowed from other maps) makes it lighter
+- If the pauses don't bother you, you can keep working as it is
+
+### Clicking a review note says no objects were found
+
+There are no notes or other objects at that beat ([chapter 10](#jumping-to-a-note)).
+
+- This happens when you changed the map after receiving the notes and moved or deleted the objects. Read the note and check whether you already fixed it
+- For a difficulty whose beats were converted by "Load song data", the beats are off if you unchecked "Read the beats as the original map's beats and convert them to NLM beats" when loading.
+  Delete the notes with **Clear notes** and load them again with the checkbox on ([chapter 10](#retimed-difficulties))
+- The beats are also off if you changed the tempo or moved clips after the beats were converted
+- Notes without a heading are looked up in the difficulty you chose when loading. If you chose the wrong one, load them again
 
 ### Resetting the preferences
 
@@ -1762,6 +2041,17 @@ Projects and assets are not deleted.
 | The downloaded file does not match the release information | The download may be broken. Wait a while and install again |
 | This plugin version cannot be used with this version of NLM | Update NLM to a newer version |
 | Cannot measure: fewer than 20 notes | That difficulty cannot be measured (it can be once it has more notes) |
+
+### The AutoModder tab shows an error
+
+| Message | Fix |
+|---|---|
+| Could not connect to GitHub | Check your internet connection |
+| The downloaded file does not match the release information | The download may be broken. Wait a while and install again |
+| This plugin version cannot be used with this version of NLM | Update NLM to a newer version |
+| There is no audio | AutoModder uses the song length. Load the song before checking |
+| AutoModder does not check this difficulty because it has fewer than 20 notes | That difficulty can't be checked (it can be once it has more notes) |
+| AutoModder stopped in the middle of the checks | There are no results for that part. Press **↻ Check again** |
 
 ### NLM does not start and shows "Failed to resolve Python.Runtime.Loader.Initialize ..."
 
@@ -1786,5 +2076,5 @@ Please let us know on [GitHub Issues](https://github.com/Oz-Co-two/nlm-oz-co2/is
 It helps if you include the **version number** shown at the top right of the screen (for example, v2.0.0-oz) and what happened after which operation.
 
 <!-- chapter-nav -->
-> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Customizing the settings](#10-customizing-the-settings) ｜ [11. Troubleshooting](#11-troubleshooting) ｜ [▲ Contents](#contents)
+> **Go to chapter:** [1. Working faster](#1-working-faster) ｜ [2. Displays that help placement](#2-displays-that-help-placement) ｜ [3. Making the most of the NLE](#3-making-the-most-of-the-nle) ｜ [4. Making several difficulties efficiently](#4-making-several-difficulties-efficiently) ｜ [5. Songs with tempo changes, and fixing beat offsets](#5-songs-with-tempo-changes-and-fixing-beat-offsets) ｜ [6. Analyzing the song (tempo and structure)](#6-analyzing-the-song-tempo-and-structure) ｜ [7. Advanced lighting](#7-advanced-lighting) ｜ [8. More about the INFO nodes](#8-more-about-the-info-nodes) ｜ [9. Checks before publishing](#9-checks-before-publishing) ｜ [10. Responding to review notes](#10-responding-to-review-notes) ｜ [11. Customizing the settings](#11-customizing-the-settings) ｜ [12. Troubleshooting](#12-troubleshooting) ｜ [▲ Contents](#contents)
 <!-- /chapter-nav -->

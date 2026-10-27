@@ -192,6 +192,12 @@ def media_lib_setup(ed):
     h.media_lib_load(ed, extra=h.media_lib_sample_extra(), covers=2, details=h.SAMPLE_DETAILS)
 
 
+def am_mock_installed(ed):
+    """AutoModder のタブ: 「GitHub から取り込む」の応答を取り込み済み、確かめの応答を素材 rich の偽の結果にする（tests/_lib/automodder_helpers.py。通信・取り込みはしない）"""
+    import automodder_helpers   # tests/_lib（nlmtest が読み込み先に足している）
+    automodder_helpers.am_spy(ed, {"install": automodder_helpers.AM_INSTALLED, "run": automodder_helpers.am_result()})
+
+
 def mock_song_details(ed):
     """全曲データの状態の応答を見本（2026-10-12 06:30 時点のデータ）に差し替える（環境設定の MEDIA タブの状態の表示を毎回同じにする）"""
     h = _e2e_helpers()
@@ -350,6 +356,12 @@ SCENES = [
                       js("(()=>{document.querySelector('#mcPanel .blStarsBox').scrollIntoView({block:'center'});return 1})()", 0.3, name='R5.A の欄までスクロール'),
                       click('#mcPanel .blRtOpen'),
                       js("(()=>{document.querySelector('#mcPanel .blStarsBox').scrollIntoView({block:'center'});return 1})()", 0.3, name='説明が見える位置へ')]),
+        Screen('mapcheck_am', 'AutoModder のタブ（プラグイン未導入・断り書き・取り込みの説明）',
+               steps=[click('#mcPanel .mcTab[data-tab=am]', 0.6), until("!!document.querySelector('#mcPanel .amOpen')", what='取り込みのボタン'),
+                      click('#mcPanel .amOpen')]),
+        Screen('mapcheck_am_result', 'AutoModder のタブ（取り込んだ後の結果: 曲の情報・ノーツ20個未満の Hard・Expert の項目と拍。応答は偽物）',
+               steps=[am_mock_installed, click('#mcPanel .amInstall'), until("!!document.querySelector('#mcPanel .amMeta')", what='AutoModder の結果')],
+               leave=[click('#mcPanel .mcTab[data-tab=mc]')]),   # 開いているタブは覚えるので BS Map Check へ戻す
     ]),
     Scene('曲データの読込', None, [
         Screen('tempo_import_dialog', '曲データを読み込む: BPM変化の取り込みの確認（音源が既にある時）',
@@ -494,4 +506,66 @@ SCENES.append(Scene('曲の解析の案内', FIXTURE, [
 SCENES.append(Scene('曲の解析の確認', FIXTURE, [
     Screen('analysis_ask', '曲の解析: 曲を取り込んだ時の「曲を解析しますか？」（解析すると何ができるか・後で解析する入口・次から聞かない・［解析する］［今はしない］）',
            steps=[analysis_ask_load, until("!!document.querySelector('#dirtyDlg[data-ana=ask]')", what='曲を解析しますか')]),
+]))
+
+
+def heavy_load_start(ed):
+    """合成の重い譜面（ライト合計15万・2難易度・ライトボックス・Standard 以外のモード・プレビューに無い環境 Weave）の「曲データを読み込む」を始める。
+    難易度の .dat を読む所で止める（window.__gateOpen() で続く）＝読み込み中の画面を撮るため（2026-10-27）"""
+    h = _e2e_helpers()
+    ed.js(h.synth_load_js(lights=150000, diffs=("Hard", "Expert"), env="WeaveEnvironment", modes=[("OneSaber", ["Expert"])], boxes=3, gate=True))
+
+
+# 曲データを読み込む: 読み込み中の画面と、ライトがとても多い時の警告（2026-10-27）。警告の画面ではトップバーの環境に
+# 「プレビューに無い環境」の印（⚠・Weave）も写る
+SCENES.append(Scene('曲データの読込（重い譜面）', None, [
+    Screen('bulk_busy_dialog', '曲データを読み込む: 読み込み中の画面（題名・今していること「譜面を読み込み中… Hard（1/2）」・進み具合のバー）',
+           steps=[heavy_load_start, until("(b=>!!b&&b.classList.contains('on'))(document.getElementById('busyDlgBg'))", what='読み込み中の画面'),
+                  wait(0.3)],
+           leave=[js("window.__gateOpen()", 0.2, name='読み込みを続ける')]),
+    Screen('light_heavy_dialog', 'ライトがとても多い時の警告（ライトが合計 150,000 個・未保存の確認のため一瞬止まる・［OK］）。トップバーの環境は Weave＋プレビューに無い印',
+           steps=[until("window.__bulkDone&&!!document.querySelector('#dirtyDlg[data-dlg=lightHeavy]')", timeout=60, what='警告')]),
+]))
+
+
+# ---- 審査の指摘（2026-10-27・js/review/review-panel.js）: 見本の文は作り物（tests/_lib/review_helpers.py） ----
+def _rvh():
+    import review_helpers   # tests/_lib（nlmtest が読み込み先に足している）
+    return review_helpers
+
+
+def review_import_open(ed):
+    """読み込みの確認の画面（.txt＝Mod.txt・貼り付けた文＝見出しの無い指摘）を出し、読み方の注意を開く"""
+    h = _rvh()
+    h.rv_open_import(ed, [("Mod.txt", h.SAMPLE), (None, h.NO_HEAD)])
+    ed.js("(()=>{ const d=document.querySelector('#dirtyDlg .rvWarns'); if(d) d.open=true; return 1; })()")
+
+
+def review_import_ok_and_jump(ed):
+    """［読み込む］→ 一覧の「first note」の行をクリック（Expert の拍4へ移動・その行に返事の欄）"""
+    h = _rvh()
+    ed.js("document.querySelector('#dirtyDlg[data-rv=rvImport] .ddBtns button.pri').click(); true")
+    h.wait_until(ed, "window._dbgApp.review().open", label="一覧")
+    h.rv_click_row(ed, "first note")
+    h.wait_until(ed, "Math.abs(window._dbgApp.state().cur-4)<1e-6", label="拍4へ")
+
+
+def review_export_check(ed):
+    """一覧の［書き出す…］→「NLM の確かめの結果」"""
+    h = _rvh()
+    ed.js("document.querySelector('#rvPanel .rvExport').click(); true")
+    h.wait_until(ed, "!!document.querySelector('#dirtyDlg[data-rv=rvExportDlg]')", label="書き出しの画面")
+    ed.js("(()=>{ const i=document.querySelector('#dirtyDlg input[name=rvXKind][value=check]'); i.checked=true; i.dispatchEvent(new Event('change',{bubbles:true})); return 1; })()")
+    h.wait_until(ed, "document.querySelector('#dirtyDlg .rvXPre').value.length>0", timeout=30, label="確かめの結果")
+
+
+SCENES.append(Scene('審査の指摘', FIXTURE, [
+    Screen('review_import', '審査の指摘: 読み込みの確認（ファイルごとの数・読み方の注意・見出しの無い指摘の難易度を選ぶ・読み込む数）',
+           steps=[review_import_open]),
+    Screen('review_panel', '審査の指摘: 一覧（難易度ごと・済みの印・拍・文・続きの行・選んだ行に返事の欄・飛んだ知らせ）と NLE の数字の帯の印（黄色の▼・範囲は帯・選んだ指摘は点線）',
+           steps=[review_import_ok_and_jump]),
+    Screen('review_export', '審査の指摘: 書き出しの画面（NLM の確かめの結果・英語・前書きに数を入れない・見本の欄・コピー／出力フォルダへ保存）',
+           steps=[review_export_check], leave=[click('#dirtyDlg .ddBtns button[data-v=cancel]')]),
+    Screen('review_paste', '審査の指摘: 貼り付けて読む画面（Discord の本文を貼る欄）',
+           steps=[click('#rvPanel .rvPaste', 0.4)]),
 ]))

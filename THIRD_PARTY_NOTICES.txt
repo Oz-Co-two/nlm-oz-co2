@@ -7353,7 +7353,8 @@ C. LGPL・GPL の部品のソースコードの入手先
 LGPL の部品のソースの添付（v2.0.0-oz 以降）
   v2.0.0-oz 以降、上の LGPL の部品（libsndfile・mpg123・LAME・python-soxr と libsoxr）の、同梱している版の
   ソースと組み立ての設定を、GitHub の各リリースのページ（https://github.com/Oz-Co-two/nlm-oz-co2/releases ）に
-  添付しています（exe 版の配布 zip と同じ場所から取れるようにするため）。添付のファイル:
+  1つの zip（LGPL-library-sources-<版>.zip）にまとめて添付しています（exe 版の配布 zip と同じ場所から取れるように
+  するため。v2.0.0-oz は公開の後に1つの zip へまとめ直しました）。zip の中のファイル:
     libsndfile-1.2.2.tar.xz（と署名 .asc）     libsndfile の公式のソース
     mpg123-1.32.9.tar.bz2（と署名 .sig）       mpg123 の公式のソース
     lame-3.100.tar.gz                          LAME の公式のソース
@@ -7370,7 +7371,9 @@ LGPL の部品のソースの添付（v2.0.0-oz 以降）
 English: From v2.0.0-oz on, the source code of the LGPL components above (libsndfile, mpg123,
 LAME, python-soxr and libsoxr), in the exact versions included in the Windows build, and the
 scripts used to build them are attached to each release on GitHub
-(https://github.com/Oz-Co-two/nlm-oz-co2/releases), the same place as the exe zip:
+(https://github.com/Oz-Co-two/nlm-oz-co2/releases), the same place as the exe zip, bundled
+in one zip (LGPL-library-sources-<version>.zip; for v2.0.0-oz it was bundled after the release).
+The zip contains:
   libsndfile-1.2.2.tar.xz (+ .asc), mpg123-1.32.9.tar.bz2 (+ .sig), lame-3.100.tar.gz,
   soxr-1.1.0.tar.gz (python-soxr 1.1.0 with the libsoxr source and build scripts),
   libsndfile-binaries-a3e6f9769d0c7e91d2d036cf0fdbe5b4bbf18b87.tar.gz (how the libsndfile DLL

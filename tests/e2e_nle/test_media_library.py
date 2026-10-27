@@ -318,19 +318,20 @@ def test_grid_drag_rule_while_filtering(t):
     t.no_errors()
 
 
-def test_v4_song_refused_and_music_lane(t):
-    '''v4 の曲は NLE のレーンへのドラッグ・曲データを読み込むを断る（一覧には出る）。Musicレーンへは記録したライブラリの音源を /__lib/file から置ける'''
+def test_v4_song_and_music_lane(t):
+    '''v4 の曲も NLE のレーンへのドラッグ・曲データを読み込むで読める（2026-10-27 まで断っていた。ライトショーのファイル名は本物の Info.dat から読む）。
+    Musicレーンへは記録したライブラリの音源を /__lib/file から置ける'''
     ed = open_lib(t, "basic")
     set_view(ed, "detail")
-    n0 = len(clips(ed))
-    drag_from(ed, *row_xy(ed, 6), *_nle_target(ed, 8))
-    ed.wait(0.4)
-    t.eq(len(clips(ed)), n0, "v4 の曲はクリップにならない")
-    t.eq(take_errors(ed, "v4 形式"), 1, "v4 は未対応の案内")
+    t.eq(_drop_notes(ed, *row_xy(ed, 6))["n"]["notes"], 20, "v4 の曲の Expert（20ノーツ）がクリップになる")
     x, y = row_xy(ed, 6)
     menu(ed, x, y, "曲データを読み込む")
-    ed.wait(0.3)
-    t.eq(take_errors(ed, "v4 形式"), 1, "曲データを読み込むも断る")
+    wait_until(ed, "document.getElementById('errToast').textContent.includes('一括読み込みしました')", label="一括読み込みの終わり")
+    pj = json.loads(ed.js("window._dbg.rt.buildProjectText()"))
+    secs = (pj["difficulties"].get("expertstandard.dat") or {}).get("sections") or []
+    t.eq([len((s.get("content") or {}).get("notes") or []) for s in secs if s.get("lk") == "n"], [20], "曲データを読み込むも Expert に 20 ノーツ")
+    t.eq(pj["njsCfg"].get("expertstandard.dat"), {"njs": 17, "offset": 0}, "Expert の NJS（v4 の Info.dat から）")
+    take_errors(ed, "音源")   # 素材の Gamma には音源のファイルが無い（音源の読み込みの失敗は出てよい）
     m = ed.js("window._dbgApp.musicScreen(4)")
     drag_from(ed, *row_xy(ed, 3), m["x"], m["top"] + m["h"] * 0.6)   # Beta（音源2秒）
     wait_until(ed, "window._dbgApp.nle().music.beat===4&&Math.abs(window._dbgApp.nle().music.dur-2)<0.05", label="Musicレーンへのドロップ")
@@ -562,6 +563,10 @@ def test_drop_to_info(t):
     by = {n["t"]: n["data"] for n in new}
     t.eq((by["meta"].get("name"), by["meta"].get("artist"), by["cover"].get("name")), ("Alpha Song", "Artist Alpha", "cover.png"), "曲情報とカバーの名前")
     t.eq((by["prev"].get("start"), by["prev"].get("dur")), (1, 2), "試聴区間は本物の Info.dat から（走査の結果には無い）")
+    cid = ed.js("(g=>Object.keys(g.nodes).filter(k=>g.nodes[k].t==='cover').pop())(window._dbgApp.infoGraph())")
+    wait_until(ed, f"!!window._dbg.rt._coverHandles[{json.dumps(cid)}]", label="カバーの画像")
+    t.eq(ed.js(f"(async()=>(await window._dbg.rt._coverHandles[{json.dumps(cid)}].getFile()).name)()"), "cover.png",
+         "カバーの画像は名前付きの File（書き出しは拡張子を名前から決める。名前の無い Blob だと補正の無い書き出しが「カバー画像のコピーに失敗」した）")
     n1 = len(nodes())
     drag_from(ed, *lib_item_xy(ed, "art"), r["x"] + 300, r["y"])
     wait_until(ed, f"Object.keys(window._dbgApp.infoGraph().nodes).length>={n1 + 1}", label="画像のドロップ")

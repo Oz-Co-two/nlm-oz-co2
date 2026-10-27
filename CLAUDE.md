@@ -76,8 +76,9 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   LGPL の部品（libsndfile・mpg123・LAME・libsoxr）のソースの入手先は THIRD_PARTY_NOTICES.txt の付録C。`build_and_deploy.py` は
   手元の NLM-app へは exe と `_internal` だけを写す（ライセンスの2ファイルは利用者向けの zip と自動更新で届く）。
 - **LGPL の部品のソースはリリースに添付する**（2026-10-20・v2.0.0-oz から）。同梱の版のソースと組み立ての設定（libsndfile・mpg123・LAME・
-  python-soxr と libsoxr・DLL を作った libsndfile-binaries と vcpkg の port）を `release-assets/lgpl-src/`（git の管理外）に置き、zip・update.json と
-  一緒に添付する（`make_release.py` はこのフォルダと `SOURCES.txt` が無ければ止まり、表示する `gh release create` に全部並べる）。
+  python-soxr と libsoxr・DLL を作った libsndfile-binaries と vcpkg の port）を `release-assets/lgpl-src/`（git の管理外）に置き、`make_release.py` が
+  1つの zip `dist/release/LGPL-library-sources-<版>.zip` にまとめて、zip・update.json と一緒に添付する（このフォルダと `SOURCES.txt` が無ければ止まる。
+  2026-10-22・利用者の要望: 9ファイルが並ぶとリリースのページでどれが本体か分からない。`--lgpl-only` はこの zip だけを作る）。
   中身・照合・版の根拠は `SOURCES.txt`（英語）、ファイル名は付録C。**soundfile・soxr の版を上げたら取り直し、SOURCES.txt と付録Cを書き直す**:
   libsndfile の DLL は soundfile のタグのサブモジュール `_soundfile_data`＝bastibe/libsndfile-binaries のコミットで、その GitHub Actions が vcpkg で組み立てる。
   DLL に版の文字列が無い部品（mpg123）は、DLL に残る `buildtrees\<port>\src\<ref>-<hash>.clean` の hash（元のソースと各パッチの SHA-512 から作る）を
@@ -265,11 +266,15 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 ## 譜面チェック（BeatLeader基準・2026-09-28）
 
 - `js/mapcheck/mapcheck.js` は BS Map Check（KivalEvan・MIT）の**BeatLeaderプリセット**と、それが使う bsmap の計算の移植。
-  ランク審査で実際に使われるのが BS Map Check なので、**「原作と同じ結果」を最優先**にしている。そのため原作の計算のクセも
-  わざと再現している（直すと審査で見られる結果とずれる）:
+  BS Map Check の名前で結果を出すので、**「原作と同じ結果」を最優先**にしている。そのため原作の計算のクセも
+  わざと再現している（直すと原作の結果とずれる）。なお、BeatLeader の審査の人が使うのは主に ChroMapper＋AutoModder で、
+  BS Map Check を使うという発言は BeatLeader の Discord では見つからなかった（2026-10-26 の調べ。以前ここに「審査で使われるのが BS Map Check」と書いていたのは誤り）:
   - 各配列を並べ替えない（原作は読み込み時に並べ替えず、.datに書かれた順で判定する。NLMの書き出しは時刻順）
   - チェーンのリンクの秒(`sec`)に拍の値が入る／bsmapの`vectorMul`は0を掛けると元の値のまま（`mulQ`）
   - 「照らされていないボム」は原作が例外で何も出さない条件では何も出さない
+  - 角度のずらし（v3 の `a`）は「向き − a」（`buildBeatmap` の `o.angle`。原作の `load/beatmap.ts` の `applyAngle` が 2026-01-11 から同じ式。ゲーム・bsmap の
+    `isNotePointing` と BL評価リストの `cutAngle` は「＋a」）。使う項目は Hammer hit・Handclap・Hitbox path・Parallel notes・Hitbox reverse staircase・
+    Double-directional・Inline sharp angle・Improper chain。2026-10-27 に符号で結果が分かれる自作の見本で公開サイトと突き合わせて一致を確かめた
 - 原作と違うのは「原作が例外で項目ごと消える」ケースだけ（分割数1のチェーン、不正IDのイベントボックス）。移植は判定できた分を出す。
 - 検査対象は書き出しと同じ `collectExportDiffs()`/`buildExportInfo()` の結果（`exportMap`から切り出して共有）。
   書き出しの中身を変えればチェックにも自動で反映される。音源の長さは書き出す song.egg の長さ（`eggLength()`）。
@@ -283,12 +288,93 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   文面に定義が無くNLMが解釈した所（チェーン密度＝squish、振り始め・スイング軌道のマス、ボムの照明の近似など）は
   コメントと画面の注記（`BL_NOTE_JA`）に書いてある。基準の改訂に追従したら `CRITERIA_DATE` を更新し `tools/blcriteria_test.py`。
   - スイングのまとまりは BS Map Check のもの（90度ちょうどで分ける）を使わず独自に作る（45度ルールが判定できなくなるため）。
+    速い連打（1/4拍が70〜80ms未満）でも別のスイングを1つにしないよう、矢印と逆へ動いた所・移動が折り返した所でも分ける（2026-10-26）。
+  - 角度のずらし（v3 の `a`・反時計回り）は向きに**足す**（`cutAngle`。Beat Saber・BeatLeader の解析と同じ。2026-10-26 まで引いていた）。
+    BS Map Check の移植（`mapcheck.js` の `o.angle`）は原作の計算どおりのまま。
+  - R4.B（45度以内・曲がる向きは片側）で「同じ拍のノーツは基準を満たす順で切る」とみなす同じ拍は、**秒で 1ms 未満のずれ**まで（2026-10-27・利用者の決定。
+    `swingOrders` の `SAME_BEAT_SEC`。以前は拍で 1e-6 未満）。保存の端数で約15µs ずれた横並びがランク譜面にあり、置いた順で切る扱いで矢印と逆＝誤検出だった
+    （ランク譜面で同じ色の続く組の間は、1ms 未満が端数・1〜3ms が意図した速いスライダーで、1ms で分かれる）。他の判定の「同時」の幅（視界ブロック・重なり等）は変えない。
+  - ランク譜面（審査を通った版）での誤検出は `tools/bl_ranked_check.py` で数える（tools/README.md）。判定を直したら、自己テストに加えてこれで直す前と後を比べる。
+  - R3.B（振り始めのふさがり）の候補は、反対色の物が振り始めのマスに**前後40ms以内**にある所だけ（2026-10-26。以前は前のノーツとの間の後半・最大0.5秒で、
+    もう切られた物まで数えてランク譜面の84%に出ていた。ちょうど同時はランク譜面に0・40ms以内は約2%）。
+  - R8.A は今の基準の数（2026-10-26）: 真ん中の片側だけを塞ぐ壁（立った頭の高さ）で、避ける時間＝頭を向かわせる反対側の列の壁が終わってから次の壁まで
+    （250ms・例外で235ms）、壁よけの回数＝塞ぐ側の入れ替わりの間隔（2回/秒・3.8回/秒・例外で4回/秒）。頭を本当に動かす必要があるかは壁の幅と頭の位置で
+    変わる近似なので、**上限を超えても違反にせず要確認**にして文で重さを伝える（ランク譜面にも 235ms・4回/秒を超える所が出るため）。
+    BS Map Check の「中央の2マス幅の壁」は幅3以上の壁を位置に関係なく必ず出すので、R8.A.2 には使わない。
+  - R7.B（ボムの明るさ）は AutoModder の Bomb Lit と同じ見方（2026-10-27・利用者の決定）: ボムの 250ms 前の瞬間に点いているライトがあるか。消灯は 250ms 遅れて効き、
+    明るさ・Chroma の色は 0.25 未満を消灯、フェードは 1 秒点灯、Chroma の lightID 付きのイベントはその ID のライトだけを変える。文面（250ms 前から通り過ぎるまで・明るさ 50）より甘い所は注記に書いてある。
+    以前は 250ms の間ずっと明るいことを求めていて、点滅（On/Fade と Off の繰り返し）の数十ms の暗がりでランク譜面の 38% の難易度に出ていた。
+  - **元の譜面のライトがライトボックスだった難易度**は R10.A・R7.B を判定しない（2026-10-26・利用者の決定）。NLM はライトボックスを読めず、読み込みで消えて
+    ライトが 0〜数十個になるため（ランク譜面で R10.A の違反の全部がこれだった）。入力は `collectMapCheckInput()` の `diffs[i].srcLightBoxes`（元の譜面にあった
+    グループの数・無ければ 0）で、0 より大きければ両方とも手動確認の所見 `boxLightsUnread` 1 つだけ（ボムの無い難易度の R7.B は今までどおり何も出さない）。
+    書き出した .dat 自体のボックス（`boxLights`）の扱いは別。
+  - **NJS の変化**（v4 の譜面から読んだ物・2026-10-27）: 入力の json の `njsEvents`/`njsEventData`（`collectMapCheckInput` が足す）を `prep` が `njsTimeline` で秒ごとの NJS にする
+    （d＝基本の NJS との差・e＝前の変化からこの変化までのイージング・p＝前の値を使う・最初の変化の前は基本の NJS。BSMG Wiki の v4 の頁）。R3.A.1（重なり）は手前の物を切る時刻の NJS で見て
+    注記 `zIntersectNjs`（近似）を出す。R3.C（BS Map Check のヒットボックスの流用）は原作どおり基本の NJS のままで注記 `njsBaseMc`。R1.B.8（イージング）・R9（目視）もこれで働く。
+    R5.A の式は★と Tech だけで NJS を使わない。BS Map Check のタブ（mapcheck.js）は NJS の変化を見ない（原作と同じ結果にするため）。
+  - R8.C（13.8ms 以下の壁）は、4 レーンにかからない枠の外の壁を判定しない（「同じレーン」の無い飾りの壁。ランク譜面で飾りの列の先頭が違反になっていた）。
+  - **時間を飛ばす区間**（`bpmEvents` の BPM が 10000 以上の区間＝`SKIP_BPM`。ランク譜面の演出は 100000）の中の物は、R3.A.1（重なり）・R8.C（短い壁）で
+    違反ではなく要確認（`zIntersectSkip`・`illegalWallSkip`）。ゲームでもほぼ同時に出る演出のため（2026-10-26・利用者の決定）。
+  - R4.A.6（チェーンの長さ≦スライダーの平均の2倍）の数え方（2026-10-27・利用者の決定）: 隣のノーツの間隔がどれも 1/32 拍未満の形は一瞬（R4.A.2）とみなして
+    スライダーに数えない・数えるスライダーが無い／3 つ未満なら比べない（合格扱いで注記 `noSliders`・`fewSliders`）・上限との差が 1ms 以内は出さない。
+    以前は数 ms の組までスライダーに数えて平均が下がり、上限が 10〜59ms になって 1/4 拍のチェーンまで出ていた。
+  - AutoModder（審査の人の道具）とは式・数が違う所がある: 視界ブロックは `(750−300)·e^(−Pass/7.6 − Tech·0.06) + 325`（★でなく Pass）で、
+    ノーツは警告だけ・ボムだけ違反。壁よけは 2.5回/秒で警告・3.5回/秒で違反（旧基準）。
   - 視界ブロック（R5.A）は★とTechレーティングを使う公式の式。値の欄は`js/mapcheck/bl-stars.js`（2026-10-12）: 「難易度を測る」プラグインが
     あれば BL評価リストを表示した時に自動で測って入れ（BS Map Check のタブでは測らない）、無ければ取り込みの案内（説明を見てから押す2段階）。
     手で書き換えた欄は手入力が優先で、測り直しても上書きしない（BeatLeaderの本当の値用）。値はアプリを開いている間だけ保持（保存しない）。
     R11.H.5（★の低い順・0.5★まで許容）も同じ★で判定する。近似値なので違反ではなく要確認止まり。★が足りない時は所見を`BL.MANUAL`にして手動確認にする。
   - R1.B.2（Shuffle/Shuffle Periodは未使用か0）に合わせ、`buildExportInfo`はShuffleが0なら周期も0で書く（他のエディタや公式譜面は0.5を書くため、
     読み込んだ値をそのまま出すと常に違反になっていた。ゲームはこの2項目を使っていないので遊び心地は変わらない）。
+
+## 審査の指摘の .txt を読む・書き出す（2026-10-27）
+
+- 部品は3つ: `js/review/review-txt.js`（読む・書く形。DOM を使わない）・`js/review/review-data.js`（保存の形へ移す・確かめる・飛ぶ先を探す・書き出しの形へ戻す・
+  NLM の確かめの結果を指摘の形に・C3 の拍の直し。DOM を使わない）・`js/review/review-panel.js`（一覧と画面。状態＝読み込んだ指摘・済みの印・返事を持つ）。見た目は `css/review.css`。
+  editor-app.js は本体との橋渡しだけ（`reviewLabels`・`reviewRetime`・`reviewJump`・`reviewSaveTxt`・`drawReviewMarks`）。
+- `review-txt.js`: `decodeReviewBytes`（BOM・BOM の無い UTF-16・Shift_JIS も）、`parseReviewText`（BeatLeader の審査の人が手で書く「拍 - 文」の .txt・Discord の本文）、
+  `formatReviewText`（実物と同じ手書きの形＝難易度の見出しの行＋`拍, 拍 - 文`・CRLF）。実物の書き方の揺れと読み方の決まりは、ファイルの冒頭と `parseReviewText` のコメント。
+  拍は丸めずに返し、項目は書かれた順。`severity:'keep'` は印のある項目にだけ印を付ける（返事を付けて返す時。`true` は印の無い項目に `(N)`＝AutoModder 用）。
+- **画面の作り**（利用者が PC から離れている間に担当が決めた。後で利用者が見て直す前提）:
+  - 入口: ファイルメニューの「審査の指摘を読み込む…」（.txt を選ぶ・複数可＝難易度ごとのファイル）・「審査の指摘を貼り付けて読む…」（Discord の本文を貼る欄）・
+    「審査の指摘の一覧…」。一覧の見出しにも［読み込む…］［貼り付け…］［書き出す…］。
+  - 読み込みの確認（`#dirtyDlg[data-rv=rvImport]`）: ファイルごとの数・読み方の注意（`warnings`）・難易度の分からない指摘は見出しの名前ごとに難易度を選ぶ（既定は今の難易度）・
+    C3 の印・今ある指摘に足すか置き換えるか。難易度の名前の表 `labels` は「曲データを読み込む」がクリップに持たせた `srcLabel`（Info.dat の `_difficultyLabel`・
+    v4 は `customData.difficultyLabel` を `infoToV2` が写す）。NLM は難易度の名前を書き出さないので、それ以外の経路で作った譜面では表が空＝見出しを選ぶ。
+  - **一覧は譜面チェックのパネルのタブではなく、別の浮きパネル `#rvPanel`**（左上・譜面チェックと同じ様式・見出しの下に黄色の線）。理由: 読み込んだ他人の指摘はプロジェクトに
+    保存するデータで、譜面チェックは毎回作り直す NLM の判定（性質が違う）・譜面チェックと並べて見られる・譜面チェックのパネルに AutoModder のタブを足す作業とぶつからない。
+    難易度ごと（難しい方から）→難易度が分からない→Standard 以外の区分、区分の中は書かれた順。行＝済みの印・重さ・拍（数字ごとに押せる）・C3 なら「→ NLM 拍」・文・続きの行・
+    返事の欄（選んだ行と返事のある行だけ）。拍の無い行・読めない行は一番下の区分（閉じた状態）。絞り込み（難易度・今の難易度）と「済みを隠す」は保存しない。
+  - **一覧の文字の大きさ**（2026-10-27・利用者の要望「指摘の文字が小さくて読めない」）: 件数の行の左端の「Aa」のスライダーと、一覧の上の Ctrl＋ホイール（MEDIA の詳細表示と同じ）で
+    指摘の文を 11〜20px（既定 14px・以前は 12px）。値は環境設定と同じ `bsnm_rvFont`（キーが無い＝既定・settings.json へ自動でミラー）で、プロジェクト・未保存の判定・履歴には関係しない。
+    CSS は全部 `--rv-fs` からの比率（式の `N/12` の N が 12px の時の大きさ）で、**パネルの幅も同じ比率で広げる**（1行の字数を変えない・`max-width` で画面に収める）。
+    **スライダーは行の右端に置かない**: ドラッグ中に幅が広がるとつまみが指から逃げて値が走る（`test_review_font_size` の「ドラッグで 17」が落ちる）。右へ動かしたパネルが
+    はみ出す時の左への寄せも、ドラッグ中はせず離した時（change）だけ。`#rvPanel` は body の直下で UI文字サイズの zoom は掛からない。
+  - クリック＝`reviewJump`: その難易度へ切り替え、ノーツ・ボム・壁・アーク・チェーンの頭のうち ±0.01拍（`JUMP_TOL`）の物を選んで移動。無ければ ±1/16拍（`JUMP_NEAR`）で
+    一番近い拍の物を「近い物」として選び、それも無ければ再生位置だけ動かして「物が見つかりません（古い指摘かもしれません）」。範囲は中の物。ノーツ類が無ければ同じ探し方でライト。
+    ロック・単独編集の外・リンクの子の物は選ばない（数だけ知らせる）。結果は一覧の上の知らせと stat、行に ≈／⚠ の印（保存しない）。
+  - タイムラインの印: NLE の数字の帯の下の方（数字の下・テンポの帯の上）に、今の難易度の指摘を ▼（範囲は帯）で描く。色＝重さ（無ければ黄色）・済みは薄く・選んでいる指摘は
+    レーンの上に点線（範囲は薄い帯）。クリック＝一覧のその項目へ（シークしない）・ツールチップ＝拍と文の頭。名前付きのマーカー（プロジェクトの物）は使わない。
+  - 書き出し（`#dirtyDlg[data-rv=rvExportDlg]`）: ①「審査の指摘に返事を付けた物」＝`formatReviewText(…, {responses:true, severity:'keep'})`（書いた拍のまま・拍の無い行も
+    見出しの下に・済みで返事の無い物に「fixed」は選んだ時だけ・読み込んだ物が2つ以上なら返す相手を選べる）。②「NLM の確かめの結果」＝BL評価リストの違反・要確認（と選べば
+    BS Map Check のランク不可・エラー・警告）の拍のある所見を英語で（`checksToItems`・`拍, 拍 - [R5.A] 文 (NLM)`・1行に8拍まで・難しい方から・拍の無い所見は数だけ）。
+    英語の文は `lang/en.json` を読んで作る（`blView(...).msg` を英語の t で・`blcriteria-view.js` が `msg` を返す）。前書きの1行は英語で数を入れない（AutoModder が拍と読む）。
+    重さの印は選べる（既定は無し）。★・Tech は「難易度を測る」の結果（`ratingClient.ratingOf`・譜面チェックの欄の手入力は使わない）。
+    出し方: クリップボード（`navigator.clipboard`・だめなら選んでコピー）と［出力フォルダへ保存］＝INFO の書き出しノードで選んだ出力フォルダ（譜面のフォルダの1つ上＝譜面の zip に
+    入らない）へ `<出力フォルダ名か曲名>_review_reply.txt`（1つの読み込んだ物なら `_<その名前>_reply.txt`）・`_nlm_check.txt`。出力フォルダが無ければダウンロード。
+    exe 版は app.py の `_WRITE_EXTS` に `.txt` を足した（許可済みの出力フォルダの中だけ）。見本の欄は textarea で LF に見えるが、書く物は CRLF。
+- **保存・未保存・履歴**: プロジェクトの `review`（`{v:1, items, notes, srcs}`・無ければキーごと無し。形は review-data.js の冒頭）。`projSig` の `rv` にも入れる＝読み込み・済み・返事で
+  未保存のランプが点く。履歴は専用の領域 `'review'`（読み込み・置き換え・消す・済みの印・返事の確定＝Enter か欄を離れた時。1回の Ctrl+Z で1つ戻る）。開く時は
+  `sanitizeReview`（ファイル由来: 知らない項目・形の違う値・重なった id・拍の無い項目を捨てる）。新規・開く前の `resetAllState` で消す。
+- **C3（拍を付け替えた難易度）**: 「曲データを読み込む」が難易度ごとに違う BPM 変化を `retimeFrag` で付け替えた時、その難易度のクリップに `srcTp`（`{b:基準のBPM, f:元の譜面の
+  [拍,BPM]…, t:読み込んだ時の NLM の [拍,BPM]…}`）を持たせる（保存・Undo に自動で乗る・開く時は `srcTpOk` で確かめる）。指摘を読む時、その難易度へ入る指摘があれば
+  「指摘の拍を元の譜面の拍として読む」の印を出し（既定オン）、`origToNlm`（retimeFrag と同じ式）で NLM の拍を `nlmBeats`/`nlmRanges` に持つ。飛ぶ・印は NLM の拍、
+  一覧は両方、返事の書き出しは書いた拍。読み込んだ時の換算なので、後でテンポやクリップの位置を変えるとずれる（書き出した後に編集した譜面への指摘と同じ）。
+- 文は他人の文章なので、一覧・画面は createElement＋textContent だけで組み立てる（innerHTML を使わない）。ツールチップは title（文字列）。大きさ・行数の上限は `REVIEW_LIMITS`・`RV_LIMITS`。
+- **実物の見本（Discord で集めた審査の .txt）はリポジトリに入れない**（他人の文章で、このリポジトリは公開するため）。テストの見本（`tests/unit_js/test_review_txt.py`・
+  `test_review_data.py`・`tests/_lib/review_helpers.py`）は形だけをまねた作り物。実物で確かめる時は `tools/review_txt_check.py`（tools/README.md）で、結果もリポジトリの外へ出す。
+- テスト: `tests/unit_js/test_review_data.py`（取り込み・確かめ・飛ぶ先・書き出し・AutoModder の取り込みで読めるか）、`tests/e2e_misc/test_review.py`（読み込み・一覧・飛ぶ・印・
+  済みと返事・保存して開き直す・Undo・C3・ファイル・貼り付け・書き出し・クリップボード・exe 版の保存）、画面テストの「審査の指摘」（4画面）、英語の総点検（`review_helpers.review_tour`）。
 
 ## 自動ライティング（2026-10-03）
 
@@ -310,6 +396,17 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   譜面チェック（`collectMapCheckInput`）は`measureCoverFit()`で補正後の寸法・名前だけを使う（どちらも`connectedCoverFit()`。PNGのエンコードは重いのでチェックではしない）。元ファイルへは書けない（`_NativeAccess`）し、補正済みの画像に差し替えると
   開き直した時に`nativePath`の元画像へ自動で繋ぎ直されて補正が消えるため。`infoGraph`の中なので保存・Undo・未保存ランプは自動で付く。
 - 画像を選び直したら`fit`を消す（前の画像向けの設定のため）。同じ画像の「再接続」では残す。補正が効く時だけカードに「書き出し時に…へ補正」と「補正をやめる」。
+- **開く・新規の時のカバー画像の控え**（2026-10-27・利用者の報告「前のプロジェクトのカバーが残った」）: 画像の参照 `_coverHandles`・同梱の画像 `_coverB64`・INFO の見本
+  `_coverImgs`・右下の表示（`updateCoverThumb`）はカバーノードの id（既定は c1）で持つので、`resetAllState` の `resetCoverState()` で全部消す。以前は消さず、
+  次のプロジェクトの同じ id へ前の画像が残った（カバーの無いプロジェクト・新規・画像を戻せないプロジェクトで INFO・右下・譜面チェック・書き出しに使われ、保存で入った）。
+  **プロジェクトごとのカバーの控えを足したら `resetCoverState` でも消すこと。** 画像を非同期に読む所は、読み終わった時に今も同じ画像かを確かめてから入れる
+  （右下＝`_coverSeq`・INFO の見本＝`mark`・同梱の画像の復元と exe 版の自動の接続＝`_coverGen`。開いてすぐ次を開くと、前の画像の読み込みが後から終わって右下に残った）。
+  Blob からカバーの参照を作る時は `coverBlobHandle`（名前付きの File を返す。名前の無い Blob では補正の無い書き出しが「カバー画像のコピーに失敗」した）。
+  テストは `tests/e2e_project/test_cover_reopen.py`。
+- **開く・新規の時の書き出し先の控え**（2026-10-27）: 書き出し先の参照 `outDirHandle`・書き出しノードごとの `_outHandles` も `resetAllState` の `resetOutDirState()` で消す
+  （以前は残り、開いたプロジェクトの記録が無い・未許可・新規でも前のフォルダへ書き出し・審査の指摘の .txt を保存していた）。許可済みの実パスなら `tryAutoRestoreNativeInputs` が
+  繋ぎ直し、それ以外は「再接続」（ブラウザ版は開き直すと必ず再接続）。確かめの途中で別のプロジェクトを開いたら繋がない（`_outGen`）。**書き出し先の控えを足したら `resetOutDirState` でも消すこと。**
+  テストは `tests/e2e_project/test_outdir_reopen.py`。
 
 ## MEDIA ライブラリ（記録・詳細表示・絞り込み・2026-10-12）
 
@@ -328,7 +425,8 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   BeatSaver・BeatLeader・PlayerData の levelId（custom_level_<大文字>）と一致する。規則を変えるとキャッシュは自動で作り直される。
 - NPS は BeatSaver と同じ: 色ノーツ数 ÷（最初〜最後の色ノーツの拍を基本の BPM で秒に）。ダウンロード日は曲フォルダの metadata.json の addedDate を優先
   （Mod が書く。無ければフォルダの作成日と Info.dat の更新日の早い方。フォルダごとコピーすると作成日はコピーした日になるため）。
-- v4 の譜面ファイルは NLM の読み込み（`parseDiffFragment`）が未対応なので、NLE へのドラッグ・曲データを読み込むは断る（一覧・絞り込みはできる）。
+- v4 の譜面も NLE へのドラッグ・曲データを読み込むで読める（2026-10-27。それまでは断っていた）。走査の結果（`quickInfo`）にはライトショー・AudioData のファイル名が無いので、
+  v4 の曲（`_v4`）は読む前に `ensureItemInfo` で本物の Info.dat を読む。読み方は「曲データを読み込む時のテンポと環境」の v4 の行。
 - 画面の配置（2026-10-12・利用者と決めた調整）: 操作部品は見出しの行 `#libHead`（MEDIA [TAB] PREVIEW の帯の右・入りきらない分だけ折り返す）。
   帯は PREVIEW と共用の `position:absolute` なので、行の先頭の空き `#libHeadGap` の幅を `lib-layout.js` が帯の幅から測って入れる（言語で帯の幅が変わる）。
   部品を足したら、既定の MEDIA の幅（約480px）で2段に収まるかを `tests/e2e_nle/test_media_library_ui.py` で確かめる。左のカタログの幅は `bsnm_libSideW`。
@@ -350,6 +448,66 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   記録したライブラリは、テストのデータフォルダの `config/library.json` を書けば次の `/__lib/list` で読み直される。素材は `tools/fixtures/media_lib/`。
   テストの中でエディタを用意する前に `import serve` すると手元の `config/` を触るので注意（`tests/README.md`）。
 
+## 曲データを読み込む時のテンポと環境（2026-10-26）
+
+- 譜面の BPM 変化は `tempoPartsFromDat`: v3 は `bpmEvents`、v2 は `_BPMChanges`（`_customData` の中も）と `_events` の **type 100**（公式の BPM 変化。
+  以前は読まずにライトとして持っていた＝`parseDiffFragment` は type 100 をライトにしない）。
+- **拍 0 の BPM 変化も取り込む**（以前は捨てていて、Info.dat と違う BPM で始まる譜面は曲の頭から秒がずれた）。Info.dat の BPM はゲームが飛来の計算に使うので
+  基準の BPM（`BPM`）は変えず、**拍 0 のテンポパート**として持つ（書き出しの `bpmEvents` にも `b:0` で出る）。利用者が手で足すテンポパートは今までどおり拍 0.25 から。
+- NLM のテンポは全難易度で共通。**難易度ごとに BPM 変化が違う譜面**は、一番多くの難易度が使うテンポ（同じ数なら難しい方）を全体のテンポにし、
+  違う難易度の物は `retimeFrag` で**秒が同じになるよう拍を付け替える**（壁の長さ・アーク/チェーンの尾・ライトも。知らせに難易度を出す）。
+  付け替えた難易度の拍は元の .dat の拍と違う（時刻は同じ）。音源が既にあり「取り込まない」を選んだ時は付け替えない（拍は元のまま）。
+- 拍⇔秒の計算を別のテンポの表で使う時は `tpBeatToSec`/`tpSecToBeat`（`beatToTimeTM`/`timeToBeatTM` と同じ計算）。
+- **環境**: 新しく曲を取り込んだ時（音源も読み込んだ時）は、読み込んだ譜面の `_environmentName` を接続中の設定ノードへ入れる（`setConnectedEnv`。
+  トップバーの環境の切り替えと同じ値＝Default は空）。以前は引き継がず、書き出し・譜面チェックが Default になり、ライトの種類の数え方（R10.A）が元の譜面と違った。
+  音源が既にある時は今の環境のまま（音源・BPMと同じ）。3D プレビューに無い環境（v3 の環境など）は、名前はそのまま書き出し、プレビューは Default で見せる。
+  その時はトップバーの環境名の右に ⚠（`#sqEnvNoPv`）とツールチップ「プレビューに無い環境のため Default で表示」を添える（2026-10-27・`syncSetQuick` が毎フレーム t() で作る
+  ＝言語の切り替えで訳し直される。印の間は名前の欄を縮めてボタンの幅を変えない）。環境の名前はファイル由来なので英数字と `_` だけ受け付ける。
+- **0 を省いた V3**（`"x":0` 等を書かない書き方・2026-10-27）: `parseDiffFragment` は省かれた項目・数でない値を既定の値で持つ（以前は undefined のまま＝3D・編集で NaN）。
+  既定は BS Map Check（bsmap）の読み方と同じ＝0、ただしアークの `mu`・`tmu`、チェーンの `sc`・`s`、ライトの `f` は 1（`mapcheck.js` の読み方と合わせてある）。
+- **色のブースト**（2026-10-27・利用者の決定）: NLM の中では v2・v3・v4 とも種類 5 のライト（i＝オン 1／オフ 0）。v3 は `colorBoostBeatmapEvents`（b・o・o を省いた物はオフ）を読み、
+  書き出しも v3 は `colorBoostBeatmapEvents` へ（`buildDiffJsonFor`。保存の raw に o は残さない＝i が正）。以前は v3 のブーストを読まず（読み込んで書き出すと消えた）、種類 5 を v3 の
+  `basicBeatmapEvents` に書いていた（v3 では廃止された書き方＝ゲームでブーストにならないおそれ。BS Map Check はライトの数に入れ、v3 の環境の「照らされていないボム」は原作の例外の扱いで何も出さなかった）。
+  v3 の `basicBeatmapEvents` の種類 5（以前の NLM の書き出し）もブーストとして読み、`colorBoostBeatmapEvents` へ移す。土台（base）の `colorBoostBeatmapEvents`（古い版のプロジェクトだけ）は
+  書き出しに残す。v2 の難易度（古い版のプロジェクト）の書き出しは `_events` の type 5 のまま。
+- **Standard 以外のモード**（OneSaber・NoArrows・360Degree 等）は読み込まない（NLM は Standard だけを作る）。黙って捨てず、知らせに「Standard 以外の難易度（OneSaber 2つ…）は
+  読み込んでいません」を足す（2026-10-27）。
+- **ライトボックス**（V3 の `lightColor`/`lightRotation`/`lightTranslation`/`vfx` の `EventBoxGroups`・2026-10-27）: NLM は読まず書き出しで消える（編集・素通しは作らない＝利用者の決定）。
+  `parseDiffFragment` がグループの数を `_lbx` に数え、読み込んだ時に作った**クリップの `srcLbx`** に持たせる（ライトのクリップ・無ければノーツのクリップ。MEDIA からライトを置いた時も）。
+  難易度の数＝その難易度のクリップの `srcLbx` の一番大きい物（`srcLbxOf`）→ `collectMapCheckInput` の `diffs[i].srcLightBoxes`（無ければ 0）で、BL評価リストがライトの判定
+  （R10.A・R7.B）を対象外にする。クリップの項目なので保存（`encSec`）・未保存の判定（`projSig` のクリップの項目）・Undo に自動で乗り、読み込んだクリップを消せば印も消える。
+  開く時は `decSec` が数として確かめる。知らせに「ライトボックス（Nグループ）は NLM では読めず、書き出すと消えます…」を足す。
+- **v4 の譜面**（Info.dat 4.x・難易度 4.x・ライトショー・AudioData.dat・2026-10-27）: **読むだけ。書き出しは今までどおり v3**（v4 の書き出しは、NLM で NJS の変化を
+  編集できるようにすると決めた時に一緒に作る＝利用者の決定）。
+  - Info は `infoToV2`（lib-native.js）が v2 の形へ写す。v4 だけの物も持たせる: `_audioDataFilename`・難易度ごとの `_lightshowFilename` と `_environmentName`（環境の一覧の番号から）。
+    全体の `_environmentName` は Standard の難易度で一番多い環境（同じ数なら難しい方。NLM の環境は1つ）で、難易度ごとに違えば知らせる。
+  - 難易度は `readBmFrag`（v4 はライトショーも読む・全難易度で共有するライトショーは1回だけ）→ `parseDiffFragment(dj, ls)` の v4 の分岐 `parseV4Into`。形の見分けは `isV4Dat`
+    （version が 4 か `colorNotesData` がある）。**v4 の Info から v2・v3 の難易度のファイルを指す譜面**（ランク譜面にある）は、そのファイルの中のライト・BPM の変化を読む（ゲームと同じ）。
+  - 「いつ」と「何を」: `colorNotes{b,r,i}`＋`colorNotesData{x,y,c,d,a}` 等。アークの頭・尾（`hi`・`ti`）とチェーンの頭（`i`）も colorNotesData を指し、アークの形は arcsData（`ai`: m・tm・a）、
+    チェーンの尾・分割数・詰め具合は chainsData（`ci`: tx・ty・c・s）。番号を省いた物は 0 番、「何を」の配列ごと無く番号も無い物は全部既定の値（bsmap と同じ）。指す物が無い物は読まずに数えて知らせる。
+    省いた項目の既定は V3 と同じ（上の行）。回転のレーン（`r`・`hr`・`tr`）は読まない（Standard では使わない）。
+  - ライト: 基本のライト（basicEvents＋basicEventsData の t・i・f）とブースト（colorBoostEvents＋Data の b → NLM の中では V2 と同じ種類 5）。ライトボックス（`eventBoxGroups`）は読まず、
+    グループの数を `_lbx` に（V3 と同じ道＝`srcLbx`→`srcLightBoxes`）。waypoints 等は読まない。
+  - テンポは全難易度で共通の AudioData.dat（`tempoFromAudioData`。v4 の難易度のファイルに BPM の変化は無い＝付け替えは起きない）。区間の BPM＝(eb−sb)/((ei−si)/songFrequency/60)。
+    サンプルは整数・拍は小数6桁なので端数が出る（194.99972 等）＝区間の長さが 0.5ms（短い区間は1サンプル）以内で合う桁の少ない値に丸める。丸めて区間の頭の秒が 1ms を超えてずれたら丸めず、
+    それでもずれる（拍0が音の途中にある等）時は知らせる。基準の BPM は Info の `audio.bpm`＝区間が1つで同じ BPM の譜面（ランク譜面の多く）はテンポパート無し。
+  - **NJS の変化**（`njsEvents`＋`njsEventData`）: NLM では編集できず、書き出す .dat には入れない（v3 に無い）。`[拍,p,e,d]` の並びを読み込んだ**ノーツのクリップの `srcNjs`** に持たせ
+    （ライトボックスの数と同じく保存・`projSig`・Undo に自動で乗り、開く時は `decSec` が `srcNjsOk` で形を確かめる）、`collectMapCheckInput` が v4 の形で各難易度の json にだけ足す（`srcNjsOf`）。
+    拍は曲の拍のまま＝クリップを動かしても動かない（テンポと同じく曲の時間に付く物とした）。MEDIA からノーツを置いた時は置いた拍だけずらす。判定での使い方は「譜面チェック」の節。
+  - 知らせ: 読み込んだ時に NJS の変化の数（難易度ごと）・環境の違い・テンポのずれ・番号の合わない物・読めなかったファイル。書き出した時は `exportLostNote` が
+    「元の譜面にあった物のうち、NLMで扱えない物は書き出していません（ライトボックス・NJS の変化）」を足す（V3 のライトボックスも）。
+  - テスト: `tests/e2e/test_bulk_import.py` の `test_v4_*`（自作の見本）・`tests/e2e_nle/test_media_library.py`（素材の Gamma V4 のドラッグ・曲データを読み込む）。
+- **読み込み中の画面**（`busyDialog`・`#busyDlgBg`・2026-10-27・利用者の要望）: 音源→難易度ごとの .dat→クリップの配置の区切りで `await busyPaint()` で一度描かせる
+  （置く途中では返さない）。出ている間は裏のクリック・キーを止める（テンポの確認の間は隠してキーを通す）。0.25 秒より早く終われば見せない。閉じてから「曲を解析しますか？」。
+  - 重いのは読み込みではなく、読み込んだ後の NLE の毎フレームの描画だった（ライト n 個のクリップで n²・ライト10万で1フレーム数十秒）: `drawLayers` のライトの色は
+    `boostLookup()`（Boost だけの表を描画1回に1回作って二分探索・`boostStateAt` と同じ答え）、画面の外のライトは描かない。重複ライトの黄色い枠の3Dの部品は
+    `CHIP_MAX`（一度に出せるチップの数）まで。**描画の途中でライトごとに全部のライトをなめる処理を足さないこと。**
+  - 未保存の判定（`projSig`）は全難易度のライトを文字にするので、ライトの数に比例して4秒ごとに一瞬止まる。**間隔は変えない**（利用者の決定: 未保存の確認の保険を弱めない）。
+    代わりに、プロジェクトを開いた時・曲データを読み込んだ時に全難易度のライトの合計が `LIGHT_WARN_N`（15万＝customData のある V3 で `projSig` の1回が 0.1 秒前後。
+    測った値はコメント）以上なら警告を1回出す（`lightHeavyWarn`・`#dirtyDlg[data-dlg=lightHeavy]`・急に出るので Enter では閉じない・Esc＝閉じる）。
+- テスト: `tests/e2e/test_bulk_import.py`（合成の重い譜面は `e2e_helpers.synth_load_js`・`gate=True` で .dat を読む所で止める）。ランク譜面での確かめは
+  `tools/bl_ranked_check.py`（テンポを読み違えると秒で決まる判定に偽の違反が出る）。
+
 ## 難易度を測る（BeatLeaderの星の近似・2026-10-02）
 
 - 計算は**本体に同梱しない別配布のプラグイン** nlm-rating（https://github.com/Oz-Co-two/nlm-rating ・MIT・.NETの自己完結exe・zip約19MB）。
@@ -367,6 +525,36 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - 上流はノーツ20個未満の難易度を計算しない（`skipped:"tooFewNotes"`）。
 - プラグイン側の保守はそのリポジトリで行う: `python build.py`（zipとmanifest.json）→ `python tests/compare_bl.py <exe>`（本家の値との比較。
   Pass/Techが1つでもずれたら失敗）。上流の追従手順はプラグインのREADME。公開は**プラグインのリリースが先、それを使うNLMの版が後**。
+
+## AutoModder の判定（譜面チェックの3つ目のタブ・2026-10-27）
+
+- 判定は**本体に同梱しない別配布のプラグイン** nlm-automodder（https://github.com/Oz-Co-two/nlm-automodder ・MIT・.NET の自己完結 exe・zip 約12MB）。
+  AutoModder（LightAi39/ChroMapper-AutoModder・MIT）v1.6.6 の自動の確かめ（BLMapCheck）を**改変せずに**組み立てた物＝近似ではなく AutoModder と同じコード。
+  ただし難易度ごとに既定の設定へ戻してから確かめる（上流は確かめの途中で設定を書き換えて次の難易度へ持ち越す）。入出力・上流の追従の手順はプラグインの README。
+- **公開の順はプラグインのリリースが先、それを使う NLM の版が後**（v0.1.0 を GitHub で公開した後に master へ入れた。NLM 側は v2.1.0-oz から）。
+- NLM側: `automodder_plugin.py`（取り込み・更新・実行。作りは `rating_plugin.py` と同じ）＋`serve.py`の`/__automodder/*`（status・check・install・use・run。POST）
+  ＋`js/automodder/automodder-client.js`（状態・通信・結果）＋`js/automodder/automodder-view.js`（タブの中身）＋`css/automodder.css`。
+  タブの切り替え・拍のクリック（`mapCheckJump`）は `mapcheck-panel.js`。editor-app.js は入力を作る `collectAutoModderInput` と窓口 `amClient` だけ。
+- 入力は譜面チェックと同じ `collectExportDiffs()`/`buildExportInfo()`（Info.dat が先頭・各難易度の .dat）と、書き出す song.egg の長さ `eggLength()`
+  （AutoModder は Cold End・Outside・Light に曲の長さを使う。音源が無ければ動かさずにそう出す）。
+- タブを開いた時（と、タブを開いたままの再チェック）に `run({ifChanged:true})`＝渡す中身が前回うまく確かめた時と同じなら exe を起動しない。
+  BS Map Check・BL評価リストのタブでは通信しない。未導入なら取り込みの案内（説明を見てから押す2段階＝bl-stars.js と同じ）。
+- 見せ方: 先頭に**必ず断り書き**（AutoModder（版・既定の設定）の判定を NLM の中で動かした結果・公式の基準と違う所がある＝R5.A の式・壁よけの回数など・
+  難易度ごとに既定の設定・公式ツールではない）、下の注記にも短く。BS Map Check・BL評価リスト（青緑）と見間違えないよう琥珀色の枠。
+  曲の情報→Info.dat の難易度の順に、重さ（Error→Warning→Inconclusive→Suggestion→Info→参考）の順。同じ重さ・同じ項目・同じ文の結果はまとめて拍を並べる
+  （AutoModder は物1つごとに結果を1つ出す）。合格は畳んだ1行・統計（Statistical Data）は1行。英語の文はそのまま、項目名だけ `am.k.<AutoModder の名前>` で訳す
+  （英語版は元の名前）。上流が項目を足しても英語の名前のまま出る。BPM は AutoModder が自動で判定しないので、いつも「判定できず」。
+- **プラグインの出力はファイル由来の文字（曲名など）を含む**: `automodder_plugin.py` が知っている項目・形だけを通し（重さ・物の種類・信号機の値は決まった物だけ・
+  文字は切り詰め・結果は2万件・物は1件5000個まで＝超えたら `truncated`）、画面は escHtml を通す。
+- 置き場所は exe隣の`plugins/automodder/<版>/`（`current.json`で使う版を選ぶ・旧版は残す）。ネットに繋がらない PC は配布の zip を展開した中身をそこに置けば使える
+  （plugin.json の名前・版・protocol と exe がそろった物だけ）。取得先URLは`automodder_plugin.py`に固定し、zip は manifest.json の名前・版・exe の名前・SHA-256・
+  サイズと照合してから展開する。JS から URL・パスを渡せるようにしないこと（署名なし exe を実行するため）。実行は1つずつ・時間切れ 300 秒。
+- 通信仕様の版 `PROTOCOL`（automodder_plugin.py）はプラグイン側 `Program.Protocol` と同じ値。入出力の形を変えたら両方を上げる（NLM は知らない protocol の版を取り込まない）。
+- プラグインは PyInstaller 製ではないので `_env_for_child` は要らない（.NET の自己完結 exe は PyInstaller の環境変数を読まない）。念のため PyInstaller・NLM の環境変数は渡さない。
+- BL評価リストの行に公式との違いの印（「AutoModder: ●」・違う行だけ目立たせる）を付けるのは後から。
+- テスト: `tests/unit_py/test_automodder_plugin.py`（取り込み・照合・protocol・実行の失敗の形・出力の整え方。exe は subprocess.run の差し替え。
+  環境変数 `NLM_AUTOMODDER_ZIP` に配布の zip（隣に manifest.json）を入れると本物でも動かす）、`tests/e2e_misc/test_automodder.py`（応答は偽物・
+  `tests/_lib/automodder_helpers.py`）、visual の `mapcheck_am`・`mapcheck_am_result`、英語の点検（`automodder_helpers.am_tour`）。
 
 ## 本体の自動更新（2026-10-02）
 
@@ -442,6 +630,13 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   （利用者の要望: カーソルを動かしただけで未保存にしない）。保存した時の値が残るだけで、動かしただけなら閉じる時に確認は出ない。
   開いた直後は音源の読込が終わる前で、曲末が暫定の128拍（`camSongEndBeat`）。3Dカメラの可動範囲（`clampCamera`）は再生ヘッドを必ず含めること
   （含めないと、戻した再生位置が128拍より後ろの時にカメラが押し出されて3Dに何も映らなくなる。2026-10-09に修正）。
+- **今どの難易度を開いているかで変わる物は比べない**（2026-10-27）。以前は保存した時と違う難易度を開いているだけでランプが点いた
+  （譜面チェックの拍・難易度のボタン・数字キーのどれで切り替えても。保存しないまま切り替えて戻ると元に戻るので、テストでは見つからなかった）。原因は3つ:
+  ①ノーツ・ライトの配線（`graphEdges` の notes/lights）は `relinkDiffEdges` が今の難易度のクリップの id で張り直す派生値＝`projSig` から外した
+  （audio・info・cover の配線は比べる）、②まだ無い難易度を開くと空の退避（`projDiffs`）ができる＝物もクリップも無い難易度は「無い」と同じに扱う、
+  ③フラットの並び（3Dで置いた物は末尾、難易度を切り替えて戻るとクリップの順に作り直される）＝`_sigArr` が値で並べ替えてから比べる
+  （中身が同じなら並びは問わない。ライトの多い譜面で `projSig` が少し重くなった＝`LIGHT_WARN_N` のコメント）。
+  **今の難易度・選択・並び順で変わる物を `projSig` に入れないこと**。確かめるテストは `tests/e2e_project/test_dirty_switch.py`（保存した直後に切り替えたままにする）。
 - 閉じる確認は`app.py`の`events.closing`（未保存時だけ中止→JSの`__nlmAskQuit`で3択）。pywebview標準の
   `confirm_close`は英語固定なので使わない。closingはUIスレッドで同期実行＝中で`evaluate_js`を待つとデッドロックする。
 - `window._dbg`は`js/main.js`が作る（editor-app.js側にあった古い`window._dbg`は、main.jsが起動時に上書きして外から見えなかったため
@@ -484,7 +679,7 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   外部サイトの読み込み・`eval`も不可（今は使っていない）。
 - 翻訳ファイルの訳文に`<`が含まれていたら`loadLang()`が捨てて既定文にする（訳文もinnerHTMLに入るため）。
 - **ファイル読み書きの許可範囲**（app.pyの`_NativeAccess`）: JSへ渡す`fs_*`/`read_song_file`は任意パスを受けない。
-  - 書き込み: 許可済み出力フォルダの中だけ、拡張子は`_WRITE_EXTS`（.dat/.egg/.json/画像）だけ。
+  - 書き込み: 許可済み出力フォルダの中だけ、拡張子は`_WRITE_EXTS`（.dat/.egg/.json/画像・審査の指摘の形の書き出しの .txt）だけ。
     **書き出しで新しい種類のファイルを作るようにしたら`_WRITE_EXTS`に足すこと**（足さないと`not-allowed`で失敗する）。
   - 許可済み出力フォルダ＝`pick_folder`（ネイティブのフォルダ選択ダイアログ）で選ばれたフォルダ。exe隣の
     `config/native_out_dirs.json`に保存され次回も自動接続できる。JS側から許可を足す口は作らないこと。
@@ -667,6 +862,8 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - `songNode`/`graphEdges`/`extraNodes`/`graphIO`/`altIns`/`altOuts`/`altSongs`/`activeUids`/`cutSet`は現役のデータ（保存ファイル・
   履歴に入る。`applyInfoGraph()`がINFOノードエディタからここへ写す）。`js/chart/graph-legacy.js`も、レイヤー画面・保存・読込が使う
   `ensureEdges`/`newDefaultGraph`/`sigConnected`/`sigPath`を持つので消さない。
+- `graphEdges`のノーツ・ライトの配線は、今の`sections`（クリップ）を`relinkDiffEdges()`がつなぎ直す派生値で、3Dで置く前の`sigConnected`が見る。
+  **`sections`を差し替える所では必ず呼ぶ**（呼ばないと前の難易度のクリップの id を指したまま「配線が切断中」で置けない。2026-10-27 に `loadDiff` のクリップの無い難易度の分岐で直した＝`tests/e2e_project/test_empty_diff_place.py`）。
 - `loadLineDiff`/`fillDiffSelectFromInfo`は、`restoreLineAssets()`が古い版の残したIndexedDBの`lineDirs`を読む経路から呼ばれ得るので残した
   （今の版は`lineDirs`を書かない）。`ndFromScreen`/`ndCam`はMEDIAのドロップが使う（今は常に恒等変換）。
 

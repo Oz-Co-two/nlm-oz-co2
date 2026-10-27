@@ -78,25 +78,39 @@ export function libDirHandle(id, rel) {
 // ---------------------------------------------------------------- Info.dat の形をそろえる
 
 /** v4 の Info.dat を、NLM の MEDIA が読む v2 の形（曲名・BPM・音源・カバー・試聴区間・難易度の一覧）に写す。v2/v3 はそのまま。
- * v4 の譜面ファイルそのものは NLM の読み込み（parseDiffFragment）が未対応＝ここでは一覧と音源・曲情報のためだけに使う */
+ * v4 だけの物も持たせる（曲データを読み込む・NLE へのドラッグが v4 の譜面を読むため・2026-10-27）:
+ *  _audioDataFilename（テンポ＝AudioData.dat の bpmData）・難易度ごとの _lightshowFilename（ライトは別のファイル）と _environmentName（環境の一覧の番号から）。
+ * 全体の _environmentName は Standard の難易度で一番多く使われている環境（同じ数なら後ろ＝難しい方。NLM の環境は1つ）。
+ * ファイル由来なので、名前は文字列だけ受け付ける（使う所は textContent・ファイル名は getFileHandle に渡すだけ） */
 export function infoToV2(info) {
   if (!info || typeof info !== 'object' || !Array.isArray(info.difficultyBeatmaps)) return info || {};
   const song = info.song || {}, audio = info.audio || {}, sets = new Map();
+  const str = v => typeof v === 'string' ? v : '';
+  const envs = Array.isArray(info.environmentNames) ? info.environmentNames.map(str) : [];
   for (const d of info.difficultyBeatmaps) {
     if (!d || typeof d !== 'object') continue;
     const ch = String(d.characteristic || 'Standard');
     if (!sets.has(ch)) sets.set(ch, []);
+    const ei = Number.isInteger(d.environmentNameIdx) ? d.environmentNameIdx : 0;
     sets.get(ch).push({ _difficulty: d.difficulty, _beatmapFilename: d.beatmapDataFilename,
-      _noteJumpMovementSpeed: d.noteJumpMovementSpeed, _noteJumpStartBeatOffset: d.noteJumpStartBeatOffset });
+      _noteJumpMovementSpeed: d.noteJumpMovementSpeed, _noteJumpStartBeatOffset: d.noteJumpStartBeatOffset,
+      _lightshowFilename: str(d.lightshowDataFilename), _environmentName: envs[ei] || envs[0] || '',
+      // 難易度の名前（v2 の _customData._difficultyLabel と同じ物）＝審査の指摘の見出しを読む表（曲データを読み込むがクリップの srcLabel へ）
+      ...(d.customData && typeof d.customData === 'object' && typeof d.customData.difficultyLabel === 'string' ? { _customData: { _difficultyLabel: d.customData.difficultyLabel } } : {}) });
   }
   const mappers = [];
   for (const d of info.difficultyBeatmaps) for (const m of ((d && d.beatmapAuthors && d.beatmapAuthors.mappers) || [])) if (typeof m === 'string' && !mappers.includes(m)) mappers.push(m);
+  const std = sets.get('Standard') || [...sets.values()][0] || [];
+  const cnt = new Map(); let env = envs[0] || '', best = 0;
+  for (const b of std) if (b._environmentName) cnt.set(b._environmentName, (cnt.get(b._environmentName) || 0) + 1);
+  for (const b of std) { const n = cnt.get(b._environmentName) || 0; if (n && n >= best) { best = n; env = b._environmentName; } }
   return {
     _version: '2.1.0', _fromV4: true,
     _songName: song.title || '', _songSubName: song.subTitle || '', _songAuthorName: song.author || '', _levelAuthorName: mappers.join(', '),
     _beatsPerMinute: audio.bpm, _songFilename: audio.songFilename || 'song.egg', _coverImageFilename: info.coverImageFilename || '',
     _previewStartTime: audio.previewStartTime, _previewDuration: audio.previewDuration,
-    _environmentName: (info.environmentNames || [])[0] || '',
+    _audioDataFilename: str(audio.audioDataFilename),
+    _environmentName: env,
     _difficultyBeatmapSets: [...sets].map(([ch, list]) => ({ _beatmapCharacteristicName: ch, _difficultyBeatmaps: list })),
   };
 }

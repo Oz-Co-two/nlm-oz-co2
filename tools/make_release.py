@@ -12,7 +12,9 @@
 - 公開はこの後に手で行う（gh release create <タグ> <zip> <update.json> ...）。update.json を添付し忘れると、
   旧版のアプリは「最新リリースに update.json が無い」ので更新を知らせられない。
 - LGPL の部品のソース（release-assets/lgpl-src/・git の管理外）も同じリリースに添付する（THIRD_PARTY_NOTICES.txt の付録Cで
-  約束している）。フォルダか SOURCES.txt が無いと止まり、表示する gh のコマンドにはその中のファイルも並べる。
+  約束している）。フォルダか SOURCES.txt が無いと止まる。中のファイルは1つの zip（dist/release/LGPL-library-sources-<版>.zip）に
+  まとめて添付する（2026-10-22・利用者の要望: 9ファイルが並ぶとリリースのページでどれが本体か分からない）。
+  `python tools/make_release.py --lgpl-only` はこの zip だけを作る（公開済みの版に後から添付し直す時用）。
 """
 import hashlib, json, re, sys, tempfile, zipfile
 from pathlib import Path
@@ -68,6 +70,30 @@ def build_notes(ver):
     return notes
 
 
+def lgpl_sources():
+    srcs = sorted(p for p in LGPL_SRC.glob("*") if p.is_file()) if LGPL_SRC.is_dir() else []
+    if not any(p.name == "SOURCES.txt" for p in srcs):
+        fail(f"{LGPL_SRC.relative_to(ROOT)} に LGPL の部品のソースと SOURCES.txt がありません（CLAUDE.md の「第三者のライセンス表示」）")
+    return srcs
+
+
+def make_lgpl_bundle(ver):
+    """LGPL の部品のソース（tar・署名・SOURCES.txt）を1つの zip に。tar は圧縮済みなのでそのまま入れる"""
+    srcs = lgpl_sources()
+    OUT.mkdir(parents=True, exist_ok=True)
+    bpath = OUT / f"LGPL-library-sources-{ver}.zip"
+    top = bpath.stem
+    with zipfile.ZipFile(bpath, "w") as zf:
+        for p in srcs:
+            packed = p.suffix in (".gz", ".xz", ".bz2", ".zip")
+            zf.write(p, f"{top}/{p.name}", compress_type=zipfile.ZIP_STORED if packed else zipfile.ZIP_DEFLATED)
+    with zipfile.ZipFile(bpath) as zf:   # 壊れていないか
+        bad = zf.testzip()
+        if bad:
+            fail(f"{bpath.name} の {bad} が読めません")
+    return bpath, srcs
+
+
 def make_zip(ver):
     zpath = OUT / f"{app_update.ZIP_TOP}-{ver}.zip"
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
@@ -81,6 +107,10 @@ def main():
     ver = app_update.read_app_version(str(ROOT))
     if not app_update.vtuple(ver):
         fail(f"APP_VERSION（{ver!r}）が v〇.〇.〇-oz の形ではありません")
+    if "--lgpl-only" in sys.argv[1:]:
+        bpath, srcs = make_lgpl_bundle(ver)
+        print(f"作成しました: {bpath.relative_to(ROOT)}  {bpath.stat().st_size / 1048576:.1f}MB（{len(srcs)} ファイル）")
+        return
     if not (DIST / app_update.EXE_NAME).is_file():
         fail(f"{DIST} にビルド結果がありません（先に python tools/build_and_deploy.py）")
     built = app_update.read_app_version(str(DIST / "_internal"))
@@ -89,9 +119,7 @@ def main():
     missing = [n for n in app_update.REPLACE_ITEMS if not (DIST / n).exists()]
     if missing:   # 案内文・ライセンス（LICENSE・THIRD_PARTY_NOTICES.txt）は nlm.spec がビルドの最後に写す
         fail(f"{DIST} に {', '.join(missing)} がありません。nlm.spec でビルドし直してください")
-    srcs = sorted(p for p in LGPL_SRC.glob("*") if p.is_file()) if LGPL_SRC.is_dir() else []
-    if not any(p.name == "SOURCES.txt" for p in srcs):
-        fail(f"{LGPL_SRC.relative_to(ROOT)} に LGPL の部品のソースと SOURCES.txt がありません（CLAUDE.md の「第三者のライセンス表示」）")
+    lgpl_sources()
     notes = build_notes(ver)
     OUT.mkdir(parents=True, exist_ok=True)
     for p in [*OUT.glob("*.zip"), OUT / "update.json"]:   # 前回の分だけ消す（同じフォルダに置いたリリースノートは残す）
@@ -111,9 +139,10 @@ def main():
     print(f"作成しました（{ver}）:")
     print(f"  {zpath.relative_to(ROOT)}  {len(data) / 1048576:.1f}MB  sha256={manifest['zip']['sha256']}")
     print(f"  {upath.relative_to(ROOT)}  更新内容 {len(notes)} 版分")
-    print(f"  {LGPL_SRC.relative_to(ROOT)}  LGPL の部品のソース {len(srcs)} ファイル {sum(p.stat().st_size for p in srcs) / 1048576:.1f}MB")
-    print("公開する時は、zip・update.json・LGPL の部品のソースを全部リリースに添付する:")
-    files = " ".join(f"\"{p.relative_to(ROOT).as_posix()}\"" for p in [zpath, upath, *srcs])
+    bpath, srcs = make_lgpl_bundle(ver)
+    print(f"  {bpath.relative_to(ROOT)}  LGPL の部品のソース {len(srcs)} ファイル {bpath.stat().st_size / 1048576:.1f}MB")
+    print("公開する時は、zip・update.json・LGPL の部品のソースの zip の3つをリリースに添付する:")
+    files = " ".join(f"\"{p.relative_to(ROOT).as_posix()}\"" for p in [zpath, upath, bpath])
     print(f"  gh release create {ver} {files} --verify-tag --latest --notes-file <ノート>")
 
 

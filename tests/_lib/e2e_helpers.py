@@ -273,3 +273,40 @@ def media_lib_sample_extra():
         "1c03 (Gamma V4 - MapperC)": {"net": {"src": "none"}},
         "Delta Noodle": {"net": {"src": "none"}, "est": {"version": "0.1.0", "diffs": {"Standard/ExpertPlus": {"stars": 11.11}}}},
     }
+
+
+# ---- 合成の譜面を「曲データを読み込む」で読む（2026-10-27）----
+# ライトがとても多い譜面（読み込み中の画面・警告）・ライトボックス・Standard 以外のモードの見本。譜面は偽のフォルダ（ページ内で作る JSON）、
+# 音源だけ tools/fixtures/basic.wav。gate=True は難易度の .dat を読む所で window.__gateOpen() まで止める（読み込み中の画面を撮る・確かめるため）
+_SYNTH_JS = r"""(()=>{
+  const O=__OPTS__;
+  const bm=(d,i,fn)=>({_difficulty:d,_difficultyRank:1+2*i,_beatmapFilename:fn,_noteJumpMovementSpeed:16,_noteJumpStartBeatOffset:0});
+  const info={_version:'2.1.0',_songName:O.name,_songSubName:'',_songAuthorName:'a',_levelAuthorName:'m',_beatsPerMinute:120,_songTimeOffset:0,_shuffle:0,_shufflePeriod:0,
+    _previewStartTime:1,_previewDuration:2,_songFilename:'song.egg',_coverImageFilename:'',_environmentName:O.env,
+    _difficultyBeatmapSets:[{_beatmapCharacteristicName:'Standard',_difficultyBeatmaps:O.diffs.map((d,i)=>bm(d,i,d+'Standard.dat'))},
+      ...O.modes.map(([m,ds])=>({_beatmapCharacteristicName:m,_difficultyBeatmaps:ds.map((d,i)=>bm(d,i,d+m+'.dat'))}))]};
+  const per=Math.round(O.lights/Math.max(1,O.diffs.length));
+  const dat=()=>{ const ev=new Array(per); for(let k=0;k<per;k++) ev[k]={b:k*0.01,et:k%5,i:1+(k%7),f:1};
+    const d={version:'3.3.0',bpmEvents:[],colorNotes:Array.from({length:16},(_,k)=>({b:4+k,x:k%4,y:k%3,c:k%2,d:1})),bombNotes:[],obstacles:[],sliders:[],burstSliders:[],
+      basicBeatmapEvents:ev};
+    if(O.boxes) d.lightColorEventBoxGroups=Array.from({length:O.boxes},(_,k)=>({b:k,g:k%4,e:[]}));
+    return JSON.stringify(d); };
+  let open=null; window.__gate=O.gate?new Promise(r=>{ open=r; }):null; window.__gateOpen=()=>{ if(open) open(); return true; };
+  window.__bulkDone=false;
+  window.__bulkP=(async()=>{
+    const wav=await (await fetch('tools/fixtures/basic.wav',{cache:'no-store'})).blob();
+    const dir={name:O.name, getFileHandle:async nm=>{
+      if(nm===info._songFilename) return {name:nm,getFile:async()=>new File([wav],'basic.wav',{type:'audio/wav'})};
+      if(!/\.dat$/.test(nm)) throw new DOMException('not found','NotFoundError');
+      if(window.__gate) await window.__gate;
+      return {name:nm,getFile:async()=>new File([dat()],nm,{type:'application/json'})}; }};
+    await window._dbg.rt.bulkLoadSongData({name:O.name,info,dir});
+    window.__bulkDone=true; return true; })();
+  return true; })()"""
+
+
+def synth_load_js(lights=0, diffs=("Expert",), env="DefaultEnvironment", modes=(), boxes=0, gate=False, name="Synth Map"):
+    """合成の譜面の「曲データを読み込む」を始める式（終わりを待たない。終われば window.__bulkDone）。lights＝全難易度のライトの合計（等分）・
+    modes＝Standard 以外のモード [(名前, [難易度…])]・boxes＝各難易度のライトボックス（lightColorEventBoxGroups）のグループの数"""
+    o = dict(lights=lights, diffs=list(diffs), env=env, modes=[[m, list(ds)] for m, ds in modes], boxes=boxes, gate=gate, name=name)
+    return _SYNTH_JS.replace("__OPTS__", json.dumps(o))

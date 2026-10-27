@@ -31,7 +31,7 @@
 | `e2e_edit/` | 3Dビューの編集（選択・コピー/貼り付け・回転・壁・アーク/チェーン・つまみ）とライティングの編集 | 使う |
 | `e2e_nle/` | NLEのクリップ操作（分割・結合・移動・長さ・レーン・L/S/M・マーカー・Music）、MEDIAとアセットクリップ | 使う |
 | `e2e_info/` | 自動ライティング・カバー補正の適用、INFOのノード操作（追加・削除・複製・配線・書き出しノード・試聴） | 使う |
-| `e2e_misc/` | BPMの自動判定、exe版だけの処理（pywebview を偽物にして通す）、環境設定、難易度を測る（応答は偽物） | 使う |
+| `e2e_misc/` | BPMの自動判定、exe版だけの処理（pywebview を偽物にして通す）、環境設定、難易度を測る・譜面チェックの AutoModder のタブ（応答は偽物） | 使う |
 | `visual/` | 画面の崩れ検出（画像なし）と、基準画像とのピクセル比較 | 使う |
 
 `t.fresh()` は localStorage を消し、一時のデータフォルダの `config/settings.json`（環境設定のミラー）を初期値に書き直してから開き直す＝
@@ -264,6 +264,10 @@ def test_place_undo(t):
 - **2026-10-21**（v2.0.0-oz のリリース前の全テスト `run_tests.py -j 8`・694件。他の作業は何も動いていない）: `e2e/test_mapcheck.py::test_mapcheck_run_rich` が
   素材の読み込み（`load_fixture` の fetch）で `TypeError: Failed to fetch`（Kaspersky の `fetchCallImpl`）＝上と同じ形。同時の数が少なくても出る。
   `e2e -k test_mapcheck` を2回回し直すと2回とも通った。
+- **2026-10-27**（v3 の色のブーストの git worktree で `run_tests.py unit_js e2e e2e_edit e2e_nle e2e_project`・同じPCで別の作業フォルダのテストとランク譜面の確かめも流れていた・
+  `test-out/history/20261027_194535/`）: e2e_nle で `test_clip_link_diffs.py::test_copy_from_kid_links_to_its_parent` の素材の読み込みで `TypeError: Failed to fetch`
+  （Kaspersky の `fetchCallImpl`）、`test_media_library.py::test_rescan_and_remove` の「外す」と `test_media_library_net.py::test_rate_selected_and_filtered` の
+  「全曲データの状態」の待ち合わせの時間切れ＝上と同じ形。同じ回の `test_clip_link_cancel.py` の2件は下の「未保存のランプ」。5件とも1件ずつ回し直すと通った。
 
 ### e2e_nle「帯のセクションの右クリック『クリップを作る…』…」で解析のメニューが出ない（2026-10-20・未解決）
 
@@ -291,6 +295,23 @@ def test_place_undo(t):
   （[74.5, 69.1, 63.9, 59.2, 69.9]）」で失敗（`test-out/history/20261020_084925/`）。このテストだけを回し直すと通った。変更は MEDIA に関係しない（難易度間コピー）。
 - **分かっていること**: 時間で判定するテストなので、CPU が混んでいると5回とも遅くなる。同時に回す数が多い時だけ出ている。
 - **次に出たら見る所**: 単独で回して 50ms 以内なら混雑のせい。単独でも超えるなら `lib-table.js` の `measureWidths` が遅くなった（CLAUDE.md「MEDIA ライブラリ」の目安）。
+
+### 画面テスト「曲の解析: 解析の帯」で未保存のランプが点いている（2026-10-27・未解決）
+
+- **起きたこと**: 3つのブランチ（判定・読み込みと画面・審査の .txt の部品）を master にまとめた直後の `run_tests.py unit_js e2e e2e_nle e2e_project e2e_info e2e_edit e2e_misc visual`
+  で、`test_image_analysis_band` が「要確認」（変化 2328px・1か所）。差分は右上の「未保存有り」のランプが点いていたことだけ（基準では消えている）。帯そのものは同じ。
+- **再現の試み**: `visual -k analysis_band` を2回 → どちらも通った。続けて `visual` を全部 → この画面は通った（他の要確認は意図した変化だけ）。
+- **分かっていること**: ランプは未保存の判定（`checkDirty`。操作の 0.5 秒後と 4 秒ごと）で点くので、撮る時刻と判定の時刻の前後で変わり得る。
+  この時はテストのグループを8つ同時に流していて混んでいた。差分の画像は次の実行で上書きされて残っていない（要確認は `test-out/history/` に残らない）。
+- **次に出たら見る所**: `test-out/visual/diff/analysis_band*.png` を消される前に別の所へ写す。ランプが点く理由（`_dbgApp.dirty()` の `same`・`sigPair()` の差）を
+  撮る直前に記録すると、どの項目が違ったかが分かる。
+- **e2e でも同じ形**（2026-10-27・上の「ページの読み込み…」の 2026-10-27 と同じ混んだ回）: `e2e_nle/test_clip_link_cancel.py` の
+  `test_esc_cancel_menu_delete_and_enter_decides`・`test_unlink_parent_cancel` が「dirty: 実際 {…"lamp": true, "same": false} / 期待 {…"lamp": false…}」。
+  操作の前と後の `_dbgApp.dirty()` を丸ごと比べていて、ランプ（`lamp`）だけが違った（`same` は同じ）＝判定の時刻の前後の違いと見られる。1件ずつ回し直すと通った。
+- **関係していた見込みの不具合を直した**（2026-10-27・a317296 で取り込み）: 保存した後に難易度を切り替えただけで未保存になる誤検知（`projSig` がノーツ・ライトの配線＝
+  今の難易度で決まる派生値・まだ無い難易度の空の退避・物の並びまで比べていた。CLAUDE.md「未保存検知」）。直した後の `visual` では解析の帯の基準の画像が
+  「点いている」から「消えている」に変わった＝**いつの間にか点いた状態が基準として受け入れられていた**（`--accept` は要確認を全部受け入れるため）。
+  以後も出るかは様子を見る。出なければ解決済みに移す。
 
 ### 画面テスト「曲データを読み込む: BPM変化の取り込みの確認」のエラー（2026-10-04・未解決）
 

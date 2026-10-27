@@ -389,6 +389,42 @@ NLM独自の実装（BS Map Check の移植ではないので、原作と突き�
 .venv-build/Scripts/python.exe tools/blcriteria_test.py      # -v で全ケースの結果を表示
 ```
 
+## 本物の譜面フォルダで判定の誤検出を数える（bl_ranked_check.py）
+
+BeatLeader でランクになった譜面（審査を通った版）にBL評価リストと譜面チェックをかけて、「違反」が出た所を数える（違反が出たら、まず判定の誤りを疑える）。
+判定や読み込みを直した時に、同じ譜面の一覧で直す前と後を比べる（2026-10-26 から）。
+
+```
+.venv-build/Scripts/python.exe tools/bl_ranked_check.py --list <一覧.json> --out <出力フォルダ> [--workers 4] [--only key1,key2] [--limit N]
+```
+
+- 利用者がチェックする時と同じ道を通す: MEDIA の記録したライブラリ（一時のデータフォルダの `config/library.json`）→「曲データを読み込む」（`bulkLoadSongData`）→
+  INFO で読み込んだ曲情報・カバーのノードを書き出しへ繋ぐ → `collectMapCheckInput` → `runMapCheck` → `runBlCriteria`。変換を別に書かない（測る相手が NLM でなくなるため）。
+- 一覧の形: `{"maps":[{"hash","key","song","mapper","period","folder","ranked_diffs":[{"mode","difficulty","stars","tech","pass",…}]}]}`。ライブラリは `folder` の親フォルダを記録して走査する（読むだけ）。
+- R5.A の★/Tech は一覧の値を渡す。同じ検出のまま AutoModder の式（Pass を使う）でも数える。
+- 出力: `nlm_results.jsonl`（1行に1難易度・違反/要確認の項目と拍・BS Map Check の項目と拍）・`nlm_results_maps.jsonl`（1行に1譜面の生の結果）・`run_log.txt`。
+  **他人の譜面の名前が入るので、出力はリポジトリの外に置く**。場所はすべて引数（環境の場所を台本に書かない）。
+- 189譜面・Edge 4つで約17分。ライトのイベントが10万を超える譜面は1つで数分かかる（その間はページが応答しないので、CDP の待ちを30分にしてある）。
+- 流れなかった譜面（`error: "not-run"`・時間切れ）だけ流し直す時は `--only key1,key2 --keep`（前の結果を残して、流した譜面だけ置き換える）。
+- 判定や読み込みを直した版を測る時は、その版を `git worktree add` で別のフォルダに出して、そこの台本で流す（測っている間に手元の JS を変えると、ページを開き直すたびに新しい JS が混ざる）。
+
+## 審査の指摘の .txt を実物で確かめる（review_txt_check.py）
+
+`js/review/review-txt.js`（BeatLeader の審査の人が手で書く「拍 - 文」の指摘を読む部品・CLAUDE.md「審査の指摘の .txt」）を、手元に集めた実物でまとめて読む。
+読み方を直した時に、直す前と後で読み落としが増えていないかを見る。
+
+```
+.venv-build/Scripts/python.exe tools/review_txt_check.py <フォルダか .txt> [...] [--names <tsv>] [--labels AT=ExpertPlus,IN=Expert] [--default Expert] [--items] [--out <ファイル>]
+```
+
+- 1件ずつ、行・項目・拍の無い行の数（種類ごと）・難易度ごとの数・見出し（担当マッパー名）・警告・拍の無い行の一覧と、**要確認**（数で始まるのに拍の無い行になった・
+  `a - b 文` を範囲と読んだ・文が数や範囲の言葉で始まる・文が空・難易度が分からない）を出す。`--items` で項目（拍・文・続き・細かい指摘・まとめ・返事）の一覧も出す。
+- `--names`: 実物を別の名前で保存している時の、保存名と元のファイル名の対応（TSV。見出しの行に「元のファイル名」か `original` の列があればその列、無ければ2列目）。
+  ファイル名から難易度を読む所（`Expert.txt`・`Hard_1.txt`）も元の名前で確かめるため。`--labels`: 独自の難易度名の表（Info.dat の `_difficultyLabel` の代わり）。
+- **実物は他人の文章なので、リポジトリに入れない・結果もリポジトリの外へ**（標準出力か `--out`。`--out` がリポジトリの中なら止まる）。
+- 2026-10-27: 実物 22件（審査の人 9人の 19件・マッパーの返事 3件）で、項目 768・拍の無い行 29・読み落とし 0。要確認に残るのは、決まりどおり範囲と読んだ
+  `a - b 文` の2件（区切りかもしれない）、書き誤りの `数.英字 - 文` の1件（拍の無い行へ）、拍の無い行の中の数（「ex+ と同じ、ただし a と b を除く」の形）。
+
 ## チュートリアルの画像を撮り直す（make_tutorial_shots.py）
 
 `docs/tutorial.md` の画像（`docs/images/tutorial/*.png`）は、`tools/make_tutorial_shots.py` が空の状態から
@@ -396,7 +432,7 @@ basic.wav を読み込み、実際のクリック・キー入力でノーツや�
 
 ```
 .venv-build/Scripts/python.exe tools/make_tutorial_shots.py          # 全部撮る（約3分）
-.venv-build/Scripts/python.exe tools/make_tutorial_shots.py 05 06    # 番号を指定するとその画像だけ保存（操作は最初から全部行う）
+.venv-build/Scripts/python.exe tools/make_tutorial_shots.py 05 06    # 番号（ファイル名の最初の「-」の前）を指定するとその画像だけ保存（操作は最初から全部行う）
 .venv-build/Scripts/python.exe tools/make_tutorial_shots.py --en     # 英語表示で撮って docs/images/tutorial-en/ へ（英語版 docs/tutorial.en.md 用）
 ```
 
@@ -442,12 +478,15 @@ basic.wav に赤青のノーツを置き、マーカー・テンポパート・�
 ```
 .venv-build/Scripts/python.exe tools/make_advanced_shots.py          # 全部撮る（約6〜7分）
 .venv-build/Scripts/python.exe tools/make_advanced_shots.py 03 09    # 章番号を指定するとその章の画像だけ保存（操作は最初から全部行う）
+.venv-build/Scripts/python.exe tools/make_advanced_shots.py 03-9 10-1 # 画像の番号（ファイル名の2つ目の「-」の前）でも指定できる
 .venv-build/Scripts/python.exe tools/make_advanced_shots.py --en     # 英語表示で撮って docs/images/tutorial-advanced-en/ へ
 ```
 
 - NLE の帯（目盛り・テンポパート・マーカー・レーン）はキャンバスに直接描くので、位置は `_dbgApp.nleScreen(拍)` で取る。
 - パイメニューはキーを押している間だけ出るので、CDP で keyDown だけ送って撮り、撮った後に keyUp する。
 - パネル（譜面チェック・難易度を測る。9章）は画面右端に出て撮影範囲からはみ出すので、撮る前に左へ寄せている。
+- 画像の番号で指定した時は、その画像を撮らない起動（下の「別の起動」）は始めない（`want_any`・`want_main`。3章・4章の別の起動で撮る画像の番号は
+  `SEP_03_04`・`BULK_03`。別の起動で撮る画像を足したら、ここにも足す）。
 - 3章の単独編集（03-2b・03-2c）と6章の曲を解析（06-1〜06-8）は、別の起動で撮る（クリップの色・マーカーの番号の続きなど、
   他の画像の状態を変えないため）。曲を解析は基本編の 04b と同じく偽の応答（`ana_mock`）と見本の結果（`TEMPO_SHOT`・`STRUCT_SHOT`）で撮る。
   解析からクリップを作る（06-7 確認の画面・06-8 作った後の NLE）は、帯がある間（06-6 の後・帯を Ctrl+Z で消す前）に撮り、Ctrl+Z 1回で元に戻す。
@@ -455,11 +494,26 @@ basic.wav に赤青のノーツを置き、マーカー・テンポパート・�
   （名前を付けた「サビ」を親にしたリンクを作るため）。
   新規作成のノーツのレーンが1本なので、単独編集（03-2b・03-2c）は溝の右クリックで一番上にレーンを足してから撮り、Ctrl+Z で戻す。
   「曲を解析しますか？」（06-1b）と解析後の案内（06-3b）は、基本編と同じく `analysis_helpers.ask_on`/`guide_on` で出し、撮った後に `'0'` へ戻す。
-  10-1（環境設定）は「曲の解析」のチェックを表示だけオンにし、欄をスクロールして撮る。
+  11-1（環境設定）は「曲の解析」のチェックを表示だけオンにし、欄をスクロールして撮る。
+- 3章の「曲データを読み込んだ時の知らせ」（03-9〜03-11）も別の起動で撮る（読み込むと音源・BPM・環境・クリップが変わるため）。
+  03-9（読み込み中の画面）は 0.25 秒より早く終わると出ないので、合成の譜面（`_BULK_GATE_JS`。`tests/_lib/e2e_helpers.py` の `synth_load_js` と同じ作り）
+  の Expert の .dat を読む所で止めて撮る。03-11（3D プレビューに無い環境の ⚠）は同じ読み込み（環境 Weave）の後に撮り、説明はツールチップ
+  （ブラウザが描く吹き出し）で撮れないので、`tooltip_copy` が同じ文の写しの吹き出しを置く。03-10 は開き直した（曲の無い）状態で作り物の
+  v4 の見本（`_v4_sample`。NJS の変化・ライトボックス・難易度ごとに違う環境）を読み込み、数秒で消える画面の下の知らせの写し（`toast_copy`）を撮る。
+- 10章「審査の指摘に対応する」（10-1〜10-5）も別の起動で、素材 `rich.nlmf`（Hard・Expert）を開いて撮る。指摘の文は作り物（`RV_PASTE`・`RV_FILE`・
+  `RV_NOHEAD`。**実物の審査の文は使わない**）。貼り付けの画面（10-2）→ 読み込む → 2回目の読み込みの確認（10-3。足すか置き換えるかは
+  2回目だけ出る）→ 一覧（10-1。1行へ飛んで返事を書き、別の行を済みにする）→ NLE の数字の帯の印（10-4）→ 書き出し（10-5）の順。
+  10-5 の R5.A は「難易度を測る」の★/Tech を使うので、nlm-rating のプラグインがあれば先に測る（無ければ R5.A の注記が出る）。
+  英語で撮る時は、素材の日本語の曲名・クリップの名前（リッチ テスト曲）を英語にして開く（`load_rich`。英語版の画像に日本語を写さない）。
+- 9章の AutoModder のタブ（09-8 取り込みの案内・09-7 結果）は nlm-automodder プラグインが要る。取り込み済みの `plugins/automodder` を
+  環境変数 `NLM_AUTOMODDER_DIR` で、または配布の zip を `NLM_AUTOMODDER_ZIP` で指定する（省略時は配布フォルダ `NLM-app/plugins/automodder`）。
+  09-8 はプラグインの無い状態で撮り、その後にプラグインを撮影用の一時データフォルダへ置いて［GitHub から取り込む］を押す
+  （取り込みの要求は状態の問い合わせに差し替える＝ネットへは出ない）。結果は本物の AutoModder が撮影の譜面を確かめた物。
+  見つからなければ 09-7 は撮らない（今ある画像のまま）。
 - 「難易度を測る」は nlm-rating プラグインが要る。取り込み済みの `plugins/rating`（`current.json` と版のフォルダ）を
   環境変数 `NLM_RATING_DIR` で指定する（省略時は配布フォルダ `NLM-app/plugins/rating`）。撮影用の一時データフォルダへ
   コピーして使う。見つからなければ「プラグイン未導入」の画面を撮る。
-- MEDIA ライブラリ（3章の 03-3〜03-8・10章の 10-2）は MEDIA の幅を変えるので最後に撮る。素材は自動テストと同じ `tools/fixtures/media_lib`
+- MEDIA ライブラリ（3章の 03-3〜03-8・11章の 11-2）は MEDIA の幅を変えるので最後に撮る。素材は自動テストと同じ `tools/fixtures/media_lib`
   （架空の曲）を一時フォルダの `CustomLevels` へ写し、撮影用のデータフォルダの `config/library.json` に記録して読み直させる
   （`tests/_lib/e2e_helpers.py` の `media_lib_load` 等を読み込んで使う。tests/ 側は変えない）。ネットへは出ない（`NLM_NO_NET=1`）ので、
   全曲データ・NLM推定の★は見本の値（`SAMPLE_DETAILS`・`media_lib_sample_extra`）、プレイ記録は見本の `PlayerData.dat` を書いて使う。

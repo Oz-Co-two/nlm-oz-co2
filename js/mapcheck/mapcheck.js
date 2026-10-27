@@ -247,6 +247,10 @@ function buildBeatmap(json, bm) {
     const o = { type, time: num(n.b), posX: num(n.x), posY: num(n.y), color: num(n.c), direction: num(n.d),
       angleOffset: num(n.a), customData: n.customData || {} };
     o.sec = tp.toRealTime(o.time); o.beatAdj = o.time; o.pos = [o.posX, o.posY];
+    // 角度のずらし(a)は「向き − a」。原作どおり（MapCheck src/ts/load/beatmap.ts の applyAngle:
+    // `resolveNoteAngle(object.direction) + -(object.angleOffset || 0)`。2026-01-11 の 8fa2789 で＋から−に変わり 56d16718 も同じ）。
+    // ゲームと bsmap 自身の isNotePointing は「＋a」だが、原作と同じ結果を優先して直さない（2026-10-27 に公開サイトとも突き合わせ済み）。
+    // NLM 独自の BL評価リスト（blcriteria.js の cutAngle）は「＋a」で別物
     o.angle = noteAngle(o.direction) - o.angleOffset + (o.direction === ANY ? 180 : 0);
     return o;
   };

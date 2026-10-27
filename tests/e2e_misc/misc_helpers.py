@@ -51,7 +51,7 @@ _FAKE_JS = r"""(()=>{
   const extOf=n=>{ const i=n.lastIndexOf('.'); return i>=0?n.slice(i).toLowerCase():''; };
   const IMG=['.png','.jpg','.jpeg','.webp','.gif','.bmp'];
   const AUD=['.egg','.ogg','.oga','.opus','.mp3','.m4a','.aac','.wav','.flac','.weba','.webm'];
-  const WRITE=['.dat','.egg','.json',...IMG];          // app.py の _WRITE_EXTS
+  const WRITE=['.dat','.egg','.json','.txt',...IMG];   // app.py の _WRITE_EXTS
   const READ=[...AUD,...IMG];                           // app.py の _READ_EXTS
   const under=(d,p)=>{ const q=norm(p); return q===d||q.startsWith(d+'\\'); };
   const inOut=p=>Object.keys(F.approved).some(d=>under(d,p));

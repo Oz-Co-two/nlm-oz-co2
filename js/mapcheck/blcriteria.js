@@ -17,7 +17,8 @@ const mod = (x, m) => ((x % m) + m) % m;
 const sdiff = (a, b) => { const d = mod(a - b + 180, 360) - 180; return d === -180 ? 180 : d; };   // aからbを引いた符号付きの角度差（-180〜180）
 const round = (v, d = 0) => { const p = 10 ** d; return Math.round(v * p) / p; };
 const segAngle = (a, b) => Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI + 90;   // 移動方向を「下=0」の角度で
-const cutAngle = n => noteAngle(n.direction) - (n.angleOffset || 0);
+// 角度のずらし（v3 の a・反時計回り）は向きに足す（Beat Saber・BeatLeader の解析と同じ。2026-10-26 まで引いていて、ずらし付きのスライダーが R4.B で違反になった）
+const cutAngle = n => noteAngle(n.direction) + (n.angleOffset || 0);
 const covers = (w, col) => w.width > 0 ? (col >= w.posX && col < w.posX + w.width) : false;
 // 壁の縦の範囲（v3の層単位）。高さがマイナスなら下へ伸びる
 const wallY = w => w.height >= 0 ? [w.posY, w.posY + w.height] : [w.posY + w.height, w.posY];
@@ -48,7 +49,7 @@ export const RULES = [
   { id: 'R1.E', kind: 'manual' }, { id: 'R1.F', kind: 'auto', f: mapLength }, { id: 'R1.G', kind: 'manual' },
   { id: 'R2.A', kind: 'manual' }, { id: 'R2.B', kind: 'manual' }, { id: 'R2.C', kind: 'manual' },
   { id: 'R3.A.1', kind: 'auto', f: zIntersect }, { id: 'R3.A.2', kind: 'auto', f: inWall },
-  { id: 'R3.B', kind: 'cand', f: preSwingBlock }, { id: 'R3.C', kind: 'cand', f: fromMc(['hitboxStair', 'hitboxReverseStair', 'hitboxInline', 'hitboxPath']) },
+  { id: 'R3.B', kind: 'cand', f: preSwingBlock }, { id: 'R3.C', kind: 'cand', f: withNjsBaseNote(fromMc(['hitboxStair', 'hitboxReverseStair', 'hitboxInline', 'hitboxPath'])) },
   { id: 'R4.A.1', kind: 'manual' }, { id: 'R4.A.2', kind: 'cand', f: fromMc(['varySwing']) },
   { id: 'R4.A.3', kind: 'cand', f: sliderPrecision }, { id: 'R4.A.4', kind: 'manual', f: precisionList },
   { id: 'R4.A.5', kind: 'manual' }, { id: 'R4.A.6', kind: 'cand', f: chainDuration },
@@ -62,7 +63,7 @@ export const RULES = [
   { id: 'R6.E', kind: 'auto', f: chainGap }, { id: 'R6.F', kind: 'auto', f: arcBomb },
   { id: 'R6.G.1', kind: 'auto', f: chainHead }, { id: 'R6.G.2', kind: 'auto', f: chainSlices },
   { id: 'R7.A', kind: 'cand', f: bombSwingPath }, { id: 'R7.B', kind: 'cand', f: bombLight }, { id: 'R7.C', kind: 'manual' },
-  { id: 'R8.A.1', kind: 'manual' }, { id: 'R8.A.2', kind: 'cand', f: fromMc(['centerObstacle']) },
+  { id: 'R8.A.1', kind: 'manual' }, { id: 'R8.A.2', kind: 'cand', f: wallAvoid },
   { id: 'R8.A.3', kind: 'cand', f: dodgeRate }, { id: 'R8.B', kind: 'auto', f: outerLane },
   { id: 'R8.C', kind: 'auto', f: legalWall }, { id: 'R8.D.1', kind: 'cand', f: crouchBottom },
   { id: 'R8.D.2', kind: 'auto', f: crouchTop },
@@ -79,6 +80,7 @@ export const SECTIONS = ['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', '
 /**
  * @param p  runMapCheck と同じ入力＋ p.meta{songName,subName,author,mapper} / p.infoRaw{songTimeOffset,shuffle,shufflePeriod,colorSchemes,requirements}
  *           / p.cover{w,h,name} / p.stars{難易度:{star,tech}}（視界ブロックの式・★の並びに使う。空なら判定しない）
+ *           / p.diffs[i].srcLightBoxes（読み込んだ元の譜面にあったライトボックスのグループの数。無ければ0）
  * @param mc runMapCheck の結果（候補の流用元）
  */
 export function runBlCriteria(p, mc) {
@@ -87,6 +89,7 @@ export function runBlCriteria(p, mc) {
     try {
       const B = buildBeatmap(d.json, { bpm: p.info.bpm, environment: p.info.environment, difficulty: d.difficulty, njs: d.njs, njsOffset: d.njsOffset });
       prep(B, d.json, p.audioDuration);
+      B.srcLightBoxes = Math.max(0, +d.srcLightBoxes || 0);   // 元の譜面にあったライトボックスのグループの数（NLM は読めない。R10.A・R7.B を対象外にする）
       built[d.difficulty] = B;
     } catch (_) { /* 読めない難易度は BS Map Check 側がエラーを出す */ }
   }
@@ -115,6 +118,7 @@ function prep(B, json, audioSec) {
   const { tp, map } = B;
   B.njsEvents = Array.isArray(json.njsEvents) ? json.njsEvents : null;
   B.njsEventData = Array.isArray(json.njsEventData) ? json.njsEventData : null;
+  B.njsVar = njsTimeline(B);   // v4 の NJS の変化（NLM は v4 の譜面を読んだ時に入力へ足す・2026-10-27）。無ければ null
   for (const ch of map.chains) {
     const a = ch.direction === ANY ? 0 : noteAngle(ch.direction);   // R6.B.2: 頭が点ノーツなら下向きとみなす
     ch.headAngle = a;
@@ -141,7 +145,9 @@ function prep(B, json, audioSec) {
   B.walls = [...map.obstacles].sort((a, b) => a.sec - b.sec);
   B.maxWallSec = B.walls.reduce((m, w) => Math.max(m, w.dsec), 0);
   // 複数ノーツのスイング: 同じ色で70ms以内（窓は80ms）に続くノーツ。向きが90度を「超えて」変わる（折り返す）か同じマスなら次のスイング。
-  // BS Map Check は90度ちょうどでも分けるため、45度ルール（R4.B）の判定には使えない
+  // BS Map Check は90度ちょうどでも分けるため、45度ルール（R4.B）の判定には使えない。
+  // 次の2つも次のスイング（2026-10-26。速い連打で1/4拍が70〜80ms未満になる譜面で、別のスイングを1つにまとめていた）:
+  //  rev＝最後の矢印の向きと90度を超えて逆へ動いた（点ノーツも）／zig＝移動の向きが90度を超えて折り返した（点ノーツの上下の往復）
   B.blSwings = [];
   for (const c of [0, 1]) {
     let cur = [];
@@ -150,12 +156,74 @@ function prep(B, json, audioSec) {
       const dt = prev ? n.sec - prev.sec : Infinity, far = Math.hypot(n.posX - prev?.posX, n.posY - prev?.posY) > 1.8;
       const turn = n.direction !== ANY && cur.some(o => o.direction !== ANY && Math.abs(sdiff(cutAngle(n), cutAngle(o))) > 90 + 1e-3);
       const same = cur.some(o => o.posX === n.posX && o.posY === n.posY);
-      if (!prev || dt > (far ? 0.08 : 0.07) || (dt > 0.005 && turn) || same) { if (cur.length) B.blSwings.push(cur); cur = []; }
+      const moved = prev && (n.posX !== prev.posX || n.posY !== prev.posY), seg = moved ? segAngle([prev.posX, prev.posY], [n.posX, n.posY]) : 0;
+      const la = [...cur].reverse().find(o => o.direction !== ANY);
+      const rev = !!(moved && la && Math.abs(sdiff(seg, cutAngle(la))) > 90 + 1e-3);
+      const pp = moved && [...cur].reverse().find(o => o.posX !== prev.posX || o.posY !== prev.posY);
+      const zig = !!(pp && Math.abs(sdiff(seg, segAngle([pp.posX, pp.posY], [prev.posX, prev.posY]))) > 90 + 1e-3);
+      if (!prev || dt > (far ? 0.08 : 0.07) || (dt > 0.005 && (turn || rev || zig)) || same) { if (cur.length) B.blSwings.push(cur); cur = []; }
       cur.push(n);
     }
     if (cur.length) B.blSwings.push(cur);
   }
   B.endBeat = audioSec ? tp.toBeatTime(audioSec) : null;   // 曲の最後の拍（エディタの最終拍）
+  // 時間を飛ばす区間（拍）: BPM を一瞬とても大きくして（ランク譜面では 100000）、その間の拍をほぼ0秒で過ぎる演出。
+  // 中の物はゲームでもほぼ同時に出るので、秒で決まる判定（R3.A.1・R8.C）が文面どおりなら違反になる。違反ではなく要確認にする（2026-10-26・利用者の決定）
+  const bev = (Array.isArray(json.bpmEvents) ? json.bpmEvents : []).map(e => ({ b: +(e.b ?? 0), m: +e.m })).filter(e => isFinite(e.b) && e.m > 0).sort((a, b) => a.b - b.b);
+  B.skips = bev.map((e, i) => e.m >= SKIP_BPM ? [e.b, i + 1 < bev.length ? bev[i + 1].b : Infinity] : null).filter(Boolean);
+}
+
+// v4 の NJS の変化（njsEvents{b,i}＋njsEventData{p,e,d}）→ 秒ごとの NJS（2026-10-27）。BSMG Wiki の v4 の頁: d＝Info.dat の基本の NJS との差、
+// e＝前の変化の拍からこの変化の拍までのイージング、p＝前の変化の値を使う（その間は変わらない）。最初の変化の前は基本の NJS。→ {n, at(秒)} か null
+function njsTimeline(B) {
+  const evs = B.njsEvents, data = B.njsEventData;
+  if (!evs || !evs.length || !data) return null;
+  const list = [];
+  for (const o of evs) {
+    const q = o && data[Number.isInteger(o.i) ? o.i : 0];
+    if (!o || !q) continue;
+    const b = +o.b || 0;
+    list.push({ sec: B.tp.toRealTime(b), p: q.p ? 1 : 0, e: Number.isInteger(q.e) ? q.e : 0, d: +q.d || 0 });
+  }
+  if (!list.length) return null;
+  list.sort((a, b) => a.sec - b.sec);
+  let prev = 0;
+  for (const x of list) { x.v = x.p ? prev : x.d; prev = x.v; }
+  const base = B.njs.value;
+  const at = sec => {
+    let lo = 0, hi = list.length;   // sec より後の最初の変化
+    while (lo < hi) { const m = (lo + hi) >> 1; if (list[m].sec <= sec) lo = m + 1; else hi = m; }
+    if (lo === 0) return base;
+    if (lo >= list.length) return base + list[list.length - 1].v;
+    const pv = list[lo - 1], nx = list[lo], span = nx.sec - pv.sec;
+    return base + pv.v + (nx.v - pv.v) * ease(nx.e, span > 0 ? (sec - pv.sec) / span : 1);
+  };
+  return { n: list.length, at };
+}
+// イージング（Beat Saber の番号: -1=なし 0=Linear 1〜3=Quad 4〜6=Sine 7〜9=Cubic 10〜12=Quart 13〜15=Quint 16〜18=Expo 19〜21=Circ 22〜24=Back
+// 25〜27=Elastic 28〜30=Bounce。各3つは In・Out・InOut）。100〜102（BS独自の InOut の Back・Elastic・Bounce）は普通の InOut で近似。t は 0〜1。式は一般的なイージングの式
+const bounceOut = t => { const n = 7.5625, d = 2.75;
+  if (t < 1 / d) return n * t * t;
+  if (t < 2 / d) { t -= 1.5 / d; return n * t * t + 0.75; }
+  if (t < 2.5 / d) { t -= 2.25 / d; return n * t * t + 0.9375; }
+  t -= 2.625 / d; return n * t * t + 0.984375; };
+const EASE_IN = {
+  1: t => t * t, 4: t => 1 - Math.cos(t * Math.PI / 2), 7: t => t ** 3, 10: t => t ** 4, 13: t => t ** 5,
+  16: t => t <= 0 ? 0 : 2 ** (10 * t - 10), 19: t => 1 - Math.sqrt(Math.max(0, 1 - t * t)),
+  22: t => 2.70158 * t ** 3 - 1.70158 * t * t,
+  25: t => t <= 0 ? 0 : t >= 1 ? 1 : -(2 ** (10 * t - 10)) * Math.sin((t * 10 - 10.75) * 2 * Math.PI / 3),
+  28: t => 1 - bounceOut(1 - t),
+};
+function ease(e, t) {
+  t = Math.min(1, Math.max(0, t));
+  if (e === -1) return t >= 1 ? 1 : 0;   // なし＝変化の拍で一度に変わる
+  const base = e >= 100 ? [22, 25, 28][e - 100] : e >= 1 && e <= 30 ? Math.floor((e - 1) / 3) * 3 + 1 : 0;
+  const f = EASE_IN[base];
+  if (!f) return t;   // Linear（と知らない番号）
+  const kind = e >= 100 ? 2 : (e - 1) % 3;
+  if (kind === 0) return f(t);
+  if (kind === 1) return 1 - f(1 - t);
+  return t < 0.5 ? f(2 * t) / 2 : 1 - f(2 - 2 * t) / 2;
 }
 
 // ---------- R1 全般 ----------
@@ -260,23 +328,38 @@ function mapLength(B) {
 }
 
 // ---------- R3 配置 ----------
-// R3.A.1: 同じマスで奥行き0.5m以内（(拍差)/(BPM/60)×NJS < 0.5m）。アークは対象外。同じチェーンの頭とリンク同士は除く
+// R3.A.1: 同じマスで奥行き0.5m以内（(拍差)/(BPM/60)×NJS < 0.5m）。アークは対象外。同じチェーンの頭とリンク同士は除く。
+// 時間を飛ばす区間の中の物どうし（どちらかが中）は要確認（演出で同時に出る物）。
+// NJS の変化（v4）がある時は、手前の物を切る時刻の NJS で見る（飛んでいる物は今の NJS で進む＝その時の間隔は 秒差×NJS。2026-10-27・近似なので注記を出す）
 function zIntersect(B) {
-  const list = B.hittable, njs = B.njs.value, res = [];
-  if (!(njs > 0)) return [];
+  const list = B.hittable, res = [], skip = [];
+  const njsAt = B.njsVar ? B.njsVar.at : () => B.njs.value;
+  if (!B.njsVar && !(B.njs.value > 0)) return [];
   const chainOf = o => o.type === 'link' ? o.chain : (o.chainOf || null);
   for (let i = 0; i < list.length; i++) {
-    const a = list[i], [ax, ay] = B.cell(a);
+    const a = list[i], [ax, ay] = B.cell(a), njs = njsAt(a.sec);
+    if (!(njs > 0)) continue;
     for (let j = i + 1; j < list.length; j++) {
       const b = list[j];
       if ((b.sec - a.sec) * njs >= 0.5) break;
       const [bx, by] = B.cell(b);
       if (ax !== bx || ay !== by) continue;
       if (chainOf(a) && chainOf(a) === chainOf(b)) continue;
-      res.push(a, b);
+      (inSkip(B, a.time) || inSkip(B, b.time) ? skip : res).push(a, b);
     }
   }
-  return res.length ? [F(null, BL.FAIL, 'zIntersect', null, uniq(res).map(ref))] : [];
+  const out = [];
+  if (res.length) out.push(F(null, BL.FAIL, 'zIntersect', null, uniq(res).map(ref)));
+  if (skip.length) out.push(F(null, BL.CHECK, 'zIntersectSkip', null, uniq(skip).map(ref)));
+  if (B.njsVar) out.push(F(null, 'note', 'zIntersectNjs', { n: B.njsVar.n }));
+  return out;
+}
+// BS Map Check の判定（原作と同じ結果にするため NJS の変化を見ない）を流用する項目のうち、NJS で決まる物（R3.C のヒットボックス）:
+// NJS の変化がある難易度に「基本の NJS で計算した」注記を添える（2026-10-27）
+function withNjsBaseNote(fn) {
+  const g = (B, ctx, dn) => [...fn(B, ctx, dn), ...(B.njsVar ? [F(null, 'note', 'njsBaseMc', { n: B.njsVar.n, njs: round(B.njs.value, 2) })] : [])];
+  Object.defineProperty(g, 'name', { value: fn.name });
+  return g;
 }
 function inWall(B) {
   const res = [];
@@ -290,19 +373,21 @@ function inWall(B) {
   }
   return res.length ? [F(null, BL.FAIL, 'inWall', null, res.map(ref))] : [];
 }
-// R3.B（候補）: ノーツの振り始めのマス（切る向きの反対側の隣のマス）に、振る直前まで反対色のノーツ/チェーンがある
-//  「直前」＝同じ手の1つ前のノーツとの間の後半（最大0.5秒）。図だけで定義された項目なので候補扱い
+// R3.B（候補）: ノーツの振り始めのマス（切る向きの反対側の隣のマス）に、ほぼ同時（前後 PRE_SWING_SEC 以内）に反対色のノーツ/チェーンがある
+//  ＝振る時にまだそこにある物。図だけで定義された項目なので候補扱い。
+//  2026-10-26 までは「同じ手の前のノーツとの間の後半（最大0.5秒）」に1つでもあれば出していて、もう切られて消えた物まで数え、
+//  ランク譜面の84%の難易度に出ていた。ランク譜面ではちょうど同時（20ms以内）は0・40ms以内は約2%の難易度だけ（tools/bl_ranked_check.py）
+const PRE_SWING_SEC = 0.04;
 function preSwingBlock(B) {
   const res = [];
   for (const c of [0, 1]) {
     const own = B.notesByColor[c];
     const opp = B.hittable.filter(o => (o.type === 'color' || o.type === 'link') && o.color === 1 - c);
-    own.forEach((n, i) => {
-      if (n.direction === ANY) return;
+    for (const n of own) {
+      if (n.direction === ANY) continue;
       const [dx, dy] = DIR_SPACE[n.direction], px = n.posX - dx, py = n.posY - dy;
-      const win = i > 0 ? Math.min((n.sec - own[i - 1].sec) / 2, 0.5) : 0.5;
-      for (const o of between(opp, n.sec - win, n.sec)) { const [x, y] = B.cell(o); if (x === px && y === py) { res.push(n); break; } }
-    });
+      for (const o of between(opp, n.sec - PRE_SWING_SEC, n.sec + PRE_SWING_SEC)) { const [x, y] = B.cell(o); if (x === px && y === py) { res.push(n); break; } }
+    }
   }
   return res.length ? [F(null, BL.CHECK, 'preSwing', null, res.map(ref))] : [];
 }
@@ -340,13 +425,19 @@ function precisionList(B) {
   if (!set.size) return [];
   return [F(null, 'note', 'precList', { list: [...set].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}×${n}`).join(', ') })];
 }
-// R4.A.6（候補）: チェーンの長さが、スライダーの平均の長さの200%を超える
+// R4.A.6（候補）: チェーンの長さが、スライダーの平均の長さの200%を超える。
+//  数え方（2026-10-27・利用者の決定。以前は数msの組までスライダーに数えて平均が下がり、上限が10〜59msになって1/4拍のチェーンまで出ていた）:
+//  - ほぼ同時の形（隣のノーツの間隔がどれも1/32拍未満）はスライダーに数えない（R4.A.2「長さの無い形は一瞬とみなしてよい」に合わせる）
+//  - 数えるスライダーが無い・3つ未満なら平均を当てにせず比べない（合格扱いで注記だけ）
+//  - 上限ちょうど（計算の端数・1ms以内）は出さない
+const INSTANT_GAP = 1 / 32, CHAIN_MIN_SLIDERS = 3, CHAIN_TOL = 0.001;
 function chainDuration(B) {
   const ch = B.map.chains.filter(c => c.tailSec > c.sec); if (!ch.length) return [];
-  const sl = sliders(B);
-  if (!sl.length) return [F(null, BL.CHECK, 'noSliders')];
+  const sl = sliders(B).filter(ns => ns.some((n, i) => i > 0 && n.time - ns[i - 1].time > INSTANT_GAP - EPS));
+  if (!sl.length) return [F(null, 'note', 'noSliders')];
+  if (sl.length < CHAIN_MIN_SLIDERS) return [F(null, 'note', 'fewSliders', { n: sl.length })];
   const avg = sl.reduce((s, ns) => s + ns[ns.length - 1].sec - ns[0].sec, 0) / sl.length;
-  const bad = ch.filter(c => c.tailSec - c.sec > avg * 2 + EPS);
+  const bad = ch.filter(c => c.tailSec - c.sec > avg * 2 + CHAIN_TOL);
   return bad.length ? [F(null, BL.CHECK, 'chainLong', { ms: round(avg * 2000) }, bad.map(ref))] : [];
 }
 // R4.B.1/2: 複数ノーツのスイングを、最初の向きから45度以内・曲がる向きは片側だけ、で振れるか
@@ -366,11 +457,16 @@ function swingDevs(ord) {   // この順で切った時の、最初の向きか�
   return devs;
 }
 const perms = a => a.length <= 1 ? [a] : a.flatMap((x, i) => perms([...a.slice(0, i), ...a.slice(i + 1)]).map(r => [x, ...r]));
+// 「同じ拍」は秒で1ms未満のずれまで（2026-10-27・利用者の決定。以前は拍で1e-6未満）。保存の端数で極小にずれた横並びを、置いた順で切る扱いにしていた
+//  （ランク譜面に 0.000031拍＝約15µs ずれた同じ色・同じ向きの横並びがあり、動きが矢印と180度逆＝R4.B.1 の誤検出。ゲームでは同時）。
+//  ランク譜面189で同じ色の続く組の間は、1ms未満が5組（0.015〜0.17ms・端数）・1〜3msが525組（意図したとても速いスライダー）＝1msで分かれる。
+//  試す順が増えるだけなので新しい違反は出ない（下の上限＝2000通り・6個以上のまとまりに届かない限り）。他の判定の「同時」の幅（視界ブロック・重なり等）は変えない
+const SAME_BEAT_SEC = 0.001;
 function swingOrders(ns) {   // 同じ拍のまとまりごとの並べ方の組み合わせ（多すぎる時は時刻順のみ）
   const groups = [];
-  for (const n of [...ns].sort((a, b) => a.time - b.time)) {
+  for (const n of [...ns].sort((a, b) => a.sec - b.sec)) {
     const g = groups[groups.length - 1];
-    if (g && Math.abs(g[0].time - n.time) < 1e-6) g.push(n); else groups.push([n]);
+    if (g && Math.abs(g[0].sec - n.sec) < SAME_BEAT_SEC) g.push(n); else groups.push([n]);
   }
   let orders = [[]];
   for (const g of groups) {
@@ -452,15 +548,17 @@ function chainFirst16(B) {
   const bad = seq.filter(s => s.ch).map(s => s.o);
   return bad.length ? [F(null, BL.FAIL, 'first16', null, uniq(bad.map(o => o.type === 'link' ? o.chain : o.chainOf || o)).map(ref))] : [];
 }
+// 長さ0のチェーン（尾＝頭・リンクが頭と同時に出る作り）は逆向きにしない（AutoModder と同じ。ランク譜面で使われている）
 function chainReverse(B) {
-  const bad = B.map.chains.filter(c => !(c.tailTime > c.time));
+  const bad = B.map.chains.filter(c => c.tailTime < c.time - EPS);
   return bad.length ? [F(null, BL.FAIL, 'chainReverse', null, bad.map(ref))] : [];
 }
-// R6.B.2/3: 頭の向き（点ノーツは下）から、リンクへ向かう線の向きが45度を超えて変わらない
+// R6.B.2/3: 頭の向き（点ノーツは下）から、頭の位置から各リンクへの向きが45度を超えて変わらない
+//（文面「頭の位置と向きから」。2026-10-26 まではリンクの間の線ごとに見ていて、曲線の終わりだけが45度を超えるチェーンを違反にしていた）
 function chainPath(B) {
   const bad = B.map.chains.filter(c => {
     for (let i = 1; i < c.pts.length; i++) {
-      const a = c.pts[i - 1], b = c.pts[i];
+      const a = c.pts[0], b = c.pts[i];
       if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-6) continue;
       if (Math.abs(sdiff(segAngle(a, b), c.headAngle)) > 45 + 1e-3) return true;
     }
@@ -472,8 +570,10 @@ function chainHeadGrid(B) {
   const bad = B.map.chains.filter(c => c.posX < 0 || c.posX > 3 || c.posY < 0 || c.posY > 2);
   return bad.length ? [F(null, BL.FAIL, 'chainHeadOut', null, bad.map(ref))] : [];
 }
+// リンクのはみ出しは 0.1 マスまで許す（曲線の計算で 0.01 マスほど枠の外へ出るチェーンがランク譜面にある。AutoModder は上下 1/3 マスまで）
+const LINK_TOL = 0.1;
 function chainLinkGrid(B) {
-  const bad = B.map.chains.filter(c => c.blLinks.some(l => l.pos[0] < -1 - 1e-3 || l.pos[0] > 4 + 1e-3 || l.pos[1] < -1e-3 || l.pos[1] > 2 + 1e-3));
+  const bad = B.map.chains.filter(c => c.blLinks.some(l => l.pos[0] < -1 - LINK_TOL || l.pos[0] > 4 + LINK_TOL || l.pos[1] < -LINK_TOL || l.pos[1] > 2 + LINK_TOL));
   return bad.length ? [F(null, BL.FAIL, 'chainLinkOut', null, bad.map(ref))] : [];
 }
 // R6.D: 「リンク対すき間」の割合＝チェーンの詰め具合（squish）とみなす（文面に計算方法が無いための解釈）
@@ -525,54 +625,108 @@ function bombSwingPath(B) {
   return res.length ? [F(null, BL.CHECK, 'bombPath', null, uniq(res).map(ref))] : [];
 }
 // R7.B: 明るさ50（=0.5）以上のライトが、ボムの250ms前からボムが通り過ぎるまで点いている
-//  基本ライトイベントを再現して判定する。フェードは1秒点灯とみなす（BS Map Checkと同じ近似）ので候補扱い
+//  基本ライトイベントを再現して判定する。近似が多いので候補扱い。
+//  2026-10-27 から審査の人の道具（AutoModder の Bomb Lit。BS Map Check の unlitBomb が元）と同じ見方にした
+//  （以前は 250ms の間ずっと明るいことを求めていて、点滅＝On/Fade と Off を細かく繰り返す所の数十ms の暗がりで、ランク譜面の38%の難易度に出ていた）:
+//   - 見るのはボムの 250ms 前の瞬間だけ。消灯（値0・暗いイベント）は 250ms 遅れて効く（AutoModder の LightBombReactionTime）。
+//     ＝ボムの 250〜500ms 前のどこかで点いていれば明るい。最後の 250ms が暗くても出ない所は文面より甘い（注記に書いてある）。
+//   - 明るさ（floatValue）と Chroma の色（最大の成分・不透明度）は 0.25 未満を消灯とみなす（AutoModder・BS Map Check と同じ。文面の「50」より甘い）。
+//   - Chroma の lightID 付きのイベントは、その ID のライトだけを変える（以前は種類の全部を変えたことにしていた）。
+//   - フェードは 1 秒点灯・Transition は点灯（AutoModder は Transition を数えない＝ここは NLM の方が甘い）。
 const lightTypesOf = env => { const t = BASIC_TRACKS[env]; return t && t.l.length ? t.l : [0, 1, 2, 3, 4]; };
 const isOn = v => v === 1 || v === 5 || v === 9, isFlash = v => v === 2 || v === 6 || v === 10, isFade = v => v === 3 || v === 7 || v === 11, isTrans = v => v === 4 || v === 8 || v === 12;
-const dimCol = c => !!c && ((typeof c[3] === 'number' && c[3] < 0.5) || Math.max(c[0], c[1], c[2]) < 0.5);
+const LIT_MIN = 0.25, LIT_FADE = 1, LIT_REACT = 0.25;
+const dimCol = c => !!c && ((typeof c[3] === 'number' && c[3] < LIT_MIN) || Math.max(c[0], c[1], c[2]) < LIT_MIN);
+const lightIds = cd => { const v = cd.lightID ?? cd._lightID; if (v == null) return null; const a = (Array.isArray(v) ? v : [v]).filter(x => typeof x === 'number'); return a.length ? a : null; };
+// 明るい区間（秒）の一覧。消灯した区間の終わりは LIT_REACT だけ後ろへ延ばす（フェードの1秒の終わりは延ばさない）
 function litSegments(B) {
+  const tail = LIT_REACT;
   const types = lightTypesOf(B.env), segs = [];
+  const bright = e => e.value !== 0 && (e.floatValue ?? 1) >= LIT_MIN && !dimCol(e.customData._color) && !dimCol(e.customData.color)
+    && (isOn(e.value) || isFlash(e.value) || isFade(e.value) || isTrans(e.value));
   for (const ty of types) {
     const evs = B.map.basicEvents.filter(e => e.etype === ty).sort((a, b) => a.sec - b.sec);
-    evs.forEach((e, i) => {
-      const end = i < evs.length - 1 ? evs[i + 1].sec : Infinity;
-      const bright = (e.floatValue ?? 1) >= 0.5 && !dimCol(e.customData._color) && !dimCol(e.customData.color);
-      if (!bright || e.value === 0) return;
-      if (isOn(e.value) || isFlash(e.value) || isTrans(e.value)) segs.push([e.sec, end]);
-      else if (isFade(e.value)) segs.push([e.sec, Math.min(end, e.sec + 1)]);
-    });
+    const st = new Map();   // 点いているライト: 土台（null＝lightID 無し）か lightID → [点いた秒, フェードの終わり]
+    const close = (k, t) => { const s = st.get(k); if (s) { segs.push([s[0], Math.min(t + tail, s[1])]); st.delete(k); } };
+    for (const e of evs) {
+      const ids = lightIds(e.customData);
+      if (!ids) for (const k of [...st.keys()]) close(k, e.sec);   // lightID 無し＝種類の全部を変える
+      for (const k of ids || [null]) {
+        close(k, e.sec);
+        if (bright(e)) st.set(k, [e.sec, isFade(e.value) ? e.sec + LIT_FADE : Infinity]);
+      }
+    }
+    for (const k of [...st.keys()]) close(k, Infinity);
   }
   segs.sort((a, b) => a[0] - b[0]);
   const merged = [];
   for (const s of segs) { const l = merged[merged.length - 1]; if (l && s[0] <= l[1] + EPS) l[1] = Math.max(l[1], s[1]); else merged.push([...s]); }
   return merged;
 }
+// 元の譜面のライトがライトボックスだった難易度: NLM は読めない（読み込みで消える）ので、ライトの判定（R10.A・R7.B）は手動確認だけにする（2026-10-26・利用者の決定）
+const srcBoxesUnread = B => B.srcLightBoxes > 0 ? [F(null, BL.MANUAL, 'boxLightsUnread', { n: B.srcLightBoxes })] : null;
 function bombLight(B) {
   const bombs = B.map.bombNotes; if (!bombs.length) return [];
+  const unread = srcBoxesUnread(B); if (unread) return unread;
   const hasBoxes = B.map.ebg.color.length > 0;
   if (!V2_ENVS.has(B.env) && hasBoxes) return [F(null, BL.CHECK, 'boxLights')];
   const segs = litSegments(B);
   if (!segs.length) return [F(null, BL.FAIL, 'noLightAtAll', null, bombs.map(ref))];
-  const covered = (s, e) => segs.some(g => g[0] <= s + EPS && g[1] >= e - EPS);
-  const dark = bombs.filter(b => !covered(b.sec - 0.25, b.sec));
+  const litAt = t => segs.some(g => g[0] <= t + EPS && g[1] >= t - EPS);
+  const dark = bombs.filter(b => !litAt(b.sec - LIT_REACT));
   return dark.length ? [F(null, BL.CHECK, 'bombDark', null, dark.map(ref))] : [];
 }
 
 // ---------- R8 壁 ----------
-// R8.A.3（候補）: 真ん中の片側だけを塞ぐ壁（dodge wall）で頭を左右へ動かす回数が1秒に2回を超える
+// R8.A.2（候補）: 壁の境界を避ける時間が 250ms 以上（例外で 235ms・NQT/RT の承認が要る）。
+//  真ん中の片側だけを（立った頭の高さで）塞ぐ壁が来た時、頭を向かわせる反対側の列を塞いでいた壁が終わってから、この壁が来るまでの時間。
+//  重なる（両方が同時に塞がれる）所は R8.B。検出が近似（頭を本当に動かす必要があるかは壁の幅・頭の位置で変わる）なので、235ms 未満も要確認にして文で伝える。
+//  2026-10-26 から（以前は BS Map Check の「中央の2マス幅の壁」を流用。あれは幅3以上の壁を位置に関係なく必ず出し、ランク譜面の7難易度に出ていた）
+const AVOID_MIN = 0.25, AVOID_MIN_EX = 0.235;
+function wallAvoid(B) {
+  const end = { 1: -Infinity, 2: -Infinity };   // 真ん中の左右の列を最後に塞いでいた壁の終わり（秒）
+  const u235 = [], u250 = [];
+  for (const w of B.walls) {
+    if (!blocksStand(w)) continue;
+    const c1 = covers(w, 1), c2 = covers(w, 2), e = w.sec + w.dsec;
+    if (c1 && c2) { end[1] = Math.max(end[1], e); end[2] = Math.max(end[2], e); continue; }
+    if (!c1 && !c2) continue;
+    const blocked = c1 ? 1 : 2, gap = w.sec - end[c1 ? 2 : 1];   // 反対側の列が空いてから、この壁が来るまで
+    if (gap > -EPS && gap < AVOID_MIN_EX - EPS) u235.push(w);
+    else if (gap > -EPS && gap < AVOID_MIN - EPS) u250.push(w);
+    end[blocked] = Math.max(end[blocked], e);
+  }
+  const out = [];
+  if (u235.length) out.push(F(null, BL.CHECK, 'wallDodge235', null, u235.map(ref)));
+  if (u250.length) out.push(F(null, BL.CHECK, 'wallDodge250', null, u250.map(ref)));
+  return out;
+}
+// R8.A.3（候補）: 真ん中の片側だけを塞ぐ壁（dodge wall）で頭を左右へ動かす回数。塞ぐ側が入れ替わる間隔から:
+//  1秒に2回を超える（0.5秒未満）＝正当化が必要／3.8回を超える＝例外として NQT/RT の承認が要る／4回を超える＝例外でも不可。
+//  基準の注の「3.8回/秒＝1/1で227BPM・4回/秒＝241BPM」は、避ける時間 250/235ms＋一番短い壁の長さから出した数。
+//  検出が近似なので、どの段も要確認にして文で伝える（2026-10-26 から。以前は2回だけ）
+const DODGE_JUSTIFY = 1 / 2, DODGE_MAX = 1 / 3.8, DODGE_MAX_EX = 1 / 4;
 function dodgeRate(B) {
-  let side = null, lastMove = null; const res = [];
+  let side = null, lastMove = null; const fast = [], over = [], overEx = [];
   for (const w of B.walls) {
     if (!blocksStand(w)) continue;
     const c1 = covers(w, 1), c2 = covers(w, 2);
     if (c1 === c2) continue;
     const need = c1 ? 'R' : 'L';
     if (side && need !== side) {
-      if (lastMove != null && w.sec - lastMove < 0.5 - EPS) res.push(w);
+      const gap = lastMove != null ? w.sec - lastMove : Infinity;
+      if (gap < DODGE_MAX_EX - EPS) overEx.push(w);
+      else if (gap < DODGE_MAX - EPS) over.push(w);
+      else if (gap < DODGE_JUSTIFY - EPS) fast.push(w);
       lastMove = w.sec;
     }
     side = need;
   }
-  return res.length ? [F(null, BL.CHECK, 'dodgeFast', null, res.map(ref))] : [];
+  const out = [];
+  if (overEx.length) out.push(F(null, BL.CHECK, 'dodgeOver4', null, overEx.map(ref)));
+  if (over.length) out.push(F(null, BL.CHECK, 'dodgeOver38', null, over.map(ref)));
+  if (fast.length) out.push(F(null, BL.CHECK, 'dodgeFast', null, fast.map(ref)));
+  return out;
 }
 // R8.B: 真ん中の2レーンが同時に（立った頭の高さで）塞がれる
 function outerLane(B) {
@@ -586,17 +740,23 @@ function outerLane(B) {
   }
   return res.length ? [F(null, BL.FAIL, 'outerLane', null, uniq(res).map(ref))] : [];
 }
-// R8.C: 13.8ms以下の壁は、同じレーンの正規の壁の後ろ250ms以内、または何かの壁の後ろ100ms以内でないといけない
+// R8.C: 13.8ms以下の壁は、同じレーンの正規の壁の後ろ250ms以内、または何かの壁の後ろ100ms以内でないといけない。
+//  枠の外（4レーンにかからない）の壁は対象外（「同じレーン」の無い飾りの壁。ランク譜面で列の先頭が違反になっていた・2026-10-26 利用者の決定）。
+//  時間を飛ばす区間の中の壁は要確認（演出で長さがほぼ0になる壁）
 function legalWall(B) {
-  const legal = w => w.dsec * 1000 > 13.8, res = [];
+  const legal = w => w.dsec * 1000 > 13.8, res = [], skip = [];
   const sameLane = (a, b) => a.posX < b.posX + b.width && b.posX < a.posX + a.width;
+  const outside = w => w.posX + w.width <= 0 || w.posX >= 4;
   for (const w of B.walls) {
-    if (legal(w) || w.width <= 0) continue;
+    if (legal(w) || w.width <= 0 || outside(w)) continue;
     const ok = B.walls.some(o => o !== w && sameLane(o, w) && o.sec <= w.sec + EPS
       && w.sec - (o.sec + o.dsec) <= (legal(o) ? 0.25 : 0.1) + EPS);
-    if (!ok) res.push(w);
+    if (!ok) (inSkip(B, w.time) ? skip : res).push(w);
   }
-  return res.length ? [F(null, BL.FAIL, 'illegalWall', null, res.map(ref))] : [];
+  const out = [];
+  if (res.length) out.push(F(null, BL.FAIL, 'illegalWall', null, res.map(ref)));
+  if (skip.length) out.push(F(null, BL.CHECK, 'illegalWallSkip', null, skip.map(ref)));
+  return out;
 }
 // しゃがむ区間: 真ん中の2レーンがどちらも「頭の高さの壁」か「頭上の壁」で塞がれ、少なくとも1つは頭上の壁（D.3の半分の壁を含む）
 function crouchSpans(B) {
@@ -630,6 +790,7 @@ function njsEvents(B) {
   return B.njsEvents && B.njsEvents.length ? [F(null, BL.CHECK, 'njsEventsUsed', { n: B.njsEvents.length })] : [];
 }
 function lightDensity(B, { p }) {
+  const unread = srcBoxesUnread(B); if (unread) return unread;
   const types = lightTypesOf(B.env);
   const basic = B.map.basicEvents.filter(e => types.includes(e.etype)).length;
   const boxes = B.map.ebg.color.reduce((s, g) => s + g.boxes.reduce((t, x) => t + x.events.length, 0), 0);
@@ -699,6 +860,8 @@ function starOrder({ p }) {
 }
 
 const uniq = a => [...new Set(a)];
+const SKIP_BPM = 10000;   // これ以上の BPM の区間を「時間を飛ばす区間」とみなす（ランク譜面の演出は 100000・普通の曲の BPM は 620 まで）
+const inSkip = (B, beat) => B.skips.some(([s, e]) => beat >= s - EPS && beat <= e + EPS);
 function lowerSec(arr, s) { let lo = 0, hi = arr.length; while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m].sec < s) lo = m + 1; else hi = m; } return lo; }
 function* between(arr, s, e) { for (let i = lowerSec(arr, s - EPS); i < arr.length && arr[i].sec <= e + EPS; i++) yield arr[i]; }
 // その秒に続いている壁（壁は開始の時刻順。最長の壁の長さぶんだけ遡って探す）

@@ -3,6 +3,7 @@
 import hmac, http.server, json, math, os, posixpath, re, secrets, shutil, subprocess, sys, tempfile, threading, time
 from urllib.parse import unquote, urlsplit, parse_qs
 from rating_plugin import RatingPlugin, PluginError
+from automodder_plugin import AutoModderPlugin, PluginError as AutoModderError
 from app_update import Updater, UpdateError
 from media_library import MediaLibrary, LibError, RatingCache
 from song_details import SongDetails
@@ -388,6 +389,31 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             return self._reply(200, {'ok': False, 'error': e.code, 'detail': e.detail})
         return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
 
+    def _automodder(self):
+        # AutoModder の判定のプラグイン（automodder_plugin.py）。取得先URL・置き場所は automodder_plugin.py に固定。
+        # JSから受け取るのは「使う版」と譜面の中身（Info.dat・各難易度の .dat の文字列と曲の長さ）だけ
+        ap = AutoModderPlugin(DATA_DIR)
+        act = self.path[len('/__automodder/'):]
+        try:
+            if act == 'status':
+                return self._reply(200, ap.status())
+            if act == 'check':
+                return self._reply(200, ap.check())
+            if act == 'install':
+                return self._reply(200, ap.install())
+            if act == 'use':
+                b = self._body()
+                return self._reply(200, ap.use(b.get('version') if isinstance(b, dict) else None))
+            if act == 'run':
+                try:
+                    b = self._body()
+                except ValueError:
+                    raise AutoModderError('badInput')
+                return self._reply(200, ap.run(b))
+        except AutoModderError as e:
+            return self._reply(200, {'ok': False, 'error': e.code, 'detail': e.detail})
+        return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
+
     def _update(self):
         # 取得先URL・差し替える物は app_update.py に固定。JSから受け取るのは言語（と更新内容を開く版番号）だけ
         act = self.path[len('/__update/'):]
@@ -599,6 +625,8 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 return self._update()
             if self.path.startswith('/__rating/'):   # 難易度を測る（BeatLeaderの星の近似）プラグイン。詳細は rating_plugin.py
                 return self._rating()
+            if self.path.startswith('/__automodder/'):   # AutoModder の判定（譜面チェックの3つ目のタブ）のプラグイン。詳細は automodder_plugin.py
+                return self._automodder()
             if self.path.startswith('/__lib/'):   # MEDIA ライブラリ。詳細は _lib
                 return self._lib()
             os.makedirs(ASSET_DIR, exist_ok=True)

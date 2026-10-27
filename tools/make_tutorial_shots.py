@@ -12,7 +12,7 @@ UIが変わったらこれを実行し直せば画像が追従する（座標は
 （cdp.Editor.TEST_SETTINGS）では出ない設定なので、撮る直前に localStorage のキー（bsnm_anaAsk / bsnm_anaGuide）を消して出す。
 
 使い方: .venv-build/Scripts/python.exe tools/make_tutorial_shots.py [--en] [撮る番号...]
-        番号を省略すると全部撮る（例: make_tutorial_shots.py 05 06 で05と06だけ）
+        番号を省略すると全部撮る（例: make_tutorial_shots.py 05 06 で05と06だけ。番号はファイル名の最初の「-」の前）
         --en: 英語表示で撮って docs/images/tutorial-en/ へ保存する（英語版チュートリアル docs/tutorial.en.md 用）
 """
 import sys
@@ -31,6 +31,20 @@ W, H = 1920, 1080
 # （DOMに無くページ側から消せない）。メーターは説明に不要なので、その手前で切って撮る
 RIGHT = 1838
 ONLY = set(a for a in sys.argv[1:] if not a.startswith("--"))
+
+
+def wanted(name):
+    """画像 name（例 "03-9-bulk-loading"）を保存するか。ONLY には章（"03"）か画像の番号（"03-9"）を書ける（上級編の台本と共用）"""
+    if not ONLY:
+        return True
+    p = name.split("-")
+    return p[0] in ONLY or "-".join(p[:2]) in ONLY
+
+
+def want_ch(ch):
+    """章 ch（例 "03"）の画像を1枚でも保存するか（章ごとの起動を省く判定）"""
+    return not ONLY or any(o.split("-")[0] == ch for o in ONLY)
+
 
 # 画面の文言で要素を探す所の、英語表示での文言（lang/en.json と同じ）
 TEXT_EN = {
@@ -113,7 +127,7 @@ class Tut:
         ed.js("__tut.style()")
 
     def shot(self, name, marks=None, clip=None):
-        if ONLY and name.split("-")[0] not in ONLY:
+        if not wanted(name):
             return
         if marks:
             self.ed.js(f"__tut.mark({marks})")
@@ -213,9 +227,10 @@ def main():
           {t:'#pvpane',n:1,at:'in',pad:-4},{t:'#nodecol',n:2,at:'in',pad:-4},{t:'#main',n:3,at:'in',pad:-4},
           {t:'#maintb',n:4,at:'l'},{t:'#transportBar',n:5,at:'l'}]""")
 
-        # 02 ファイルメニュー
+        # 02 ファイルメニュー（メニューの下端まで写す＝審査の指摘など下の方の項目も見える）
         t.click_el("#mFileBtn"); ed.wait(0.5)
-        t.shot("02-file-menu", marks="[{t:'#mFileMenu button[data-act=loadsong]',n:1,at:'r'}]", clip=(0, 0, 900, 420))
+        fm = t.rect("#mFileMenu")
+        t.shot("02-file-menu", marks="[{t:'#mFileMenu button[data-act=loadsong]',n:1,at:'r'}]", clip=(0, 0, 900, round(fm["y"] + fm["h"]) + 16))
         # 02b 曲を取り込んだ時の「曲を解析しますか？」。撮影の環境（cdp.Editor.TEST_SETTINGS）は聞かない設定なので、
         # 読み込む直前にキーを消して初めて使う人と同じにする（tests/_lib/analysis_helpers.py の ask_on）。撮った後は［今はしない］
         ana_h.ask_on(ed)

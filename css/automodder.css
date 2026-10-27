@@ -1,0 +1,56 @@
+/* Non-Linear Mapper — automodder.css（譜面チェックのパネルの3つ目のタブ「AutoModder」・js/automodder/automodder-view.js）
+   BS Map Check のタブ・BL評価リスト（青緑）と見間違えないよう、琥珀色の枠と背景にする。項目・拍のチップは mapcheck.css の .mcItem・.mcBeat を使う */
+
+  #mcPanel .mcTab[data-tab="am"].on{background:#21190f;border-color:#d08a3a;color:#ffc98a;}
+  #mcPanel.amMode{border:2px solid #d08a3a;box-shadow:0 8px 28px rgba(0,0,0,.55),0 0 0 3px #d08a3a26;}
+  #mcPanel.amMode .mcBody{background:#21190f;}
+  #mcPanel.amMode .mcFoot{background:#1b140c;color:#cfb08a;border-top-color:#d08a3a55;}
+  #mcPanel .amBanner{display:flex;flex-direction:column;gap:3px;margin:6px 2px 8px;padding:8px 10px;border-radius:6px;
+    background:#3a2812;border:1px dashed #d08a3a;color:#f0dfc6;font-size:11px;line-height:1.5;}
+  #mcPanel .amBanner b{color:#ffc98a;font-size:12.5px;}
+
+  /* プラグインの状態・取り込みの説明 */
+  #mcPanel .amCtl{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:0 2px 6px;}
+  #mcPanel .amInfo{font-size:10.5px;color:#c4a882;}
+  #mcPanel .amErrLine{margin:0 2px 6px;font-size:11px;color:#ffb3bb;}
+  #mcPanel .amOkLine{margin:0 2px 6px;font-size:11px;color:#9fe0b4;}
+  #mcPanel .amBox{margin:0 2px 6px;padding:7px 9px;border-radius:6px;background:#3a2812;border:1px solid #d08a3a;color:#f0dfc6;font-size:11px;line-height:1.55;}
+  #mcPanel .amRepo{color:#cfb08a;margin-top:3px;user-select:text;}
+  #mcPanel .amBtns{display:flex;gap:6px;margin-top:6px;}
+  #mcPanel .amCtl button,#mcPanel .amBtns button{background:#4a3214;border:1px solid #d08a3a;border-radius:6px;color:#ffe9cc;padding:2px 9px;cursor:pointer;font:inherit;font-size:11px;white-space:nowrap;}
+  #mcPanel .amCtl button:hover,#mcPanel .amBtns button:hover{background:#d08a3a;color:#1d1206;}
+  #mcPanel .amCtl button:disabled{opacity:.6;cursor:default;background:#4a3214;color:#ffe9cc;}
+  #mcPanel .amVer{background:#2a1d0f;border:1px solid #6a4a22;border-radius:4px;color:#ffe9cc;font:inherit;font-size:11px;padding:1px 4px;}
+  #mcPanel .amRunning{color:#ffc98a;padding:6px 4px;}
+
+  /* 結果 */
+  #mcPanel .amSum{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 2px 6px;}
+  #mcPanel .amSec>summary{background:#33240f;}
+  #mcPanel .amMark{font-size:10.5px;padding:1px 6px;border-radius:9px;border:1px solid #5a4a30;color:#e8d2b0;margin-left:auto;}
+  #mcPanel .amMark.m-Success{border-color:#2d6a44;color:#7ee0a0;}
+  #mcPanel .amMark.m-Warning{border-color:#6a5f22;color:#f0dc72;}
+  #mcPanel .amMark.m-Fail{border-color:#7a2a34;color:#ff8a94;}
+  #mcPanel .mcCnt.sv-Error{border-color:#6a2a32;color:#ff8a94;}
+  #mcPanel .mcCnt.sv-Warning{border-color:#5f5520;color:#f0dc72;}
+  #mcPanel .mcCnt.sv-Inconclusive{border-color:#4f3d6a;color:#cdb4f2;}
+  #mcPanel .mcCnt.sv-Suggestion{border-color:#244a6a;color:#9ccbff;}
+  #mcPanel.amMode .mcItem{background:#2a1f13;}
+  #mcPanel .amItem.sv-Error{border-left-color:#ff4d5e;}
+  #mcPanel .amItem.sv-Warning{border-left-color:#d8c040;}
+  #mcPanel .amItem.sv-Inconclusive{border-left-color:#a98ad8;}
+  #mcPanel .amItem.sv-Suggestion{border-left-color:#4da3ff;}
+  #mcPanel .amItem.sv-Info,#mcPanel .amItem.sv-Data{border-left-color:#6f6f78;}
+  #mcPanel .amSev{margin-left:auto;font-size:10px;color:#a8957a;white-space:nowrap;}
+  #mcPanel .amDesc{margin:3px 0 0 22px;color:#dccbb2;font-size:11px;line-height:1.45;user-select:text;}
+  #mcPanel .amData{margin:2px 0 0 22px;color:#a8957a;font-size:10.5px;user-select:text;}
+  #mcPanel .amStat{margin:4px 0;padding:4px 8px;border-radius:5px;background:#2a1f13;font-size:10.5px;color:#cdb89a;display:flex;flex-wrap:wrap;gap:2px 8px;}
+  #mcPanel .amStatLab{color:#e8d2b0;}
+  #mcPanel .amPassed{margin:4px 0 2px;}
+  #mcPanel .amPassed>summary{cursor:pointer;color:#7ee0a0;font-size:11px;padding:2px 6px;}
+  #mcPanel .amPassList{margin:2px 0 0 22px;font-size:10.5px;color:#a8957a;line-height:1.5;}
+  #mcPanel .amNote{margin:4px 2px;padding:4px 8px;font-size:11px;color:#e8d2b0;background:#2a1f13;border-radius:5px;}
+  #mcPanel .amErrDetail{margin-top:3px;font-size:10.5px;color:#ffccd2;user-select:text;word-break:break-all;}
+  #mcPanel .amMeta{margin:8px 2px 2px;font-size:10.5px;color:#8f7f68;}
+  #mcPanel.amMode .mcBeat{background:#4a3214;color:#ffe9cc;}
+  #mcPanel.amMode .mcBeat:hover{background:#d08a3a;color:#1d1206;}
+  #mcPanel.amMode .mcBeat.cur{background:#5a44a8;color:#fff;}

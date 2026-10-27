@@ -29,6 +29,7 @@ import { installEditorRuntimeHelpers } from '../runtime/editor-runtime.js';
 import { installMapCheckPanel } from '../mapcheck/mapcheck-panel.js';
 import { installRatingPanel } from '../rating/rating-panel.js';
 import { createRatingClient } from '../rating/rating-client.js';
+import { createAutoModderClient } from '../automodder/automodder-client.js';
 import { installUpdater } from '../update/update-dialog.js';
 import { generateAutoLights, showAutoLightDialog } from '../lighting/auto-light.js';
 import { fitCoverImage, measureCoverFit, coverNeedsFix, coverFitSize, showCoverFitDialog } from '../media/cover-fit.js';
@@ -42,6 +43,8 @@ import { installLibOnline } from '../media/lib-online.js';   // MEDIAの全曲�
 import { linkDialog, linkBand, hideLinkBand } from '../nle/clip-link.js';   // リンクしたクリップの確認の画面と帯（2026-10-19）
 import { installSongAnalysis } from '../analysis/song-analysis.js';   // 曲の解析（テンポの推定・構成の解析）の画面側。解析は serve.py の /__analysis/*
 import { anaClipsDialog } from '../analysis/ana-clips.js';            // 解析からクリップを作る確認の画面（作るのは anaMakeClips）
+import { installReviewPanel } from '../review/review-panel.js';        // 審査の指摘（「拍 - 文」の .txt・Discord の本文）の一覧・読み込み・書き出し（2026-10-27）
+import { pickTargets as rvPickTargets, srcTpOk } from '../review/review-data.js';   // 指摘の拍に当たる物を探す・元の譜面のテンポ（C3）の形の確かめ
 
 /**
  * Editor runtime — original closure (behavior-preserving).
@@ -56,6 +59,18 @@ function boostStateAt(beat){   // 指定拍でのBoost状態: その拍以前の
   let on=false, best=-Infinity;
   for(const e of lightEvents){ if(e.et!==5) continue; if(e.beat<=beat+1e-6 && e.beat>=best){ best=e.beat; on=(e.i>0); } }
   return on; }
+// boostStateAt と同じ答えを、ライトをたくさん描く所（NLE のミニロール・ゴースト）向けに速く返す関数を作る（2026-10-27）。
+// boostStateAt は1回ごとに lightEvents を全部たどるので、ライト n 個のクリップを描くと1フレームで n² になり、ライト10万の譜面で
+// 1フレーム7〜20秒かかって画面が固まっていた。Boost(et=5)だけを拍の順に並べ、二分探索で「その拍以前の最後の Boost」を引く
+// （同じ拍の Boost は後に書かれた方＝boostStateAt の e.beat>=best と同じ）。lightEvents が変わったら作り直すこと（描画1回ごとに作る）
+function boostLookup(){
+  const bs=[];
+  for(let k=0;k<lightEvents.length;k++){ const e=lightEvents[k]; if(e.et!==5) continue; const b=+e.beat; if(b===b) bs.push([b,e.i>0,k]); }
+  if(!bs.length) return ()=>false;
+  bs.sort((p,q)=>p[0]-q[0]||p[2]-q[2]);
+  return beat=>{ const lim=beat+1e-6; let lo=0, hi=bs.length;   // 拍が lim 以下の最後の Boost
+    while(lo<hi){ const m=(lo+hi)>>1; if(bs[m][0]<=lim) lo=m+1; else hi=m; }
+    return lo>0?bs[lo-1][1]:false; }; }
 function _briB(c){ const f=(v)=>Math.min(255,v+((255-v)*0.4)|0); return f(c>>16&255)<<16|f(c>>8&255)<<8|f(c&255); }   // ブースト既定＝基本色を明るくした派生
 function laserBoostCols(){ LRED_B=_briB(LRED); LBLUE_B=_briB(LBLUE); }
 const hexOf=n=>'#'+(n>>>0).toString(16).padStart(6,'0');
@@ -200,6 +215,7 @@ async function loadLang(){
   try{ if(document.getElementById('keyEditBody')) renderKeyEditor(); }catch(_){}   // ショートカット編集の操作名
   try{ if(typeof renderLibList==='function') renderLibList(); }catch(_){}   // MEDIAの「アセット」など
   try{ libView.relabel(); libFilter.relabel(); libView.refresh(); libOnline.relabel(); }catch(_){}   // MEDIAの詳細表示の見出し・件数・出どころ・★の計算の帯・環境設定の状態（起動の途中で呼ばれた時はまだ無い）
+  try{ if(reviewPanel) reviewPanel.relabel(); }catch(_){}   // 審査の指摘の一覧（開いていれば）
 }
 // ---- ペインモード（Tabで切替。マウスの乗っているペインが対象） ----
 let curTab='tabFolder', pvMode='media', nodeMode='edit', nodeColMode='nle', hoverPane='main';   // 起動時はMEDIAを先に表示（ヘルバ様指示）
@@ -889,7 +905,8 @@ function numSprTex(n){
   numSprTexCache[n]=tx; return tx;
 }
 const chipPool=[];
-function ensureChips(n){ while(chipPool.length<n&&chipPool.length<1200){
+const CHIP_MAX=1200;   // 3Dのライトのチップを一度に出せる数（重複の黄色枠のライトの分もこれまで）
+function ensureChips(n){ while(chipPool.length<n&&chipPool.length<CHIP_MAX){
   const mat=new THREE.MeshStandardMaterial({flatShading:true,metalness:0.1,roughness:0.65,transparent:true});
   const body=new THREE.Mesh(CHIP_GEOS.on,mat);
   const num=new THREE.Sprite(new THREE.SpriteMaterial({transparent:true,depthWrite:false}));
@@ -2191,12 +2208,15 @@ async function loadCoverPreview(n){
   const key=n.handle?('h:'+_coverHid.get(n.handle)+':'+n.name):('f:'+(n.name||'').toLowerCase());
   const c=_coverImgs.get(n.id);
   if(c&&c.key===key) return;
-  _coverImgs.set(n.id,{key,bmp:(c&&c.bmp)||null});   // 先にkeyを立てて多重ロード防止
+  const mark={key,bmp:(c&&c.bmp)||null};
+  _coverImgs.set(n.id,mark);   // 先にkeyを立てて多重ロード防止
   let file=null;
   try{ if(n.handle) file=await n.handle.getFile(); }catch(e){}
   let bmp=null;
   if(file){ try{ bmp=await createImageBitmap(file); }catch(e){} }
-  const now=_coverImgs.get(n.id); if(now&&now.key!==key) return;   // 読込中に別の画像へ替わった＝古い結果で上書きしない
+  // 読込中に別の画像へ替わった・開く/新規で控えごと消えた（resetCoverState）＝古い結果で上書きしない。
+  // 以前は key だけで比べ、消えた後（控えが無い）は前のプロジェクトの画像を入れ直していた
+  if(_coverImgs.get(n.id)!==mark){ if(bmp&&bmp.close) try{ bmp.close(); }catch(_){} return; }
   _coverImgs.set(n.id,{key,bmp});
   if(String(n.id).startsWith('ig:')) refreshInfoCards();   // INFOのカードは読込完了で描き直す（読込中は前の画像のまま＝ここで追いつかせる）
 }
@@ -2423,17 +2443,21 @@ async function openSongFile(){
   }catch(err){ showErr(tf('msg.loadAudioFail','音源の読込に失敗: {err}',{err})); }
 }
 // 右下表示用のジャケット（OUTPUTへ配線中のCOVERノードのhandle。無ければ出さない）
-let _coverURL=null, _coverKey='';
+let _coverURL=null, _coverKey='', _coverSeq=0;   // _coverKey=null は「表示を決め直す」（applyInfoGraph・開く/新規の前の resetCoverState）
 async function updateCoverThumb(){
   const img=document.getElementById('siCover');
   const covN=extraNodes.find(x=>x.kind==='cover'
     &&graphEdges.some(e2=>e2.sig==='cover'&&e2.fromId===x.id&&e2.toId==='out'));   // OUTPUTへ配線中のみ有効
   const fname=covN?(covN.name||''):'';
-  const key=covN?(covN.handle?'h:'+covN.name:'f:'+fname):'';
+  if(covN&&covN.handle&&!_coverHid.has(covN.handle)) _coverHid.set(covN.handle,++_coverHidSeq);
+  const key=covN?(covN.handle?'h:'+_coverHid.get(covN.handle)+':'+covN.name:'f:'+fname):'';   // 画像の参照ごとに別のキー（同じファイル名の別の画像でも読み直す）
   if(key===_coverKey) return;
-  _coverKey=key;
+  _coverKey=key; const seq=++_coverSeq;
   let file=null;
   try{ if(covN&&covN.handle) file=await covN.handle.getFile(); }catch(e){}
+  // 読んでいる間に表示する画像が替わった（別のプロジェクトを開いた等）＝古い結果で上書きしない（2026-10-27。前のプロジェクトの画像の読み込みが
+  // 後から終わり、開いたプロジェクトの右下に前の画像が残っていた）
+  if(seq!==_coverSeq) return;
   if(_coverURL){ URL.revokeObjectURL(_coverURL); _coverURL=null; }
   if(file){ _coverURL=URL.createObjectURL(file); img.src=_coverURL; img.style.display=''; }
   else { img.removeAttribute('src'); img.style.display='none'; }
@@ -2673,6 +2697,7 @@ function roundRectND(x,y,w,h,r){ if(typeof r==='number') r=[r,r,r,r];
 function drawLayers(curV){
   if(curV===undefined) curV=cur;   // 再生中はtickから音声遅延補正済みの拍(curV)が渡る＝下段Music/Notesと完全一致
   if(!ndW) return;
+  let _bAt=null; const boostAt=b=>(_bAt||(_bAt=boostLookup()))(b);   // ミニロールのライトの色（Boost の表はライトを描く時だけ・描画1回に1回作る）
   flushFlatEdits();   // 3D(NOTES/LIGHT)の編集をクリップcontentへ確定してから描画＝ミニロールが即追従・他操作でrevertしない
   ndg.clearRect(0,0,ndW,ndH);
   for(const g of ['n','l']){ const laneH=laneHt(g); ndg.save(); ndg.beginPath(); ndg.rect(0,laneTopOf(g),ndW,laneVP(g)); ndg.clip();
@@ -2790,8 +2815,8 @@ function drawLayers(curV){
         const laneLH=byH/10, ltTop=byTop;
         for(const ev of (cc.lights||[])){ if((ev.beat||0)>=L||(ev.beat||0)<0) continue;    // ライト=3Dと同レーン順・チップ同色
           const li=laneIdxByType[ev.et]; if(li===undefined) continue;
-          const nx=x+(ev.beat||0)*PPB; if(nx<x-3||nx>x+w) continue;
-          ndg.fillStyle='#'+chipColorOf(ev.et,ev.i,evChroma(ev),boostStateAt(ev.beat)).toString(16).padStart(6,'0');
+          const nx=x+(ev.beat||0)*PPB; if(nx<x-3||nx>x+w||nx<LGUT-3||nx>ndW) continue;   // 画面の外（溝の下・右端の外）は描かない
+          ndg.fillStyle='#'+chipColorOf(ev.et,ev.i,evChroma(ev),boostAt(ev.beat)).toString(16).padStart(6,'0');
           ndg.fillRect(nx,ltTop+li*laneLH+0.3,2,Math.max(1,laneLH-0.6)); }
       }
     } else if(!isNull){
@@ -2828,6 +2853,7 @@ function drawLayers(curV){
     ndg.fillStyle='#c9c9c9'; ndg.fillText(nm,x+8,mkT+MKRH/2+0.5);
     _mkRects.push({i:mi2,x:x+6,y:mkT+1,w:tw+6,h:MKRH-2});
   }
+  drawReviewMarks(bx);   // 審査の指摘の印（数字の帯の下の方・今の難易度の分・2026-10-27）
   // MEDIAドラッグ中のゴーストクリップ（ホバー中のレーン種で中身が変わる。曲に現在の難易度が無ければ「？」）
   if(_dragMedia&&_mediaGhostNd){
     const gla=laneAtY(_mediaGhostNd.sy), glk=gla.lk;
@@ -2847,7 +2873,6 @@ function drawLayers(curV){
     if(invalid){   // ドロップ不可（種別不一致 or 音楽ファイル or 現在の難易度が無い）→ 中央1行で案内（短いレーンでも縦に潰れない）
       const msg=_dragMedia.isImage?t('msg.imgToCoverShort','画像はカバー画像へ')
         :_dragMedia.isMusic?t('msg.dragMusicLane','音楽ファイルは Music レーンへ')
-        :_dragMedia._v4?t('msg.v4Short','v4 形式の譜面は未対応')
         :laneBad?(clipLk==='n'?t('msg.clipToNotes','NOTESクリップは NOTES レーンへ'):t('msg.clipToLight','LIGHTクリップは LIGHT レーンへ'))   // 種別不一致（ヘルバ様指定）
         :(glk==='l'?t('msg.noDiffLights','この難易度のライティングは含まれていません')
                    :t('msg.noDiffNotes','この難易度のノーツは含まれていません'));   // ドラッグ先レーン種でノーツ/ライティングを出し分け
@@ -2877,8 +2902,8 @@ function drawLayers(curV){
         const laneLH=bH/10;
         for(const ev of (fr.lights||[])){ if((ev.beat||0)>=gl||(ev.beat||0)<0) continue;
           const li=laneIdxByType[ev.et]; if(li===undefined) continue;
-          const nx=gx+(ev.beat||0)*PPB; if(nx<gx-3||nx>gx+gw) continue;
-          ndg.fillStyle='#'+chipColorOf(ev.et,ev.i,evChroma(ev),boostStateAt(ev.beat)).toString(16).padStart(6,'0');
+          const nx=gx+(ev.beat||0)*PPB; if(nx<gx-3||nx>gx+gw||nx<LGUT-3||nx>ndW) continue;
+          ndg.fillStyle='#'+chipColorOf(ev.et,ev.i,evChroma(ev),boostAt(ev.beat)).toString(16).padStart(6,'0');
           ndg.fillRect(nx,bTop+li*laneLH+0.3,2,Math.max(1,laneLH-0.6)); }
       } }
     if(!invalid){   // 不可時は中央1行の案内のみ（上部ラベルと重ねない）
@@ -2977,8 +3002,8 @@ function drawLayers(curV){
           const laneLH=byH/10;
           for(const ev of (cc.lights||[])){ if((ev.beat||0)>=L||(ev.beat||0)<0) continue;
             const li=laneIdxByType[ev.et]; if(li===undefined) continue;
-            const nx=gx+(ev.beat||0)*PPB; if(nx<gx-3||nx>gx+gw) continue;
-            ndg.fillStyle='#'+chipColorOf(ev.et,ev.i,evChroma(ev),boostStateAt(ev.beat)).toString(16).padStart(6,'0');
+            const nx=gx+(ev.beat||0)*PPB; if(nx<gx-3||nx>gx+gw||nx<LGUT-3||nx>ndW) continue;
+            ndg.fillStyle='#'+chipColorOf(ev.et,ev.i,evChroma(ev),boostAt(ev.beat)).toString(16).padStart(6,'0');
             ndg.fillRect(nx,byTop+li*laneLH+0.3,2,Math.max(1,laneLH-0.6)); }
         }
         ndg.restore();
@@ -2990,7 +3015,7 @@ function drawLayers(curV){
   const _phx=bx(curV);
   if(_phx>=LGUT){ phRect(ndg,ndcv,_phx);   // 本体=デバイスピクセルスナップでクッキリ
     ndg.fillStyle='#ff3344'; ndg.beginPath(); ndg.moveTo(_phx-5,0); ndg.lineTo(_phx+5,0); ndg.lineTo(_phx,7); ndg.closePath(); ndg.fill(); }
-  ndcv.style.cursor=layerRazor?'crosshair':_ndEdgeHover?'ew-resize':layerDrag?'grabbing':_ndClipHover?'grab':_ndEoHover?'pointer':'';   // クリップ=掌／ドラッグ中=グー／単独編集の帯=指
+  ndcv.style.cursor=layerRazor?'crosshair':_ndEdgeHover?'ew-resize':layerDrag?'grabbing':_ndClipHover?'grab':(_ndEoHover||_ndRvHover)?'pointer':'';   // クリップ=掌／ドラッグ中=グー／単独編集の帯・審査の指摘の印=指
 }
 // フェーズ2: レイヤービューの編集（選択・移動・分割・結合・削除）。位置=真実で合成
 let layerPan=null, layerDrag=null, layerRazor=false, layerSeek=false, layerBand=null, layerSel=new Set();
@@ -2999,7 +3024,7 @@ let layerResize=null;   // クリップ端トリム {s,side,origBeat,origLen,ref
 let layerClipboard=null; // クリップのコピー内容 {items:[{rel,track,len,label,col,colHex,content,byDiff}]}（全難易度の中身ごと保持）
 let _ndEdgeHover=false; // クリップ端ホバー（ew-resizeカーソル用）
 let _ndClipHover=false; // クリップ本体ホバー（掌カーソル用。ドラッグ中はグー）
-let _ndEoHover=false;   // 溝の単独編集の帯の上（指のカーソル用）
+let _ndEoHover=false, _ndRvHover=false;   // 溝の単独編集の帯の上・数字の帯の審査の指摘の印の上（指のカーソル用）
 let tlHoverBeat=null;   // NLE/Musicのマウス拍（3Dの黄ラインと同じ・スナップ済み。両パネルを貫く一本線で描画）
 // レイヤーのソロ/ミュート（表示のみのフィルタ。保存・書き出しデータは削らない）
 let layerMuteS=new Set(), layerSoloS=new Set(), layerLockS=new Set();   // L=ロック（暗く＋触れない）
@@ -3734,6 +3759,7 @@ ndcv.addEventListener('pointerdown', e=>{
     return; }
   if(sy<LRULER-MKRH){                            // 数字ルーラー（マーカー帯より上）=シーク（Premiere/DaVinciと同じ。ドラッグでスクラブ）
     if(e.button!==0) return;
+    { const rv=reviewMarkAt(sx,sy); if(rv){ if(reviewPanel) reviewPanel.focus(rv.id); return; } }   // 審査の指摘の印＝一覧のその項目へ（シークしない）
     if(playing) pause();
     tlFrozen=tlWindow(cur); layerSeek=true;
     cur=Math.max(0,snapV(lXToBeat(sx))); offset=beatToTimeTM(cur);
@@ -3765,8 +3791,9 @@ ndcv.addEventListener('pointermove', e=>{
   const r=ndcv.getBoundingClientRect(), sx=e.clientX-r.left, sy=e.clientY-r.top;
   _ndMouseY=sy;   // L/M/Sショートカット用にマウスyを記録
   { _ndEoHover=sx<LGUT&&_eoBtns.some(r2=>sx>=r2.x&&sx<=r2.x+r2.w&&sy>=r2.y&&sy<=r2.y+r2.h);   // 単独編集の帯の上（指のカーソル）
+    const rv=sy<LRULER-MKRH-TPRH?reviewMarkAt(sx,sy):null; _ndRvHover=!!rv;   // 審査の指摘の印の上（指のカーソル・文の頭をツールチップに）
     const tip=_ndEoHover   // 単独編集の帯の説明（キャンバスに描いた部品なので title で出す）
-      ?t('nle.editOnlyTip','このレーンだけを編集 — 3Dの編集はこのレーンだけに入ります。他のレーンは編集できません'):'';
+      ?t('nle.editOnlyTip','このレーンだけを編集 — 3Dの編集はこのレーンだけに入ります。他のレーンは編集できません'):rv&&reviewPanel?reviewPanel.tipOf(rv.id):'';
     if(ndcv.title!==tip){ if(tip) ndcv.title=tip; else ndcv.removeAttribute('title'); } }
   if(layerPaste){ tlHoverBeat=(sx>=LGUT&&sy>=LRULER)?Math.max(0,snapV(lXToBeat(sx))):null; if(tlHoverBeat!=null) updateLayerPaste(tlHoverBeat); return; }   // ゴースト追従
   if(markerDrag){ const nb=Math.max(0,snapV(lXToBeat(sx)));   // マーカードラッグ中は拍だけ更新
@@ -4953,19 +4980,73 @@ let BPM=120, songDur=0, cur=0, snap=0.5, brush={c:0,d:1,type:'note'};
 // 拍番号は据え置きで、テンポを変えると後ろの絶対時刻が自動でズレる（bpmEventsそのままの標準挙動）。
 let tempoParts=[];
 function sortTempoParts(){ tempoParts.sort((a,b)=>a.beat-b.beat); }
-// 譜面(.dat)のテンポ変化 → テンポパート。V3=bpmEvents{b,m} / V2=_BPMChanges{_time,_BPM}（_bpmChanges も）。
-// 拍0の値は基準BPM（Info.dat）として扱い取り込まない（テンポパートは拍0には置けない＝addTempoPartAtの下限と同じ）。
+// 譜面(.dat)のテンポ変化 → テンポパート。V3=bpmEvents{b,m}（b を省いた物は拍0）/ V2=_BPMChanges{_time,_BPM}（_bpmChanges・_customData の中も）と
+// _events の type 100（公式のBPM変化・_floatValue がBPM。以前は読まずにライトとして持っていた）。
+// 拍0の変化も取り込む（2026-10-26。以前は捨てていて、Info.dat と違うBPMで始まる譜面は曲の頭から秒がずれた）。Info.dat のBPMはゲームが
+// 飛来の計算に使うので、基準BPMは変えずに拍0のテンポパートとして持つ（利用者が手で足すテンポパートは今までどおり拍0.25から）。
 // 直前と同じテンポの変化点は意味が無いので省く
 function tempoPartsFromDat(d,baseBpm){
-  const src=(d&&(Array.isArray(d.bpmEvents)?d.bpmEvents.map(e=>({beat:+e.b,bpm:+e.m}))
-    :(d._BPMChanges||d._bpmChanges||[]).map(e=>({beat:+e._time,bpm:+e._BPM||+e._bpm}))))||[];
+  const cd=(d&&d._customData)||{};
+  const src=!d?[]:Array.isArray(d.bpmEvents)?d.bpmEvents.map(e=>({beat:+(e.b??0),bpm:+e.m}))
+    :[...(d._BPMChanges||d._bpmChanges||cd._BPMChanges||cd._bpmChanges||[]).map(e=>({beat:+e._time,bpm:+e._BPM||+e._bpm})),
+      ...(Array.isArray(d._events)?d._events:[]).filter(e=>e&&e._type===100).map(e=>({beat:+(e._time??0),bpm:+e._floatValue}))];
   const byBeat=new Map();   // 同じ拍に複数あれば後に書かれたもの
-  for(const p of src) if(isFinite(p.beat)&&p.beat>1e-6&&p.bpm>0) byBeat.set(Math.round(p.beat*1e6),p);
+  for(const p of src) if(isFinite(p.beat)&&p.beat>-1e-6&&p.bpm>0&&isFinite(p.bpm)) byBeat.set(Math.round(Math.max(0,p.beat)*1e6),{beat:Math.max(0,p.beat),bpm:p.bpm});
   const out=[]; let prev=baseBpm;
   for(const p of [...byBeat.values()].sort((a,b)=>a.beat-b.beat)){
     if(Math.abs(p.bpm-prev)<1e-9) continue;
     out.push({beat:p.beat,bpm:p.bpm}); prev=p.bpm; }
   return out;
+}
+// v4 の AudioData.dat（全難易度で共通のテンポ。bpmData＝音のサンプルの範囲 si〜ei ⇔ 拍の範囲 sb〜eb）→ テンポパート（2026-10-27）。
+// 区間の BPM＝(eb−sb)/((ei−si)/songFrequency/60)。サンプルは整数・拍は小数6桁に丸めて書かれるので、計算した BPM には 194.99972 のような端数が出る
+//（ランク譜面: 4拍の区間で 194.99972、曲全体の1区間で 256.000069＝曲の終わりで 0.05ms の差）。
+// 区間の長さが 0.5ms（短い区間は 1 サンプル）以内で合う、桁の少ない値（195 等。小数3桁まで）に丸める。丸めた後の各区間の頭の秒が元のサンプルの位置から 1ms を超えてずれたら
+// 丸めない（それでもずれる＝区間の間が空いている等は drift で知らせる）。最初の区間の BPM は拍0から（その前の拍も同じ BPM とみなす）。
+// 直前と同じテンポは省く（tempoPartsFromDat と同じ）＝区間が1つで Info.dat の BPM と同じ譜面はテンポパート無し。→ {tp, drift(秒)}
+function tempoFromAudioData(ad,baseBpm){
+  const fq=+(ad&&ad.songFrequency), rs=(ad&&Array.isArray(ad.bpmData))?ad.bpmData:[];
+  if(!(fq>0)) return {tp:[],drift:0};
+  const reg=[];
+  for(const r of rs){ if(!r||typeof r!=='object') continue;
+    const si=+(r.si??0), ei=+(r.ei??0), sb=+(r.sb??0), eb=+(r.eb??0);
+    if(![si,ei,sb,eb].every(Number.isFinite)||ei<=si||eb<=sb) continue;
+    reg.push({si,ei,sb,eb,bpm:(eb-sb)/((ei-si)/fq/60)}); }
+  reg.sort((a,b)=>a.sb-b.sb);
+  if(!reg.length) return {tp:[],drift:0};
+  const snap=r=>{ const dur=(r.ei-r.si)/fq;
+    for(let k=0;k<=3;k++){ const p=10**k, c=Math.round(r.bpm*p)/p; if(c>0&&Math.abs((r.eb-r.sb)*60/c-dur)<=Math.max(1/fq,0.0005)) return c; }
+    return Math.round(r.bpm*1e6)/1e6; };
+  const build=bpms=>tempoPartsFromDat({bpmEvents:reg.map((r,k)=>({b:k?r.sb:0,m:bpms[k]}))},baseBpm);
+  // 区間の頭の秒のずれ（NLM の拍0＝音の0秒。最初の区間が音の頭から始まらない＝拍0が音の途中にある譜面も、ここでずれとして出る）
+  const driftOf=tp=>{ let m=0;
+    for(const r of reg) m=Math.max(m,Math.abs(tpBeatToSec(baseBpm,tp,r.sb)-r.si/fq));
+    return m; };
+  let tp=build(reg.map(snap)), drift=driftOf(tp);
+  if(drift>0.001){ const tp2=build(reg.map(r=>Math.round(r.bpm*1e6)/1e6)), d2=driftOf(tp2); if(d2<drift){ tp=tp2; drift=d2; } }
+  return {tp,drift};
+}
+// テンポの表（基準BPM base＋テンポパート parts）での拍⇔秒。beatToTimeTM/timeToBeatTM と同じ計算を、今のテンポ以外の表
+// （曲データを読み込む時の難易度ごとのBPM変化）にも使う
+function tpBeatToSec(base,parts,b){ let bb=0,bpm=base,tt=0;
+  for(const p of parts){ if(p.beat>=b) break; tt+=(p.beat-bb)*60/bpm; bb=p.beat; bpm=p.bpm; }
+  return tt+(b-bb)*60/bpm; }
+function tpSecToBeat(base,parts,tm){ let bb=0,bpm=base,tt=0;
+  for(const p of parts){ const seg=(p.beat-bb)*60/bpm; if(tt+seg>tm) break; tt+=seg; bb=p.beat; bpm=p.bpm; }
+  return bb+(tm-tt)*bpm/60; }
+/** 譜面のかけら（parseDiffFragment の形）の拍を、テンポの表 from から to へ付け替える（秒は同じ・長さは終わりの拍も付け替えて引く）。新しいかけらを返す */
+function retimeFrag(frag,base,from,to){
+  const m=b=>Math.round(tpSecToBeat(base,to,tpBeatToSec(base,from,b))*1e6)/1e6;
+  const out={}; let mx=0;
+  const M=b=>{ if(b>mx) mx=b; return b; };
+  out.notes=(frag.notes||[]).map(o=>({...o,beat:M(m(o.beat))}));
+  out.bombs=(frag.bombs||[]).map(o=>({...o,beat:M(m(o.beat))}));
+  out.walls=(frag.walls||[]).map(o=>{ const b=m(o.beat); return {...o,beat:M(b),dur:Math.round((m(o.beat+(+o.dur||0))-b)*1e6)/1e6}; });
+  out.arcs=(frag.arcs||[]).map(o=>({...o,b:M(m(o.b)),tb:M(m(o.tb))}));
+  out.chains=(frag.chains||[]).map(o=>({...o,b:M(m(o.b)),tb:M(m(o.tb))}));
+  out.lights=(frag.lights||[]).map(o=>({...o,beat:M(m(o.beat))}));
+  if(frag._njs) out._njs=frag._njs.map(e=>[m(e[0]),e[1],e[2],e[3]]);   // v4 の NJS の変化も同じ秒の拍へ
+  out._max=mx; return out;
 }
 function bpmAtBeat(b){ let bpm=BPM; for(const p of tempoParts){ if(p.beat>b+1e-9) break; bpm=p.bpm; } return bpm; }
 function beatToTimeTM(b){   // 区分的な拍→秒（曲頭=拍0からの経過秒。offset/leadInは呼び出し側で別途加減する）
@@ -5065,6 +5146,7 @@ function dumpDomain(d){
     // 解析の結果そのものの変化は全部 'ana' の履歴に積まれる＝ここで戻す時の結果は控えた時と同じなので、印だけを戻せばよい
     return JSON.stringify({node:dumpDomain('node'),others,absent,locks:[...layerLockS],anaMade:!!(songAna&&songAna.made())}); }
   if(d==='ana') return JSON.stringify((songAna&&songAna.save())||null);   // 曲の解析の結果（帯・付け直した名前）
+  if(d==='review') return JSON.stringify((reviewPanel&&reviewPanel.save())||null);   // 審査の指摘（読み込み・消す・済みの印・返事）
   if(d==='tempo') return JSON.stringify({bpm:BPM,off:songNode?songNode.offset:null});   // 曲の解析の「適用」（BPM・無音追加）。BPMの欄は履歴に積まないので専用の領域
   if(d==='info') return JSON.stringify({g:{...infoGraph,cam:undefined},sel:[..._inSel]});   // ビュー(cam)は履歴対象外
   if(d==='light') return JSON.stringify({lightEvents,sel:[...lightSelection].map(ev=>lightEvents.indexOf(ev)).filter(i2=>i2>=0)});
@@ -5087,6 +5169,7 @@ function restoreDomain(d,s2){
     if(songAna&&typeof v.anaMade==='boolean') songAna.setMade(v.anaMade);
     return; }
   if(d==='ana'){ if(songAna) songAna.load(v); metaDirty=true; return; }
+  if(d==='review'){ if(reviewPanel) reviewPanel.load(v); metaDirty=true; return; }
   if(d==='tempo'){ anaSetTempoRaw(v.bpm,v.off); metaDirty=true; return; }
   if(d==='node'){
     // handleはJSON不可なので現物から引き継ぐ
@@ -5142,7 +5225,7 @@ function restoreDomain(d,s2){
   }
   metaDirty=true;
 }
-const DOM_LABEL={note:'NOTES',light:'LIGHT',node:'NODE',info:'INFO',diffs:'ALL DIFFS',ana:'ANALYSIS',tempo:'BPM'};
+const DOM_LABEL={note:'NOTES',light:'LIGHT',node:'NODE',info:'INFO',diffs:'ALL DIFFS',ana:'ANALYSIS',tempo:'BPM',review:'REVIEW'};
 function snapshot(dom){
   const d=dom||(lightMode?'light':'note');
   pushHist(d,dumpDomain(d));
@@ -5630,7 +5713,7 @@ async function libScanNative(lib,first){
 }
 function libMapItem(lib,m){
   const it={name:m.name||String(m.rel).split('/').pop(),entry:m,native:true,rel:m.rel,dir:libDirHandle(lib.id,m.rel),info:quickInfo(m),_infoFull:false,coverURL:null,extra:null};
-  if(m.fmt===4) it._v4=true;   // v4 の譜面は NLM の読み込みが未対応（一覧・並べ替え・絞り込み・音源の配置はできる）
+  if(m.fmt===4) it._v4=true;   // v4 の譜面（読む前に本物の Info.dat が要る＝ライトショー・AudioData のファイル名は走査の結果に無い。ensureItemInfo）
   return it;
 }
 function libFileItem(lib,f){   // 譜面フォルダの外の音源・画像
@@ -5839,7 +5922,7 @@ async function scanLibrary(dh,reuse){   // reuse＝読み直す時の同じフ�
         if(infoFh){
           try{
             const raw=JSON.parse(await (await infoFh.getFile()).text()), v4=Array.isArray(raw&&raw.difficultyBeatmaps);
-            const info=infoToV2(raw);   // v4 の Info.dat は v2 の形に写す（一覧・音源・曲情報用。v4 の譜面は読み込めない＝_v4）
+            const info=infoToV2(raw);   // v4 の Info.dat は v2 の形に写す（一覧・音源・曲情報・譜面の読み込み用。_v4＝v4 の曲）
             // カバー画像はここで同期抽出しない＝音楽ファイルの埋め込みアートワークと同じく背景で1件ずつ（大量の譜面フォルダ登録時にUIが固まるバグの対策）
             const mit={name:info._songName||h.name, info, dir:h, coverURL:null, entry:entryFromInfo(info,h.name,v4?4:2), _v4:v4};   // entry＝詳細表示・絞り込み用（数は分からない）
             addLibItem(mit,lib);
@@ -6180,7 +6263,7 @@ async function dropInfoNodesFromItem(item,wx,wy){
     if(hasArt){ try{
       if(item.isImage&&item.imgFh) _coverHandles[cid]=item.imgFh;   // 画像=実ファイルハンドルをそのまま（書き出し時に曲フォルダへコピー）
       else { const blob=item._coverBlob||await fetch(item.coverURL).then(r=>r.blob());
-        _coverHandles[cid]={name:infoGraph.nodes[cid].data.name,getFile:async()=>blob}; }
+        _coverHandles[cid]=coverBlobHandle(infoGraph.nodes[cid].data.name,blob); }
       try{ await loadCoverPreview({id:'ig:'+cid,handle:_coverHandles[cid],name:infoGraph.nodes[cid].data.name}); }catch(_){}   // 先にデコードしてからカード更新＝サムネが即表示される
       refreshInfoCards(); }catch(e){} }
     showOk(item.isImage?tf('msg.coverPlaced','「{name}」をカバー画像として配置しました',{name:item.name})
@@ -6206,7 +6289,7 @@ async function dropInfoNodesFromItem(item,wx,wy){
     try{ _coverHandles[cid]=await item.dir.getFileHandle(info._coverImageFilename); refreshInfoCards(); }catch(e){} }
   else if(hasArt){   // blob を疑似ハンドル({name,getFile})でカバーノードへ（_coverHandlesはランタイム専用なので安全）
     try{ const blob=item._coverBlob||await fetch(item.coverURL).then(r=>r.blob());
-      _coverHandles[cid]={name:infoGraph.nodes[cid].data.name,getFile:async()=>blob}; refreshInfoCards(); }catch(e){} }
+      _coverHandles[cid]=coverBlobHandle(infoGraph.nodes[cid].data.name,blob); refreshInfoCards(); }catch(e){} }
   showOk(tf('msg.infoPlaced','「{name}」の情報をノードとして配置しました（書き出しへは未接続）',{name:info._songName||item.name}));
 }
 { const insp=document.getElementById('inspcol');
@@ -6270,10 +6353,22 @@ function libFindBm(item,pick,curDn){
   const std=sets.find(s2=>s2._beatmapCharacteristicName==='Standard')||sets[0];
   return ((std&&std._difficultyBeatmaps)||[]).find(b2=>b2._difficulty===curDn)||null;
 }
+// 1つの難易度の譜面を曲フォルダから読む（2026-10-27）。v4 の難易度はライトが別のファイル（Info の lightshowDataFilename）なので一緒に読む
+//（v4 の Info から v2・v3 の難易度のファイルを指す譜面もある＝その時はライトは難易度のファイルの中）。cache＝全難易度で共有するライトショーを1回だけ読むための Map。
+// → {dj（難易度の JSON）, frag（parseDiffFragment の形）, v4, lsFail（読めなかったライトショーの名前・無ければ ''）}
+async function readBmFrag(item,bm,cache){
+  const rd=async nm=>{ if(cache&&cache.has(nm)) return cache.get(nm);
+    const j=JSON.parse(await (await item.dir.getFileHandle(nm)).getFile().then(f=>f.text())); if(cache) cache.set(nm,j); return j; };
+  const dj=JSON.parse(await (await item.dir.getFileHandle(bm._beatmapFilename)).getFile().then(f=>f.text())), v4=isV4Dat(dj);
+  let ls=null, lsFail='';
+  if(v4&&bm._lightshowFilename){ try{ ls=await rd(bm._lightshowFilename); }catch(e){ lsFail=String(bm._lightshowFilename); console.warn('ライトショーの読込に失敗',e); } }
+  const frag=parseDiffFragment(dj,ls); frag._lsFail=lsFail;
+  return {dj, frag, v4, lsFail};
+}
 async function prepareMediaFrag(item,pick){   // 入れる難易度の譜面だけを先読み（無い曲は_noDiff=？ゴースト）。pick＝{char,diff}（無ければ今開いている難易度）
   if(item.isClip) return;   // クリップは読込済み(_fragは配列生成時にセット済み)
   if(item.isImage){ item._noDiff=1; return; }   // 画像=NLE/Musicレーンには置けない（カバー専用）→ _noDiffゴースト
-  if(item._v4){ item._noDiff=1; return; }   // v4 の譜面は読み込めない（ゴーストは赤で案内）
+  if(item._v4) await ensureItemInfo(item);   // v4: ライトショーのファイル名は本物の Info.dat にだけある（走査の結果には無い）
   const selOpt=document.getElementById('diff').selectedOptions[0];
   const curDn=selOpt?selOpt.textContent:'Hard';
   const key=pick?pick.char+'/'+pick.diff:'*/'+curDn;
@@ -6284,35 +6379,139 @@ async function prepareMediaFrag(item,pick){   // 入れる難易度の譜面だ�
     const bm=libFindBm(item,pick,curDn);
     item._bmDiff=curDn; item._bmKey=key;
     if(!bm){ item._noDiff=1; }
-    else { const df=await (await item.dir.getFileHandle(bm._beatmapFilename)).getFile();
-      item._frag=parseDiffFragment(JSON.parse(await df.text()));
+    else { item._frag=(await readBmFrag(item,bm)).frag;
       item._len=Math.max(4,Math.ceil((item._frag._max+1)/4)*4); }
   }catch(e){ console.warn('MEDIA先読みに失敗',e); }
   item._fragLoading=0;
 }
 // .dat を編集用フラグメント（Sheetのcontent形式）へ変換。V3は raw=元の値を保持（書き出しは raw を土台に標準の値で上書き＝
 // 角度オフセット a・customData 等が残る。loadDiff と同じ）。V2は raw 無し（一括読込の難易度はV3で書き出すため、V2の項目名が混ざる）
-function parseDiffFragment(d){
-  const v3='colorNotes' in d||!!String(d.version||'').match(/^[34]/);
+const LIGHT_BOX_KEYS=['lightColorEventBoxGroups','lightRotationEventBoxGroups','lightTranslationEventBoxGroups','vfxEventBoxGroups'];
+/** v4 の難易度のファイル（4.x。「いつ」の配列＋「何を」の *Data 配列に分けた形）か */
+function isV4Dat(d){ return !!d&&typeof d==='object'&&(/^4/.test(String(d.version||''))||Array.isArray(d.colorNotesData)); }
+// ls＝v4 のライトショーのファイル（Info.dat の lightshowDataFilename。v4 の難易度のファイルにはライトが無い）。v2・v3 の難易度では使わない（ライトは難易度のファイルの中）
+function parseDiffFragment(d,ls=null){
+  const v4=isV4Dat(d), v3=!v4&&('colorNotes' in d||!!String(d.version||'').match(/^3/));
   const out={notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:[]}; let mx=0;
   const M=b=>{ b=+b||0; if(b>mx)mx=b; return b; };
+  // 省かれた項目・数でない値は既定の値で持つ（2026-10-27）。V3 には 0 の項目を書かない書き方（"x":0 等を省く）があり、以前は undefined のまま持って
+  // 3D・編集で NaN になっていた。既定の値は BS Map Check（bsmap）の読み方と同じ＝0。ただしアークの mu・tmu、チェーンの sc・s、ライトの f は 1
+  //（bsmap の既定。アークの mu・tmu とライトの f は書き出し・3D の今までの「無ければ 1」とも同じ）。ゲームと同じく、省いた譜面も元の値どおりに読む
+  const N=(v,def=0)=>(typeof v==='number'&&Number.isFinite(v))?v:def;
+  if(v4){ parseV4Into(d,ls,out,M,N); out._max=mx; return out; }
   if(v3){
-    for(const n of d.colorNotes||[]) out.notes.push({kind:'note',beat:M(n.b),x:n.x,y:n.y,c:n.c,d:n.d,raw:n});
-    for(const n of d.bombNotes||[]) out.bombs.push({kind:'bomb',beat:M(n.b),x:n.x,y:n.y,raw:n});
-    for(const o of d.obstacles||[]) out.walls.push({kind:'wall',beat:M(o.b),x:o.x,y:o.y,dur:o.d,w:o.w,h:o.h,raw:o});
-    for(const a of d.sliders||[]) out.arcs.push({kind:'arc',b:M(a.b),c:a.c,x:a.x,y:a.y,d:a.d,mu:a.mu,tb:M(a.tb),tx:a.tx,ty:a.ty,tc:a.tc,tmu:a.tmu,m:a.m,raw:a});
-    for(const c of d.burstSliders||[]) out.chains.push({kind:'chain',b:M(c.b),c:c.c,x:c.x,y:c.y,d:c.d,tb:M(c.tb),tx:c.tx,ty:c.ty,sc:c.sc,s:c.s,raw:c});
+    for(const n of d.colorNotes||[]) out.notes.push({kind:'note',beat:M(n.b),x:N(n.x),y:N(n.y),c:N(n.c),d:N(n.d),raw:n});
+    for(const n of d.bombNotes||[]) out.bombs.push({kind:'bomb',beat:M(n.b),x:N(n.x),y:N(n.y),raw:n});
+    for(const o of d.obstacles||[]) out.walls.push({kind:'wall',beat:M(o.b),x:N(o.x),y:N(o.y),dur:N(o.d),w:N(o.w),h:N(o.h),raw:o});
+    for(const a of d.sliders||[]) out.arcs.push({kind:'arc',b:M(a.b),c:N(a.c),x:N(a.x),y:N(a.y),d:N(a.d),mu:N(a.mu,1),tb:M(a.tb),tx:N(a.tx),ty:N(a.ty),tc:N(a.tc),tmu:N(a.tmu,1),m:N(a.m),raw:a});
+    for(const c of d.burstSliders||[]) out.chains.push({kind:'chain',b:M(c.b),c:N(c.c),x:N(c.x),y:N(c.y),d:N(c.d),tb:M(c.tb),tx:N(c.tx),ty:N(c.ty),sc:N(c.sc,1),s:N(c.s,1),raw:c});
     absorbChainCompanionNotes(out.notes, out.chains);   // 実機.datのチェーン頭colorNoteはチェーンへ吸収（幽霊廃止・書き出し時に再合成）
-    for(const e of d.basicBeatmapEvents||[]) out.lights.push({beat:M(e.b),et:e.et,i:e.i??0,f:e.f??1,raw:e});
+    for(const e of d.basicBeatmapEvents||[]) out.lights.push({beat:M(e.b),et:N(e.et),i:N(e.i),f:N(e.f,1),raw:e});
+    // 色のブースト（colorBoostBeatmapEvents の b・o＝オン/オフ・2026-10-27）。NLM の中では V2・v4 と同じ種類 5 のライト（i＝オン 1／オフ 0）で持ち、
+    // 書き出しで colorBoostBeatmapEvents へ戻す（buildDiffJsonFor）。以前は読まず、読み込んで書き出すと消えていた。o を省いた物はオフ（bsmap の既定と同じ）。
+    // raw は元の値（customData 等を書き出しに残す。o は書き出しで i から書き直す）
+    let nBoost=0;
+    if(Array.isArray(d.colorBoostBeatmapEvents)) for(const e of d.colorBoostBeatmapEvents){ if(!e||typeof e!=='object') continue;
+      out.lights.push({beat:M(e.b),et:5,i:(e.o===true||e.o===1)?1:0,f:1,raw:e}); nBoost++; }
+    if(nBoost) out.lights.sort((a,b)=>a.beat-b.beat);   // 基本のライトとブーストを拍の順に（同じ拍は読んだ順のまま＝安定な並べ替え）
   } else {
     for(const n of d._notes||[]){
-      if(n._type===3) out.bombs.push({kind:'bomb',beat:M(n._time),x:n._lineIndex,y:n._lineLayer,raw:null});
-      else if(n._type===0||n._type===1) out.notes.push({kind:'note',beat:M(n._time),x:n._lineIndex,y:n._lineLayer,c:n._type,d:n._cutDirection,raw:null}); }
-    for(const o of d._obstacles||[]) out.walls.push({kind:'wall',beat:M(o._time),x:o._lineIndex,y:o._type===1?2:0,dur:o._duration,w:o._width,h:o._type===1?3:5,raw:null});
-    for(const e of d._events||[]) out.lights.push({beat:M(e._time),et:e._type,i:e._value??0,f:1,raw:null});
+      if(n._type===3) out.bombs.push({kind:'bomb',beat:M(n._time),x:N(n._lineIndex),y:N(n._lineLayer),raw:null});
+      else if(n._type===0||n._type===1) out.notes.push({kind:'note',beat:M(n._time),x:N(n._lineIndex),y:N(n._lineLayer),c:n._type,d:N(n._cutDirection),raw:null}); }
+    for(const o of d._obstacles||[]) out.walls.push({kind:'wall',beat:M(o._time),x:N(o._lineIndex),y:o._type===1?2:0,dur:N(o._duration),w:N(o._width),h:o._type===1?3:5,raw:null});
+    for(const e of d._events||[]){ if(e._type===100) continue;   // type 100＝BPM変化（テンポパートとして読む・tempoPartsFromDat）
+      out.lights.push({beat:M(e._time),et:N(e._type),i:N(e._value),f:1,raw:null}); }
   }
+  // ライトボックス（V3 の lightColor/lightRotation/lightTranslation/vfx の EventBoxGroups）のグループの数（2026-10-27）。NLM は読まない（書き出しで消える）ので、
+  // 数だけ持って読み込んだ時に知らせ、譜面チェックの BL評価リストのライトの判定（R10.A・R7.B）を対象外にする（クリップの srcLbx → collectMapCheckInput の srcLightBoxes）
+  let lbx=0;
+  if(v3) for(const k of LIGHT_BOX_KEYS) if(Array.isArray(d[k])) lbx+=d[k].length;
+  out._lbx=lbx;
   out._max=mx; return out;
 }
+// v4 の難易度（4.x）とライトショーを、parseDiffFragment の形へ（2026-10-27）。v4 は「いつ」（colorNotes の b・r＝回転のレーン・i＝中身の番号）と
+// 「何を」（colorNotesData の x・y・c・d・a）に分けて同じ中身を使い回す。アークの頭・尾（hi・ti）とチェーンの頭（i）も colorNotesData を指し、
+// アークの形（m・tm・a）は arcsData（ai）、チェーンの尾・分割数・詰め具合（tx・ty・c・s）は chainsData（ci）。項目の意味は BSMG Wiki の v4 の頁と
+// bsmap（MIT）の読み方: 番号を省いた物は 0 番、「何を」の配列ごと省いて番号も無い物は中身が全部既定の値。番号が指す物が無い物は読まない（数えて知らせる）。
+// 省いた項目の既定の値は V3 と同じ（N）。回転のレーン（r・hr・tr）は Standard では使わない（読まない）。
+// NJS の変化（njsEvents＋njsEventData: b・p＝前の値を使う・e＝イージング・d＝基本の NJS との差）は NLM では編集できないので、[拍,p,e,d] の並びで持つだけ
+// （読み込んだノーツのクリップの srcNjs → 譜面チェックの入力の njsEvents/njsEventData。書き出す .dat には入れない）。
+// ライト: 基本のライト（basicEvents＋basicEventsData の t・i・f）と色のブースト（colorBoostEvents＋colorBoostEventsData の b＝オン/オフ。NLM の中では
+// V2 と同じ種類 5 のライト）。ライトボックス（eventBoxGroups）は読まず、グループの数だけ持つ（V3 の4種類の EventBoxGroups の合計と同じ扱い＝_lbx）
+function parseV4Into(d,ls,out,M,N){
+  const A=(o,k)=>(o&&Array.isArray(o[k]))?o[k]:[];
+  let bad=0;
+  // 「何を」の中身: 番号 i（省いたら 0）。配列が無く番号も無い物は {}（全部既定の値）。指す物が無い・形が違う物は null（読まない）
+  const at=(o,k,i)=>{ const arr=o&&o[k];
+    if(arr===undefined&&i===undefined) return {};
+    if(!Array.isArray(arr)) return null;
+    const n=i===undefined?0:i;
+    return (Number.isInteger(n)&&n>=0&&n<arr.length&&arr[n]&&typeof arr[n]==='object')?arr[n]:null; };
+  const cd=x=>(x&&x.customData&&typeof x.customData==='object'&&!Array.isArray(x.customData))?{customData:x.customData}:null;   // Chroma 等の customData は V3 と同じく raw に残す（書き出しの土台）
+  const each=(o,k,fn)=>{ for(const e of A(o,k)){ if(!e||typeof e!=='object'){ bad++; continue; } if(fn(e)===false) bad++; } };
+  each(d,'colorNotes',o=>{ const q=at(d,'colorNotesData',o.i); if(!q) return false;
+    const b=M(o.b), x=N(q.x), y=N(q.y), c=N(q.c), dd=N(q.d);
+    out.notes.push({kind:'note',beat:b,x,y,c,d:dd,raw:{b,x,y,c,d:dd,a:N(q.a),...cd(q)}}); });
+  each(d,'bombNotes',o=>{ const q=at(d,'bombNotesData',o.i); if(!q) return false;
+    const b=M(o.b), x=N(q.x), y=N(q.y);
+    out.bombs.push({kind:'bomb',beat:b,x,y,raw:{b,x,y,...cd(q)}}); });
+  each(d,'obstacles',o=>{ const q=at(d,'obstaclesData',o.i); if(!q) return false;
+    const b=M(o.b), x=N(q.x), y=N(q.y), du=N(q.d), w=N(q.w), h=N(q.h);
+    out.walls.push({kind:'wall',beat:b,x,y,dur:du,w,h,raw:{b,x,y,d:du,w,h,...cd(q)}}); });
+  each(d,'arcs',o=>{ const q=at(d,'arcsData',o.ai), h=at(d,'colorNotesData',o.hi), tl=at(d,'colorNotesData',o.ti); if(!q||!h||!tl) return false;
+    const a={b:M(o.hb),c:N(h.c),x:N(h.x),y:N(h.y),d:N(h.d),mu:N(q.m,1),tb:M(o.tb),tx:N(tl.x),ty:N(tl.y),tc:N(tl.d),tmu:N(q.tm,1),m:N(q.a)};
+    out.arcs.push({kind:'arc',...a,raw:{...a,...cd(q)}}); });
+  each(d,'chains',o=>{ const h=at(d,'colorNotesData',o.i), q=at(d,'chainsData',o.ci); if(!h||!q) return false;
+    const c={b:M(o.hb),c:N(h.c),x:N(h.x),y:N(h.y),d:N(h.d),tb:M(o.tb),tx:N(q.tx),ty:N(q.ty),sc:N(q.c,1),s:N(q.s,1)};
+    out.chains.push({kind:'chain',...c,raw:{...c,...cd(q)}}); });
+  absorbChainCompanionNotes(out.notes,out.chains);   // チェーンの頭の colorNote はチェーンへ（V3 と同じ）
+  const njs=[];
+  each(d,'njsEvents',o=>{ const q=at(d,'njsEventData',o.i); if(!q) return false;
+    const b=N(o.b), e=Number.isInteger(q.e)?q.e:0;
+    njs.push([b,q.p?1:0,e,N(q.d)]); });
+  njs.sort((a,b)=>a[0]-b[0]);
+  out._njs=njs;
+  let lbx=0;
+  if(ls&&typeof ls==='object'){
+    each(ls,'basicEvents',o=>{ const q=at(ls,'basicEventsData',o.i); if(!q) return false;
+      const b=M(o.b), et=N(q.t), i=N(q.i), f=N(q.f,1);
+      out.lights.push({beat:b,et,i,f,raw:{b,et,i,f,...cd(q)}}); });
+    each(ls,'colorBoostEvents',o=>{ const q=at(ls,'colorBoostEventsData',o.i); if(!q) return false;
+      const b=M(o.b), i=q.b?1:0;
+      out.lights.push({beat:b,et:5,i,f:1,raw:{b,et:5,i,f:1}}); });
+    lbx=A(ls,'eventBoxGroups').length;
+  }
+  out.lights.sort((a,b)=>a.beat-b.beat);
+  out._lbx=lbx; out._v4bad=bad;
+}
+/** 難易度のクリップ（secs）が持つ、元の譜面のライトボックスのグループの数（読み込んだ時に作ったクリップの srcLbx。分割・コピーで同じ数が増えても数えすぎないよう一番大きい物） */
+function srcLbxOf(secs){ let n=0;
+  for(const s of secs||[]){ if(!s||s.kind==='null') continue; const v=s.srcLbx; if(Number.isInteger(v)&&v>0&&v>n) n=v; }
+  return n; }
+/** 難易度のクリップが持つ、元の v4 の譜面の NJS の変化（読み込んだノーツのクリップの srcNjs＝[[拍,p,e,d],…]・2026-10-27）。NLM では編集できず、書き出す .dat には
+ * 入れない（v3 に無い）。譜面チェックの入力にだけ渡す（collectMapCheckInput）。拍は曲の拍のまま（テンポと同じく曲の時間に付く物＝クリップを動かしても動かない）。
+ * 分割・コピーで同じ物が増えても1つだけ（一番多い物）。無ければ null */
+function srcNjsOf(secs){ let best=null;
+  for(const s of secs||[]){ if(!s||s.kind==='null') continue; const v=s.srcNjs; if(Array.isArray(v)&&v.length&&(!best||v.length>best.length)) best=v; }
+  return best; }
+/** 書き出しの知らせに添える「元の譜面にあったが書き出さない物」（ライトボックス・v4 の NJS の変化。書き出す難易度ごと）。無ければ '' */
+function exportLostNote(diffFiles){
+  const ls=[];
+  for(const d of diffFiles||[]){ const st=projDiffs[d.name.toLowerCase()], secs=st&&st.sections, lb=srcLbxOf(secs), nj=srcNjsOf(secs), p=[];
+    if(lb) p.push(tf('msg.exportLostLbx','ライトボックス {n}グループ',{n:lb}));
+    if(nj) p.push(tf('msg.exportLostNjs','NJSの変化 {n}回',{n:nj.length}));
+    if(p.length) ls.push(dispDiff(d.dnm)+': '+p.join(t('word.listSep','、'))); }
+  return ls.length?tf('msg.exportLost','　※元の譜面にあった物のうち、NLMで扱えない物は書き出していません（{list}）',{list:ls.join(' / ')}):'';
+}
+/** 難易度の名前（Info.dat の _difficultyLabel・v4 は customData.difficultyLabel を infoToV2 が写す）。ファイル由来なので文字列として確かめる（使う所は textContent・照合だけ）。無ければ '' */
+function bmDiffLabel(bm){ const cd=bm&&bm._customData, v=cd&&typeof cd==='object'?cd._difficultyLabel:null;
+  if(typeof v!=='string') return ''; const s=v.replace(/[\u0000-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g,'').trim();
+  return s.length<=80?s:''; }
+function srcLabelOk(v){ return typeof v==='string'&&v.length>0&&v.length<=80&&!/[\u0000-\u001F\u007F]/.test(v); }
+/** srcNjs の形を確かめる（ファイル由来。[拍,p(0/1),e(整数),d] の並び・数が多すぎない） */
+function srcNjsOk(v){
+  return Array.isArray(v)&&v.length>0&&v.length<=100000&&v.every(e=>Array.isArray(e)&&e.length===4&&e.every(x=>typeof x==='number'&&Number.isFinite(x))
+    &&Math.abs(e[0])<=1e7&&(e[1]===0||e[1]===1)&&Number.isInteger(e[2])&&e[2]>=-1&&e[2]<=1000&&Math.abs(e[3])<=1e6); }
 // MEDIA→NLE: 譜面（ノーツ/ライト）をクリップとして配置。プルダウンにある全難易度ぶんを一括読込
 // （現在の難易度=ライブ配置、他の難易度=退避データ(projDiffs)へ同じ位置・同じ色で配置。音源=Musicレーン、曲情報=INFO画面）
 // アセットクリップ内容 → 先読みフラグメント（ゴースト/配置用）。_max も算出
@@ -6347,7 +6546,7 @@ function placeClipLine(item,place){
 async function addSongLine(item,wx,wy,place){   // place={beat,lk,track,pick}: ドロップ位置。今開いている難易度へ、1つの難易度のノーツ/ライトだけ読み込む（他難易度には一切入れない）
   if(item.isClip){ placeClipLine(item,place); return; }
   if(item.isMusic){ showErr('音楽ファイルには譜面がありません（Musicレーンへドラッグすると音源を配置できます）'); return; }
-  if(item._v4){ showErr(t('msg.v4NotSupported','この曲は v4 形式の譜面のため、まだ読み込めません（一覧の表示・並べ替え・絞り込み・音源の配置はできます）')); return; }
+  if(item._v4) await ensureItemInfo(item);   // v4: ライトショーのファイル名は本物の Info.dat にだけある（走査の結果には無い）
   const info=item.info||{};
   const selOpt=document.getElementById('diff').selectedOptions[0];
   const curDn=selOpt?selOpt.textContent:'';
@@ -6359,9 +6558,10 @@ async function addSongLine(item,wx,wy,place){   // place={beat,lk,track,pick}: �
   let frag;
   try{
     frag=(item._bmKey===key&&item._frag)?item._frag   // dragstart/dragoverの先読みを再利用
-      :parseDiffFragment(JSON.parse(await (await item.dir.getFileHandle(bm._beatmapFilename)).getFile().then(f=>f.text())));
+      :(await readBmFrag(item,bm)).frag;
   }catch(err){ showErr(tf('msg.chartLoadFail','譜面の読込に失敗: {err}',{err})); return; }
   const lk=(place&&place.lk)==='l'?'l':'n';
+  if(lk==='l'&&frag._lsFail){ showErr(tf('msg.v4LightshowFail','ライトのファイル（{name}）を読めませんでした',{name:frag._lsFail})); return; }
   const cp=a=>(a||[]).map(o=>({...o}));
   const content=lk==='n'
     ?{notes:cp(frag.notes),bombs:cp(frag.bombs),walls:cp(frag.walls),arcs:cp(frag.arcs),chains:cp(frag.chains),lights:[]}
@@ -6377,13 +6577,19 @@ async function addSongLine(item,wx,wy,place){   // place={beat,lk,track,pick}: �
     njsCfg[k]={ njs:(+bm._noteJumpMovementSpeed>0)?+bm._noteJumpMovementSpeed:(_DIFF_NJS[srcDn]||16), offset:+bm._noteJumpStartBeatOffset||0 };   // 別の難易度を入れた時は、その難易度の NJS（その速さで作られた譜面のため）
     metaDirty=true; if(typeof refreshMusicHdr==='function') refreshMusicHdr(); }
   edgesInited=true;                                       // 自動直列配線をここからの追加に走らせない
+  const lbx=lk==='l'&&frag._lbx>0?frag._lbx:0;   // ライトを持ってきた時: 元の譜面のライトボックスの数（曲データを読み込むと同じく、クリップに持たせて知らせる）
+  // ノーツを持ってきた時: 元の v4 の譜面の NJS の変化（曲データを読み込むと同じく、ノーツのクリップに持たせる）。置いた拍だけずらした曲の拍で持つ
+  const njsEv=lk==='n'&&frag._njs&&frag._njs.length?frag._njs.map(e=>[e[0]+beat,e[1],e[2],e[3]]):null;
   const sec={id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat,track:tr,lk,col:pickStripCol(),
-    label:info._songName||item.name,len,kind:'sheet',content};
+    label:info._songName||item.name,len,kind:'sheet',content,...(lbx?{srcLbx:lbx}:{}),...(njsEv?{srcNjs:njsEv}:{})};
   sections.push(sec); relinkDiffEdges(); layerSel=new Set([sec.id]);
   lineSrc.set(sec.id,{dir:item.dir,info,sheetId:sec.id,cur:''});
   compileLayersToFlat(); metaDirty=true;
   showOk(tf('msg.chartPlaced','「{name}」の{kind}を配置しました: {diff}（{lane}・拍 {beat}）',{name:info._songName||item.name,kind:lk==='n'?t('word.notes','ノーツ'):t('word.lighting','ライティング'),diff:dl,lane:laneLabel(lk,tr),beat})
-    +(pick&&pick.filtered?t('msg.chartPickFiltered','　※フィルターに合う難易度から選びました'):''));
+    +(pick&&pick.filtered?t('msg.chartPickFiltered','　※フィルターに合う難易度から選びました'):'')
+    +(lbx?tf('msg.bulkSongLightBoxes','　※この譜面のライトボックス（{n}グループ）はNLMでは読めず、書き出すと消えます。BL評価リストのライトの判定（R10.A・R7.B）は対象外になります',{n:lbx}):'')
+    +(njsEv?tf('msg.bulkSongNjsEvents','　※NJSの変化（{list}）はNLMでは編集できず、書き出すと消えます（譜面チェックの判定には使います）',{list:tf('msg.bulkSongNjsCount','{diff} {n}回',{diff:dl,n:njsEv.length})}):'')
+    +(frag._v4bad?tf('msg.bulkSongV4Bad','　※v4 の譜面のうち、中身の番号が合わない物（{n}個）は読み込んでいません',{n:frag._v4bad}):''));
 }
 // MEDIA→NLE のドロップ（placeClipLine・addSongLine）の行き先のレーン: 一番数字の低いトラック(Notes1/Light1=一番下)から空きを探す（重なる分だけ上へ・
 // ドロップしたレーンには縛られない）。全部埋まっていれば一番上にレーンを足して track0（3Dで置く時の clipSlotAt と同じ。レーンの既定が1本になったため、
@@ -6411,31 +6617,97 @@ function firstFreeTrackIn(secArr,lk,beat,len,maxTracks){
 // 曲情報/カバーノードは既存仕様通り書き出しへは未接続のまま生成（手動配線・ヘルバ様指示は維持）。
 async function bulkLoadSongData(item){
   if(item.isClip||item.isImage||item.isMusic){ showErr(t('msg.bulkSongBadItem','曲データの読込対象はCustomLevelsの曲のみです')); return; }
-  if(item._v4){ showErr(t('msg.v4NotSupported','この曲は v4 形式の譜面のため、まだ読み込めません（一覧の表示・並べ替え・絞り込み・音源の配置はできます）')); return; }
-  await ensureItemInfo(item);   // 記録したライブラリの曲: 本物の Info.dat（試聴区間など）
+  await ensureItemInfo(item);   // 記録したライブラリの曲: 本物の Info.dat（試聴区間など。v4 はライトショー・AudioData のファイル名も）
   const info=item.info||{};
   let newSong=false;   // 音源を新しく取り込んだ＝全部読み込んだ後に「曲を解析しますか？」（途中で聞くとテンポパートの取り込みの前の目盛りになる）
+  let loadedOk=false;  // 譜面まで読み込めた（ライトがとても多い時の警告を出す）
+  // 読み込み中の画面（2026-10-27・利用者の要望。以前は数秒〜数分、画面が固まって止まったように見えた）。区切りごとに busyPaint で一度描かせる
+  //（クリップを置く途中では返さない＝半端な状態を描かせない）。重い所は読み込んだ後の NLE の描画だった（drawLayers の Boost の表・重複の枠の上限で直した）
+  const busy=busyDialog(tf('busy.bulkTitle','「{name}」を読み込んでいます',{name:info._songName||item.name}));
   try{
     const hasMusic=!!audioBuf&&!songDeleted;    // 既に音源が入っている＝Music(音源・BPM・プレビュー)は上書きせず読み込まない（ヘルバ様指定）
+    if(!hasMusic){ busy.set(t('busy.bulkMusic','音源を読み込み中…'),0.03); await busyPaint(); }
     if(!hasMusic) newSong=await loadSongFromItem(item,0,false);   // 音源・BPM・プレビュー区間（既に音源がある時はスキップ）
     { const sp=infoFreeSpot();   // 曲情報＋カバー画像（＋試聴）ノード（未接続）。既存のノードと重ならない所へ
       await dropInfoNodesFromItem(item,sp.x,sp.y); }
+    // 環境: 新しく曲を取り込んだ時（音源も読み込んだ）は、読み込んだ譜面の環境を書き出しへ引き継ぐ（接続中の設定ノード＝トップバーの環境と同じ値。
+    // 2026-10-26 までは引き継がず、書き出し・譜面チェックが Default になって、ライトの種類の数え方（R10.A）・3Dの環境が元の譜面と違っていた）。
+    // 音源が既にある時は今の環境のまま（音源・BPMと同じ）。Undo は曲情報のノードを足した時の履歴（dropInfoNodesFromItem）と一緒に戻る
+    if(!hasMusic) setConnectedEnv(info._environmentName);
     const sets=info._difficultyBeatmapSets||[];
     const std=sets.find(s2=>s2._beatmapCharacteristicName==='Standard')||sets[0];
     const bms=(std&&std._difficultyBeatmaps)||[];
+    // Standard 以外のモード（OneSaber・NoArrows・360Degree 等）は読み込まない（NLM は Standard の譜面だけを作る）。黙って捨てずに知らせる（2026-10-27）。
+    // モードの名前はファイル由来（知らせは textContent）
+    const modeNote=(()=>{ const ls=sets.filter(s2=>s2&&s2!==std&&Array.isArray(s2._difficultyBeatmaps)&&s2._difficultyBeatmaps.length)
+        .map(s2=>tf('msg.bulkSongModeCount','{mode} {n}つ',{mode:String(s2._beatmapCharacteristicName||'?').slice(0,40),n:s2._difficultyBeatmaps.length}));
+      return ls.length?tf('msg.bulkSongOtherModes','　※Standard 以外の難易度（{list}）は読み込んでいません',{list:ls.join(t('word.listSep','、'))}):''; })();
     if(!bms.length){ showOk(tf('msg.bulkSongNoChart','「{name}」に譜面が含まれていないため、曲情報のみ取り込みました',{name:info._songName||item.name})); return; }
     flushFlatEdits(); snapshot('diffs');   // 開いていない難易度にもクリップを作り、足りなければレーンも足す（全難易度のクリップがずれる）＝全難易度の履歴（以前は 'node' で、Undo で他の難易度に作ったクリップが残った）
     let placedDiffs=0, placedClips=0, curTouched=false;
     const otherTouched=new Set();   // クリップを足した、開いていない難易度
-    let tempoSrc=null;   // テンポ変化の読み元（最初に bpmEvents/_BPMChanges を持っていた譜面）
+    const loaded=[];   // 先に全難易度を読む（テンポを決めてから置くため）
+    let bi=0;
+    // v4（2026-10-27）: テンポは全難易度で共通の AudioData.dat（v4 の難易度のファイルに BPM の変化は無い）。基準の BPM は Info.dat の audio.bpm。
+    // v4 の Info から v2・v3 の難易度のファイルを指す譜面は、今までどおりそのファイルの BPM の変化を読む（ゲームもそのファイルの形で読む）
+    const lsCache=new Map(), lsFail=new Set(); let tpV4=null, v4Drift=0, v4Bad=0, adFail='';
+    const tpOfV4=async()=>{ if(tpV4) return tpV4;
+      let ad=null; const nm=info._audioDataFilename||'';
+      if(nm){ try{ ad=JSON.parse(await (await item.dir.getFileHandle(nm)).getFile().then(f2=>f2.text())); }catch(_){ adFail=nm; } }
+      const r=tempoFromAudioData(ad,+info._beatsPerMinute>0?+info._beatsPerMinute:BPM); tpV4=r.tp; v4Drift=r.drift; return tpV4; };
     for(const bm of bms){
       const dnm=bm._difficulty; if(!dnm) continue;
+      busy.set(tf('busy.bulkDiff','譜面を読み込み中… {diff}（{i}/{n}）',{diff:dispDiff(dnm),i:++bi,n:bms.length}),0.1+0.75*(bi-1)/bms.length); await busyPaint();
       const key=(dnm+'Standard.dat').toLowerCase();
       njsCfg[key]={ njs:(+bm._noteJumpMovementSpeed>0)?+bm._noteJumpMovementSpeed:(_DIFF_NJS[dnm]||16), offset:+bm._noteJumpStartBeatOffset||0 };
-      let frag, dj;
-      try{ dj=JSON.parse(await (await item.dir.getFileHandle(bm._beatmapFilename)).getFile().then(f2=>f2.text())); frag=parseDiffFragment(dj); }
+      let frag, dj, v4=false;
+      try{ ({dj,frag,v4}=await readBmFrag(item,bm,lsCache)); }
       catch(_){ continue; }   // 譜面ファイル自体が読めなくてもNJS/オフセットは取得済みのまま次の難易度へ
-      if(!tempoSrc&&tempoPartsFromDat(dj,BPM).length) tempoSrc=dj;
+      if(frag._lsFail) lsFail.add(frag._lsFail);
+      if(v4) v4Bad+=frag._v4bad||0;
+      loaded.push({dnm,key,frag,tp:v4?await tpOfV4():tempoPartsFromDat(dj,BPM),lbx:frag._lbx||0,env:bm._environmentName||'',label:bmDiffLabel(bm)});
+    }
+    // テンポ変化（V3 bpmEvents / V2 _BPMChanges・type 100）→テンポパート。NLMのテンポは全難易度共通。
+    // 難易度ごとにBPM変化が違う譜面（2026-10-26。以前は最初に見つかった難易度の物を全部に当て、他の難易度は秒がずれた）は、
+    // 一番多くの難易度が使うテンポ（同じ数なら難しい方）を全体のテンポにし、違う難易度の物は秒が同じになるよう拍を付け替える。
+    // 音源も読み込んだ時はそのまま取り込む。音源が既にある時（音源・BPMは上書きしない＝ヘルバ様指定）は、
+    // 同じ曲の譜面を持ってきた（取り込むべき）のか、別の曲の譜面を自分の曲へ持ってきた（取り込むと自分の曲のテンポが壊れる）のかを
+    // アプリでは見分けられないので、利用者に尋ねる。取り込まない時は、後でテンポパートで足せるよう地点を知らせる（拍の付け替えもしない）
+    const tpSig=tp=>JSON.stringify(tp.map(p=>[p.beat,p.bpm]));
+    let tpG=null;
+    { const cnt=new Map(); for(const L of loaded){ const s=tpSig(L.tp); cnt.set(s,(cnt.get(s)||0)+1); }
+      let best=-1; for(const L of loaded){ const n=cnt.get(tpSig(L.tp)); if(n>=best){ best=n; tpG=L.tp; } } }   // 後ろ（難しい方）を優先
+    tpG=tpG||[];
+    let tempoNote='', take=false;
+    if(tpG.length){
+      const list=tpG.map(p=>tf('msg.tempoPoint','拍{beat}でBPM{bpm}',{beat:+p.beat.toFixed(3),bpm:p.bpm})).join(t('word.listSep','、'));
+      take=!hasMusic;
+      if(hasMusic){
+        const srcBpm=+info._beatsPerMinute;
+        busy.hide(true);   // 確認の画面の間は隠す（キーもその画面へ）
+        take=await askYesNo(tf('dlg.tempoImport','読み込んだ譜面にはBPMの変化があります（{list}）。\n今のプロジェクトのテンポに取り込みますか？\n\n同じ曲の譜面なら「取り込む」、別の曲の譜面を自分の曲へ持ってきたなら「取り込まない」を選んでください。',{list})
+          +(tempoParts.length?tf('dlg.tempoImportReplace','\n※取り込むと、今のテンポパート（{n}個）は置き換わります。',{n:tempoParts.length}):'')
+          +(srcBpm>0&&Math.abs(srcBpm-BPM)>1e-9?tf('dlg.tempoImportBase','\n※基準のBPMは今のまま（今 {now}／読み込んだ譜面 {src}）。',{now:BPM,src:srcBpm}):''),
+          t('dlg.tempoImportYes','取り込む'),t('dlg.tempoImportNo','取り込まない'));
+        busy.hide(false);
+      }
+      if(!take) tempoNote=tf('msg.tempoNotImported','　※BPMの変化（{list}）は取り込んでいません。必要ならテンポパートで足してください',{list});
+    } else {   // 全体のテンポにBPM変化が無い: 音源も読み込んだ時だけ取り込む（今のテンポパートは消す）
+      take=!hasMusic;
+      const other=loaded.find(L=>L.tp.length);   // 一部の難易度だけにBPM変化がある＋音源は今のまま＝付け替えない（拍は元のまま）
+      if(!take&&other) tempoNote=tf('msg.tempoNotImported','　※BPMの変化（{list}）は取り込んでいません。必要ならテンポパートで足してください',
+        {list:other.tp.map(p=>tf('msg.tempoPoint','拍{beat}でBPM{bpm}',{beat:+p.beat.toFixed(3),bpm:p.bpm})).join(t('word.listSep','、'))});
+    }
+    busy.set(t('busy.bulkPlace','クリップを配置中…'),0.9); await busyPaint();   // ここから最後までは返さない（置く途中を描かせない）
+    if(take){ tempoParts=tpG.map(p=>({...p})); sortTempoParts(); }
+    const retimed=[], njsList=[];
+    let lbxMax=0;   // ライトボックスの数（難易度ごとの一番多い物。ランク譜面はほとんど全難易度で同じ物）
+    for(const L of loaded){
+      let frag=L.frag;
+      if(take&&tpSig(L.tp)!==tpSig(tpG)){ frag=retimeFrag(frag,BPM,L.tp,tpG); retimed.push(dispDiff(L.dnm));
+        // C3（2026-10-27）: 元の譜面のテンポをクリップに持たせる＝審査の指摘（元の .dat の拍で書かれる）を NLM の拍へ直せる（review-data.js の origToNlm・retimeFrag と同じ式）
+        L.srcTp={b:BPM,f:L.tp.map(p=>[p.beat,p.bpm]),t:tpG.map(p=>[p.beat,p.bpm])}; }
+      const {dnm,key}=L;
       const cp=a=>(a||[]).map(o=>({...o}));
       const contentN={notes:cp(frag.notes),bombs:cp(frag.bombs),walls:cp(frag.walls),arcs:cp(frag.arcs),chains:cp(frag.chains),lights:[]};
       const contentL={notes:[],bombs:[],walls:[],arcs:[],chains:[],lights:cp(frag.lights)};
@@ -6446,41 +6718,45 @@ async function bulkLoadSongData(item){
       const len=Math.max(4,Math.ceil((frag._max+1)/4)*4);
       const isCur=key===(currentDiffName||'').toLowerCase();
       const target=isCur?sections:(projDiffs[key]=projDiffs[key]||{name:dnm+'Standard.dat',v3:true,base:EMPTY_V3(),notes:[],bombs:[],walls:[],arcs:[],chains:[],lightEvents:[],sections:[]}).sections;
+      // ライトボックスがあれば、その数を作ったクリップに持たせる（ライトのクリップ・無ければノーツのクリップ）。難易度の印＝その難易度のクリップの srcLbx（srcLbxOf）。
+      // クリップに持たせる＝保存（encSec）・未保存の判定（projSig のクリップの項目）・Undo（'diffs'）に自動で乗り、読み込んだクリップを消せば印も消える
+      const lbxAt=L.lbx>0?(cntL?'l':'n'):null;
+      if(L.lbx>lbxMax) lbxMax=L.lbx;
+      // v4 の NJS の変化はノーツのクリップに持たせる（ライトボックスの数と同じく保存・未保存の判定・Undo に自動で乗る。ノーツが無ければ判定にも要らない）
+      const njsEv=cntN&&frag._njs&&frag._njs.length?frag._njs:null;
+      if(njsEv) njsList.push(tf('msg.bulkSongNjsCount','{diff} {n}回',{diff:dispDiff(dnm),n:njsEv.length}));
       const mk=(lk,content,cnt)=>{ if(!cnt) return;
         let tr=firstFreeTrackIn(target,lk,0,len,laneCountOf(lk));   // 今あるレーンの中だけ（以前は上限の10本まで探し、レーンの外＝見えない段へ入ることがあった）
         if(tr<0){ if(!laneAdd(lk)) return; tr=0; }   // 埋まっていれば一番上にレーンを足す（全難易度のクリップが1段下がる＝target も）
         target.push({id:'n'+(++_nid)+Math.random().toString(36).slice(2,6),beat:0,track:tr,lk,col:pickStripCol(),
-          label:info._songName||item.name,len,kind:'sheet',content});
+          label:info._songName||item.name,len,kind:'sheet',content,...(lbxAt===lk?{srcLbx:L.lbx}:{}),...(lk==='n'&&njsEv?{srcNjs:njsEv}:{}),
+          ...(L.label?{srcLabel:L.label}:{}),...(L.srcTp?{srcTp:L.srcTp}:{})});   // 元の譜面の難易度の名前（_difficultyLabel）・付け替える前のテンポ＝審査の指摘を読む時に使う（保存・Undo に自動で乗る）
         placedClips++; if(isCur) curTouched=true; else otherTouched.add(key); };
       mk('n',contentN,cntN); mk('l',contentL,cntL);
     }
-    // テンポ変化（V3 bpmEvents / V2 _BPMChanges）→テンポパート。NLMのテンポは全難易度共通なので最初に見つかった譜面のものを使う。
-    // 音源も読み込んだ時はそのまま取り込む。音源が既にある時（音源・BPMは上書きしない＝ヘルバ様指定）は、
-    // 同じ曲の譜面を持ってきた（取り込むべき）のか、別の曲の譜面を自分の曲へ持ってきた（取り込むと自分の曲のテンポが壊れる）のかを
-    // アプリでは見分けられないので、利用者に尋ねる。取り込まない時は、後でテンポパートで足せるよう地点を知らせる
-    let tempoNote='';
-    if(tempoSrc){
-      const tp=tempoPartsFromDat(tempoSrc,BPM);
-      const list=tp.map(p=>tf('msg.tempoPoint','拍{beat}でBPM{bpm}',{beat:+p.beat.toFixed(3),bpm:p.bpm})).join(t('word.listSep','、'));
-      let take=!hasMusic;
-      if(hasMusic){
-        const srcBpm=+info._beatsPerMinute;
-        take=await askYesNo(tf('dlg.tempoImport','読み込んだ譜面にはBPMの変化があります（{list}）。\n今のプロジェクトのテンポに取り込みますか？\n\n同じ曲の譜面なら「取り込む」、別の曲の譜面を自分の曲へ持ってきたなら「取り込まない」を選んでください。',{list})
-          +(tempoParts.length?tf('dlg.tempoImportReplace','\n※取り込むと、今のテンポパート（{n}個）は置き換わります。',{n:tempoParts.length}):'')
-          +(srcBpm>0&&Math.abs(srcBpm-BPM)>1e-9?tf('dlg.tempoImportBase','\n※基準のBPMは今のまま（今 {now}／読み込んだ譜面 {src}）。',{now:BPM,src:srcBpm}):''),
-          t('dlg.tempoImportYes','取り込む'),t('dlg.tempoImportNo','取り込まない'));
-      }
-      if(take){ tempoParts=tp; sortTempoParts(); }
-      else tempoNote=tf('msg.tempoNotImported','　※BPMの変化（{list}）は取り込んでいません。必要ならテンポパートで足してください',{list});
-    }
+    if(retimed.length) tempoNote+=tf('msg.tempoRetimed','　※難易度ごとにBPMの変化が違うため、{diffs} の拍を全体のテンポに合わせて付け替えました（時刻は元の譜面と同じ）',{diffs:retimed.join(t('word.listSep','、'))});
     if(curTouched){ relinkDiffEdges(); compileLayersToFlat(); }
     // 開いていない難易度はクリップを足しただけではフラット配列（書き出し・譜面チェックが読む）が空のまま＝クリップから作る
     //（難易度を開いた時の loadDiff と同じく、クリップの内容が正）
     for(const key of otherTouched){ const st=projDiffs[key]; if(st) Object.assign(st,flatFromSections(st.sections)); }
     metaDirty=true; if(typeof refreshMusicHdr==='function') refreshMusicHdr();
-    showOk(tf('msg.bulkSongLoaded','「{name}」のデータを一括読み込みしました（{n}難易度分・{c}クリップ配置）{skip}',{name:info._songName||item.name,n:placedDiffs,c:placedClips,skip:(hasMusic?t('msg.bulkSongMusicKept','　※音源は既存のものを維持'):'')+tempoNote}));
+    const lbxNote=lbxMax>0?tf('msg.bulkSongLightBoxes','　※この譜面のライトボックス（{n}グループ）はNLMでは読めず、書き出すと消えます。BL評価リストのライトの判定（R10.A・R7.B）は対象外になります',{n:lbxMax}):'';
+    // v4 の知らせ（2026-10-27）: 書き出すと消える NJS の変化・難易度ごとに違う環境（NLM の環境は1つ）・テンポのずれ・読めなかった物。名前はファイル由来（知らせは textContent）
+    const sep=t('word.listSep','、');
+    let v4Note=njsList.length?tf('msg.bulkSongNjsEvents','　※NJSの変化（{list}）はNLMでは編集できず、書き出すと消えます（譜面チェックの判定には使います）',{list:njsList.join(sep)}):'';
+    { const by=new Map(); for(const L of loaded) if(L.env){ if(!by.has(L.env)) by.set(L.env,[]); by.get(L.env).push(dispDiff(L.dnm)); }
+      if(by.size>1&&!hasMusic) v4Note+=tf('msg.bulkSongEnvMixed','　※難易度ごとに環境が違います（{list}）。NLMの環境は1つなので {env} にしました',
+        {list:[...by].map(([e,ds])=>String(e).slice(0,60)+': '+ds.join(sep)).join(' / '),env:String(info._environmentName||'').slice(0,60)}); }
+    if(take&&v4Drift>0.001) v4Note+=tf('msg.bulkSongV4Drift','　※AudioData.dat のテンポをNLMのテンポに直すと、最大 {ms}ms ずれます',{ms:Math.round(v4Drift*1000)});
+    if(adFail) v4Note+=tf('msg.bulkSongV4NoAudioData','　※テンポのファイル（{name}）を読めなかったため、BPMの変化は取り込んでいません',{name:String(adFail).slice(0,80)});
+    if(lsFail.size) v4Note+=tf('msg.bulkSongV4NoLightshow','　※ライトのファイル（{name}）を読めませんでした',{name:[...lsFail].map(s=>String(s).slice(0,80)).join(sep)});
+    if(v4Bad) v4Note+=tf('msg.bulkSongV4Bad','　※v4 の譜面のうち、中身の番号が合わない物（{n}個）は読み込んでいません',{n:v4Bad});
+    showOk(tf('msg.bulkSongLoaded','「{name}」のデータを一括読み込みしました（{n}難易度分・{c}クリップ配置）{skip}',{name:info._songName||item.name,n:placedDiffs,c:placedClips,skip:(hasMusic?t('msg.bulkSongMusicKept','　※音源は既存のものを維持'):'')+tempoNote+modeNote+lbxNote+v4Note}));
+    loadedOk=true;
   }catch(err){ showErr(tf('msg.bulkSongLoadFail','曲データの一括読込に失敗: {err}',{err})); }
-  finally{ if(newSong) anaAfterLoad(); }
+  finally{ busy.close();
+    if(loadedOk) lightHeavyWarn();   // ライトがとても多い時の警告（「曲を解析しますか？」は #dirtyDlgBg が閉じるのを待つ＝警告の後に出る）
+    if(newSong) anaAfterLoad(); }   // 閉じてから「曲を解析しますか？」（他の画面が出ている間は待つため）
 }
 function resetAllState(){   // 新規/開く/最近使った の直前に全状態を初期化＝前ファイルの残留（特にフラット配列と_flatDirty）が新ファイルのクリップへ混入するのを防止（ヘルバ様報告のデータ混在バグ対策）
   if(playing) pause();
@@ -6490,6 +6766,7 @@ function resetAllState(){   // 新規/開く/最近使った の直前に全状�
   projDiffs={}; currentDiffName=''; rawDiff=null;
   markers=[]; _mkSeq=0;
   if(songAna) songAna.reset();                                         // 曲の解析の結果も持ち越さない（解析中ならやめる）
+  if(reviewPanel) reviewPanel.reset();                                 // 審査の指摘も持ち越さない
   _flatDirty=false;                                                    // ★未反映の3D編集フラグを消す＝旧フラットが新クリップへ同期されない
   chainCurveGlobal={...CHAIN_CURVE_DEFAULTS};
   // ★音源も必ずクリア＝新規で読み込んだ曲が、その後に開いた別プロジェクトへ残留するバグの対策（ヘルバ様報告）
@@ -6504,6 +6781,8 @@ function resetAllState(){   // 新規/開く/最近使った の直前に全状�
   _lkHold=false; _lkParSig.clear(); _lkWarned.clear(); _linkVer++; hideLinkBand();   // リンクの控え・帯も持ち越さない
   _cpal=[]; lightBrush.chroma=null; lightBrush._lastChromaHex=null; _lightPalIdx=-1;   // クロマパレット/ブラシは持ち越さない＝新規は空・既定(左ノーツ色)。開くファイルはapplyProjectで上書き（ヘルバ様指定 2026-07-13）
   try{ updateChromaUI(); }catch(_){}
+  resetCoverState();                                                   // カバー画像の控え（画像の参照・同梱の画像・INFOの見本・右下の表示）も持ち越さない（2026-10-27）
+  resetOutDirState();                                                  // 書き出し先の参照（outDirHandle・_outHandles）も持ち越さない（2026-10-27）
   resetHistory(); _pv4Hist=-1;
 }
 // プロジェクトデータの適用（pj=null はプロジェクト無し＝既定の構成。今は画面からは通らず、テストが新規の代わりに使う）
@@ -6559,6 +6838,7 @@ async function applyProject(pj){
   // セクションタグ: .nlmf（旧 .bsnm）> 既定
   markers=(pj&&Array.isArray(pj.markers))?structuredClone(pj.markers):[]; _mkSeq=markers.length;   // マーカー復元
   if(songAna) songAna.load(pj&&pj.analysis);   // 曲の解析の結果（帯・付け直した名前・解析した時の目盛り）。中身は song-analysis.js が確かめる
+  if(reviewPanel) reviewPanel.load(pj&&pj.review);   // 審査の指摘（済みの印・返事も）。中身はファイル由来なので review-data.js の sanitizeReview が確かめる
   njsCfg=(pj&&pj.njsCfg&&typeof pj.njsCfg==='object')?structuredClone(pj.njsCfg):{};   // 難易度別NJS/オフセットの編集値を復元
   if(pj&&pj.chainCurveGlobal&&typeof pj.chainCurveGlobal==='object')
     chainCurveGlobal={...CHAIN_CURVE_DEFAULTS,...pj.chainCurveGlobal};
@@ -6729,21 +7009,27 @@ async function tryAutoLoadSongNative(){
 // 出力フォルダは「このPCでフォルダ選択ダイアログから選んだことがある」ものだけ自動接続する（app.pyのout_dir_okが判定）。
 // 他人から受け取った.nlmfに任意のフォルダ（スタートアップ等）を書き出し先として仕込まれても、黙って書き込まないため。
 async function tryAutoRestoreNativeInputs(){
-  await waitPywebview(); const api=nativeApi(); if(!api||!infoGraph) return;
+  // 確かめている間に別のプロジェクトを開いた/新規にしたら、前のプロジェクトの出力先・カバーを繋がない（2026-10-27。以前は出力先の確かめが後から終わり、
+  // 開いた後のプロジェクトの控え _outHandles へ前のフォルダを入れていた＝カードを押すと書き出し先がそれに替わった）
+  const og=_outGen, gen=_coverGen;
+  await waitPywebview(); const api=nativeApi(); if(!api||!infoGraph||og!==_outGen) return;
   let changed=false, unapproved=false;
-  for(const oid in (infoGraph.outs||{})){ const o=infoGraph.outs[oid]; if(!o.outDirPath) continue;
-    try{ const st=await api.out_dir_ok(o.outDirPath);
-      if(st==='ok'){ _outHandles[oid]=mkNativeDir(o.outDirPath); changed=true; }
-      else if(st==='unapproved') unapproved=true; }catch(e){} }
+  const outs=infoGraph.outs||{};
+  for(const oid in outs){ const path=outs[oid]&&outs[oid].outDirPath; if(!path) continue;
+    let st=''; try{ st=await api.out_dir_ok(path); }catch(e){}
+    if(og!==_outGen) return;
+    const o=infoGraph.outs&&infoGraph.outs[oid];
+    if(st==='ok'){ if(o&&o.outDirPath===path){ _outHandles[oid]=mkNativeDir(path); changed=true; } }   // 確かめている間に選び直した・Undoした書き出しノードには入れない（控えと記録を一致させる）
+    else if(st==='unapproved') unapproved=true; }
   if(unapproved) stat(t('msg.outDirReconfirm','書き出し先フォルダは「再接続」で選び直してください（このPCでまだ選ばれていないフォルダのため、自動では接続しません）'));
   const act=infoGraph.activeOut, ao=act&&infoGraph.outs[act];
   if(ao&&ao.outDirPath&&_outHandles[act]&&_outHandles[act].nativePath===ao.outDirPath){
     outDirHandle=_outHandles[act];
     if(graphIO&&graphIO.out){ graphIO.out.outDirName=ao.outDirName||outDirHandle.name; graphIO.out.outDirPath=ao.outDirPath; } }
   for(const cid in (infoGraph.nodes||{})){ const n=infoGraph.nodes[cid]; if(n.t!=='cover'||!n.data.nativePath) continue;
-    try{ if(await api.fs_isfile(n.data.nativePath)){ const h=mkNativeFile(n.data.nativePath); _coverHandles[cid]=h; changed=true;
+    try{ if(await api.fs_isfile(n.data.nativePath)&&gen===_coverGen){ const h=mkNativeFile(n.data.nativePath); _coverHandles[cid]=h; changed=true;
         try{ await loadCoverPreview({id:'ig:'+cid,handle:h,name:n.data.name}); }catch(_){} } }catch(e){} }
-  if(changed){ applyInfoGraph(); refreshInfoCards(); refreshOutCards(); }
+  if(changed&&gen===_coverGen){ applyInfoGraph(); refreshInfoCards(); refreshOutCards(); }
 }
 // .nlmf（旧 .bsnm）を開いた後の復元
 // .bsnm再オープン時: IndexedDBの元フォルダ参照から 音源・カバー・難易度切替 を復元
@@ -6810,6 +7096,7 @@ async function applyOpenedProject(pj,fh){
   markSaved();
   if(audioBuf) showOk(tf('msg.projOpened','プロジェクトを開きました: {name}',{name:fh.name}));
   else showOk(tf('msg.projOpenedNoAudio','プロジェクトを開きました: {name}　※音源が未読込です — ファイル→音楽ファイルを読み込む…から開いてください',{name:fh.name}));
+  lightHeavyWarn();
 }
 async function openProjectFile(){
   if(!await confirmDiscard('switch')) return;
@@ -6846,6 +7133,7 @@ async function openFromNativeArg(){
   markSaved();
   if(audioBuf) showOk(tf('msg.projOpened','プロジェクトを開きました: {name}',{name:_nativeSaveName}));
   else showOk(tf('msg.projOpenedNoAudio','プロジェクトを開きました: {name}　※音源が未読込です — ファイル→音楽ファイルを読み込む…から開いてください',{name:_nativeSaveName}));
+  lightHeavyWarn();
 }
 // inheritMissingClipsは撤去（箱ごと難易度別・2026-07-05確定）
 async function loadDiff(f){ if(!f) return;
@@ -6894,7 +7182,8 @@ async function loadDiff(f){ if(!f) return;
           _flatDirty=true; flushFlatEdits(); compileLayersToFlat();
           console.warn('旧形式のフラット残チェイン/アークをクリップへ回収:',orphC.length+orphA.length,'件',f);
         }
-      } else if(st.sections) sections=structuredClone(st.sections);   // クリップ無し: フラット直保持（compileで消さない）
+      } else if(st.sections){ sections=structuredClone(st.sections);   // クリップ無し: フラット直保持（compileで消さない）
+        relinkDiffEdges(); }   // 配線もこの難易度の（空の）クリップへ張り直す。以前は前の難易度のクリップの id を指したままで、空の難易度へ戻ると「配線が切断中」で置けなかった（2026-10-27）
     }
     { // 幽霊制度廃止に伴う旧データ変換: チェーンの頭/尾と重なる隠しノーツ（旧仕様が notes に保持していた分）をチェーンへ吸収
       const g=absorbChainCompanionNotes(notes, chains);
@@ -6931,7 +7220,17 @@ function buildDiffJsonFor(st){
     d.obstacles=mW.map(o=>({...(R3(o)||{}),b:o.beat,x:o.x,y:o.y,d:o.dur,w:o.w,h:o.h})).sort(sortB);
     d.sliders=mA.map(a=>({...(R3(a)||{}),b:a.b,c:a.c,x:a.x,y:a.y,d:a.d,mu:a.mu??1,tb:a.tb,tx:a.tx,ty:a.ty,tc:a.tc??a.d,tmu:a.tmu??1,m:a.m??0})).sort(sortB);
     d.burstSliders=mC.map(c=>({...(stripChainTuning(R3(c))||{}),b:c.b,c:c.c,x:c.x,y:c.y,d:c.d,tb:c.tb,tx:c.tx,ty:c.ty,sc:c.sc??4,s:c.s??1})).sort(sortB);
-    d.basicBeatmapEvents=mL.map(e=>({...(R3(e)||{}),b:e.beat,et:e.et,i:e.i??0,f:e.f??1})).sort(sortB);
+    // 色のブースト（種類 5）は v3 では colorBoostBeatmapEvents（b・o）へ書く（2026-10-27）。v3 の basicBeatmapEvents の種類 5 は廃止された書き方で
+    // （BSMG Wiki: 5 は v3 から専用の配列）、以前はここへ書いていた＝ゲームでブーストにならないおそれがあり、BS Map Check もライトの数に入れていた。
+    // raw のうち別の配列の項目（ブーストから基本のライトへ変えた物の o・基本のライトや v4 から来た物の et・i・f）は書かない
+    const omit=(r,ks)=>{ if(r) for(const k of ks) delete r[k]; return r; };   // R3 は新しい物を返す（raw 自体は変えない）
+    d.basicBeatmapEvents=mL.filter(e=>e.et!==5).map(e=>({...(omit(R3(e),['o'])||{}),b:e.beat,et:e.et,i:e.i??0,f:e.f??1})).sort(sortB);
+    { const bst=mL.filter(e=>e.et===5).map(e=>({...(omit(R3(e),['et','i','f'])||{}),b:e.beat,o:(e.i??0)>0}));
+      // 土台（base）の colorBoostBeatmapEvents は、読み込んだ .dat を土台にしていた古い版のプロジェクトにだけ中身がある（NLM では見えない物）。以前と同じく
+      // 書き出しに残す（同じ拍・同じオン/オフの物は1つ）。今の版の土台は空（EMPTY_V3）
+      const old=Array.isArray(d.colorBoostBeatmapEvents)?d.colorBoostBeatmapEvents.filter(e=>e&&typeof e==='object'):[];
+      const seen=new Set(bst.map(e=>e.b+'|'+e.o));
+      d.colorBoostBeatmapEvents=[...old.filter(e=>!seen.has((+e.b||0)+'|'+(e.o===true||e.o===1))),...bst].sort(sortB); }
     d.bpmEvents=tempoParts.map(p=>({b:p.beat,m:p.bpm}));   // 曲中のテンポ変更（パート機能）。拍番号はそのまま・以降の絶対時刻だけ変わるBS標準の仕組み
     d.version=d.version||'3.2.0'; delete d._version;              // v3構造 → v3のversionを自動
   } else {
@@ -6960,7 +7259,7 @@ const _RAWSKIP={
   walls:['b','x','y','d','w','h','_time','_lineIndex','_type','_duration','_width'],
   arcs:['b','c','x','y','d','mu','tb','tx','ty','tc','tmu','m'],
   chains:['b','c','x','y','d','tb','tx','ty','sc','s'],
-  lights:['b','et','i','f','_time','_type','_value'],
+  lights:['b','et','i','f','o','_time','_type','_value'],   // o＝v3 の色のブースト（colorBoostBeatmapEvents）のオン/オフ。i が正（書き出しで i から書き直す）
 };
 _RAWSKIP.bombs=_RAWSKIP.notes;
 function _rawX(raw,t){ if(!raw) return null; let o=null;   // rawから標準外フィールド（v3のangle等）だけ抽出
@@ -6981,6 +7280,10 @@ function encSec(s){ const c=s.content||{}, o={};
   return {...s,content:o}; }
 function decSec(s){ const c=s.content||{}, o={};
   for(const k2 of _CKEYS) o[k2]=decArr(c[k2],k2);
+  if('srcLbx' in s&&!(Number.isInteger(s.srcLbx)&&s.srcLbx>0&&s.srcLbx<=1e7)) delete s.srcLbx;   // 元の譜面のライトボックスの数（ファイル由来なので数として確かめる）
+  if('srcNjs' in s&&!srcNjsOk(s.srcNjs)) delete s.srcNjs;   // 元の v4 の譜面の NJS の変化（ファイル由来なので形を確かめる）
+  if('srcLabel' in s&&!srcLabelOk(s.srcLabel)) delete s.srcLabel;   // 元の譜面の難易度の名前（審査の指摘の見出しを読む表。ファイル由来）
+  if('srcTp' in s&&!srcTpOk(s.srcTp)) delete s.srcTp;   // 拍を付け替える前の元の譜面のテンポ（C3。ファイル由来）
   s.content=o; return s; }
 function _slimBase(st){ const b=structuredClone(st.base||{});
   for(const k2 of (st.v3?['colorNotes','bombNotes','obstacles','sliders','burstSliders','basicBeatmapEvents']:['_notes','_obstacles','_events']))
@@ -7004,6 +7307,7 @@ function buildProjectText(){
       ...(editOnlyTr!=null?{editOnly:editOnlyTr}:{})},   // 単独編集のノーツのレーン（内部の段）。projSigには入れない＝切り替えただけでは未保存にしない（viewと同じ・2026-10-19）
     view:{beat:curAnim?curAnim.to:cur,span:tlSpan,b0:tlShownB0()},   // 再生位置（ジャンプの途中なら着地点）とNLEのズーム・表示位置（開いた時に復元）。projSigには入れない＝動かしただけでは未保存にしない（2026-10-06）
     analysis:songAna?songAna.save():undefined,   // 曲の解析の結果（無ければキーごと書かない）。projSig にも入れる＝名前の付け直しで未保存
+    review:reviewPanel?reviewPanel.save():undefined,   // 審査の指摘・済みの印・返事（無ければキーごと書かない）。projSig にも入れる＝済み・返事で未保存
     graph:{...(graphIO||{}),edges:graphEdges,
       song:songNode?(({handle,...r})=>r)(songNode):null,
       extra:extraNodes.map(({handle,...r})=>r),
@@ -7051,24 +7355,46 @@ async function saveProject(saveAs=false){   // 戻り値: 保存できたら tru
 // metaDirty は履歴に積まれる編集(snapshot)で立たない・Undoで戻らない等の穴があるため判定には使わない。
 // projSig は buildProjectText と同じ項目を副作用なしで直列化したもの（保存されない選択・カメラ・savedAt・カバー画像本体、
 // 保存はするが比べない再生位置とNLEのズーム(view)は除外）。
-// 難易度は「フラット配列＋クリップ構成(content除く)」で統一表現＝難易度を切り替えただけでは変化しない。
+// 難易度は「フラット配列＋クリップ構成(content除く)」で統一表現＝難易度を切り替えただけでは変化しない
+//（今の難易度で決まる物＝ノーツ・ライトの配線・物の並び・空の難易度の退避は比べない。下の _sigArr・projSig の注記）。
 let _savedSig=null, _dirtyNow=false, _dirtyT=0, _inputSinceBase=false;
-const _sigArr=(arr,tp)=>{ const d=_ENC[tp]; return (arr||[]).map(o=>{ const a=d.f.map(k2=>o[k2]??null); const x=_rawX(o.raw,tp); if(x) a.push(x); return a; }); };
+// 物の並び順は比べない（2026-10-27）: 3Dで置いた物はフラットの末尾に足されるが、難易度を切り替えて戻るとクリップの順に作り直される
+//（flatFromSections）＝中身が同じでも並びが変わり、切り替えて戻っただけで未保存になっていた。並びは、開く時もクリップの中身から作り直される。
+// 並べ方（全順序。中身が同じ物どうしの順は結果に出ない）: 値の種類（数・文字・配列・物・その他）→ 数は大小・文字は文字の順・
+// 配列は長さ→要素ごと・物は項目の数→項目ごとに名前→値。文字にしてから比べない（Chroma の譜面は同じ拍・種類のライトが多く、標準外の項目まで比べることが多い）
+const _sigT=v=>typeof v==='number'?(v===v?0:4):typeof v==='string'?1:Array.isArray(v)?2:v===null?5:typeof v==='object'?3:typeof v==='boolean'?(v?7:6):8;
+function _sigCmp(x,y){
+  if(x===y) return 0;
+  const tx=_sigT(x), ty=_sigT(y); if(tx!==ty) return tx-ty;
+  if(tx<2) return x<y?-1:1;
+  if(tx===2){ if(x.length!==y.length) return x.length-y.length;
+    for(let i=0;i<x.length;i++){ const c=_sigCmp(x[i],y[i]); if(c) return c; } return 0; }
+  if(tx===3){ const kx=Object.keys(x), ky=Object.keys(y); if(kx.length!==ky.length) return kx.length-ky.length;
+    for(let i=0;i<kx.length;i++){ const p=kx[i], q=ky[i]; if(p!==q) return p<q?-1:1; const c=_sigCmp(x[p],y[q]); if(c) return c; } return 0; }
+  return 0; }
+const _sigArr=(arr,tp)=>{ const d=_ENC[tp]; return (arr||[]).map(o=>{ const a=d.f.map(k2=>o[k2]??null); const x=_rawX(o.raw,tp); if(x) a.push(x); return a; }).sort(_sigCmp); };
 const _sigSec=s=>{ const {content,_diffName,...r}=s; return r; };
 function projSig(){
   const dOut={};
-  const put=(k2,st)=>{ dOut[k2]={n:_sigArr(st.notes,'notes'),b:_sigArr(st.bombs,'bombs'),w:_sigArr(st.walls,'walls'),a:_sigArr(st.arcs,'arcs'),
-    c:_sigArr(st.chains,'chains'),l:_sigArr(st.lightEvents,'lights'),s:(st.sections||[]).map(_sigSec)}; };
+  // 物もクリップも無い難易度は「無い」のと同じに扱う（まだ無い難易度を開くと空の退避が作られる＝開いただけで未保存にしない・2026-10-27）。
+  // 今の難易度は後から上書きするので、空なら退避側の古い値も消す
+  const put=(k2,st)=>{ const e={n:_sigArr(st.notes,'notes'),b:_sigArr(st.bombs,'bombs'),w:_sigArr(st.walls,'walls'),a:_sigArr(st.arcs,'arcs'),
+    c:_sigArr(st.chains,'chains'),l:_sigArr(st.lightEvents,'lights'),s:(st.sections||[]).map(_sigSec)};
+    if(Object.values(e).some(a=>a.length)) dOut[k2]=e; else delete dOut[k2]; };
   for(const k2 in projDiffs) put(k2,projDiffs[k2]);
   if(currentDiffName) put(currentDiffName.toLowerCase(),{notes,bombs,walls,arcs,chains,lightEvents,sections});   // 現難易度は退避前の生データが正
   const noH=o=>o?(({handle,...r})=>r)(o):null;
   // 書き出し先ミラー(graphIO.out)は INFOのUndo等で「値なし→空文字」に整えられる＝同じ意味なので揃えて比較（旧プロジェクトでの誤検知防止）
   const gio=graphIO?{...graphIO,out:graphIO.out?{...graphIO.out,folderName:graphIO.out.folderName||'',outDirName:graphIO.out.outDirName||'',outDirPath:graphIO.out.outDirPath||''}:graphIO.out}:{};
   const info=infoBase?{...infoBase,_beatsPerMinute:undefined}:null;   // BPMの写し（BPM変更で後から書き足される）はbpmで比較済み＝戻しても差分が残る誤検知を防ぐ
+  // ノーツ・ライトの配線は、今の難易度のクリップの id を relinkDiffEdges が張り直した派生値（難易度を切り替えるとその難易度のクリップの id に変わる）。
+  // クリップは d に全難易度の分が入っている＝比べない。入れていた時は、保存した時と違う難易度を開いているだけで未保存になった（2026-10-27）
+  const edges=graphEdges.filter(e=>e.sig!=='notes'&&e.sig!=='lights');
   return JSON.stringify({bpm:BPM,tempoParts,musicBeat,musicSegs,songDeleted,col:[RED,BLUE,LRED,LBLUE],markers,notesLanes,lightLanes,info,
     ig:{...infoGraph,cam:undefined},njsCfg,chainCurveGlobal,cpal:_cpal,lanes:[[...layerMuteS],[...layerSoloS],[...layerLockS]],
     ana:songAna?songAna.sig():undefined,   // 曲の解析の結果・付け直した名前（無ければキーごと無し＝解析していない旧プロジェクトの比較は変わらない）
-    graph:{...gio,edges:graphEdges,song:noH(songNode),extra:extraNodes.map(noH),altIns,altOuts,altSongs:altSongs.map(noH),activeUids},d:dOut});
+    rv:reviewPanel?reviewPanel.save():undefined,   // 審査の指摘（無ければキーごと無し）
+    graph:{...gio,edges,song:noH(songNode),extra:extraNodes.map(noH),altIns,altOuts,altSongs:altSongs.map(noH),activeUids},d:dOut});
 }
 function setDirtyLamp(on){
   on=!!on; if(on===_dirtyNow) return; _dirtyNow=on;
@@ -7090,6 +7416,59 @@ for(const ev of ['pointerdown','keydown','dragenter']) addEventListener(ev,dirty
 for(const ev of ['pointerup','keyup','wheel','change','input','drop']) addEventListener(ev,checkDirtySoon,{capture:true,passive:true});
 setInterval(()=>{ if(!playing) checkDirty(); },4000);   // 操作後に非同期で反映される変更（BPM測定の結果など）の拾い漏れ対策／操作前は基準の追従
 addEventListener('beforeunload',e=>{ if(!window.pywebview&&checkDirty()){ e.preventDefault(); e.returnValue=''; } });   // ブラウザ版(serve.py)はブラウザ標準の確認で代用
+/** 処理中の画面（曲データを読み込む・2026-10-27）: 題名・今していること・進み具合のバー。押せる物は無く、出ている間は裏のクリック・キーを止める
+ *  （読み込みの途中で Ctrl+Z 等が動かないように）。0.25 秒より早く終わる時は見せない（ちらつかせない。止めるのは最初から）。
+ *  処理が画面の描画を止めている間は何も描かれないので、文を変えたら await busyPaint() で一度描かせる */
+function busyDialog(title){
+  const bg=document.createElement('div'); bg.id='busyDlgBg';
+  const dlg=document.createElement('div'); dlg.id='busyDlg'; bg.appendChild(dlg);
+  const hd=document.createElement('div'); hd.className='bdTitle'; hd.textContent=title; dlg.appendChild(hd);
+  const msg=document.createElement('div'); msg.className='bdMsg'; dlg.appendChild(msg);
+  const bar=document.createElement('div'); bar.className='bdBar'; const fill=document.createElement('i'); bar.appendChild(fill); dlg.appendChild(bar);
+  const onKey=e=>{ e.preventDefault(); e.stopPropagation(); };
+  let keyOn=false; const keys=on=>{ if(on===keyOn) return; keyOn=on; if(on) addEventListener('keydown',onKey,true); else removeEventListener('keydown',onKey,true); };
+  keys(true); document.body.appendChild(bg);
+  const showT=setTimeout(()=>bg.classList.add('on'),250);
+  return {
+    set(text,frac){ msg.textContent=text; fill.style.width=Math.round(Math.max(0,Math.min(1,frac||0))*100)+'%'; },
+    hide(h){ bg.style.display=h?'none':''; keys(!h); },   // 別の確認の画面（askYesNo）を出す間は隠す（キーもその画面へ通す）
+    close(){ clearTimeout(showT); keys(false); bg.remove(); } };
+}
+/** 一度だけ画面を描かせてから続ける（次の描画の後。窓が隠れて描画が止まっていても 60ms で続ける） */
+function busyPaint(){ return new Promise(r=>{ let d=false; const go=()=>{ if(!d){ d=true; r(); } };
+  requestAnimationFrame(()=>setTimeout(go,0)); setTimeout(go,60); }); }
+// ---- ライトがとても多い譜面の警告（2026-10-27・利用者の決定） ----
+// 未保存の確認（checkDirty→projSig）は4秒ごとと操作の0.5秒後に、全難易度のライトを文字にして比べる＝ライトの数に比例して、その間だけ画面が止まる。
+// 確認の間隔は変えない（未保存の確認の保険を弱めない）代わりに、プロジェクトを開いた時・曲データを読み込んだ時に目安を超えていたら1回知らせる。
+// 目安 LIGHT_WARN_N は projSig の1回が 0.1 秒前後になる数。測った値（2026-10-27・このPC・ヘッドレスEdge・5難易度に等分・7回の中央値）:
+//   ライト 10万→40ms・15万→53ms・20万→68ms・30万→105ms（customData なし）／10万→57ms・15万→90ms・20万→116ms・30万→171ms（customData あり＝V3 の Chroma の譜面）。
+//   実際の譜面では Nobody's Christmas!（V3・customData あり・合計52.5万）が 0.4〜0.68秒（1個約1µs）、Deutschland（V2＝raw なし・合計43.6万）が 0.1〜0.24秒。
+//   → customData のある V3 の譜面で 0.1 秒前後になる 15万 にした（customData の無い譜面では 0.05 秒ほど＝早めに知らせる側に倒した）
+//   同じ日に projSig が物を並べ替えて比べるようにした（難易度を切り替えて戻っただけで未保存になる誤検知の直し）分、少し重くなった:
+//   2難易度に等分した15万で、customData なし 67→74ms、同じ拍・種類のライトが8個ずつ並ぶ Chroma 風の customData あり 145→165〜185ms（他の検証と並んで動いていて揺れが大きい）
+const LIGHT_WARN_N=150000;
+/** 全難易度のライトの合計（今の難易度は退避前の生データ） */
+function lightTotal(){ const curK=(currentDiffName||'').toLowerCase(); let n=0;
+  for(const k in projDiffs){ if(k===curK||!projDiffs[k]) continue; n+=(projDiffs[k].lightEvents||[]).length; }
+  return n+(curK?lightEvents.length:0); }
+/** 目安を超えていれば警告を出す（急に出るので Enter では閉じない・Esc＝閉じる。#dirtyDlgBg＝「曲を解析しますか？」はこれが閉じるのを待つ） */
+function lightHeavyWarn(){
+  const n=lightTotal(); if(n<LIGHT_WARN_N) return false;
+  if(document.querySelector('#dirtyDlg[data-dlg=lightHeavy]')) return true;   // 2重に出さない
+  const bg=document.createElement('div'); bg.id='dirtyDlgBg';
+  const dlg=document.createElement('div'); dlg.id='dirtyDlg'; dlg.dataset.dlg='lightHeavy'; bg.appendChild(dlg);
+  const msg=document.createElement('div'); msg.className='ddMsg';
+  msg.textContent=tf('dlg.lightHeavy','ライトが合計 {n} 個あります。\n編集中に一瞬止まることがあります（未保存の確認のため）。',{n:n.toLocaleString()});
+  dlg.appendChild(msg);
+  const row=document.createElement('div'); row.className='ddBtns'; dlg.appendChild(row);
+  const done=()=>{ removeEventListener('keydown',onKey,true); bg.remove(); };
+  const ok=document.createElement('button'); ok.type='button'; ok.className='pri'; ok.textContent=t('lk.ok','OK'); ok.addEventListener('click',done); row.appendChild(ok);
+  const onKey=e=>{ if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); done(); return; }
+    if(e.key==='Enter'||e.key===' ') e.preventDefault();   // 急に出るので Enter・Space では閉じない（他の急に出る確認と同じ）
+    e.stopPropagation(); };   // 裏のショートカットを発火させない
+  addEventListener('keydown',onKey,true);
+  document.body.appendChild(bg);
+  return true; }
 /** はい/いいえの確認（見た目は未保存の確認と同じ）。はい=true。Esc=いいえ */
 function askYesNo(text,yesLabel,noLabel){
   return new Promise(res=>{
@@ -7155,6 +7534,12 @@ if(NLM_DEV) window._dbgApp=Object.freeze({
     band:_specWinCols?{cB:parseInt(_specWinKey,10)/4,cols:Array.from(_specWinCols)}:null}),
   /** 曲の解析（tests/e2e_nle/test_analysis.py 用）: 帯が出ているか・解析中の段階と進み具合・目盛りが変わったか・帯の上の知らせ・保存する中身・帯に描く文字 */
   analysis:()=>songAna?songAna.dbg():null,
+  /** 審査の指摘（tests/e2e_misc/test_review.py 用）: 一覧が開いているか・項目（済み・返事・NLM の拍）・拍の無い行・読み込んだ物・選んでいる項目・一覧に出ている行・最後の知らせ・飛んだ結果 */
+  review:()=>reviewPanel?reviewPanel.dbg():null,
+  /** 3Dの選択（ノーツ類の種類・拍と、ライトの選択の数）。審査の指摘で飛んだ時の確かめ用 */
+  selObjs:()=>({objs:[...selection].map(o=>({kind:o.kind,beat:o.beat??o.b})),lights:lightSelection.size}),
+  /** タイムラインの審査の指摘の印（最後の描画の時点）: 項目の id とページ座標px の矩形 */
+  reviewMarks:()=>{ const r=ndcv.getBoundingClientRect(); return _rvRects.map(q=>({id:q.id,x:r.left+q.x,y:r.top+q.y,w:q.w,h:q.h})); },
   /** 解析の帯（#anacv）の拍beatのx とセクション・細かい区切りの段の中央のy（ページ座標px） */
   anaScreen:beat=>songAna?songAna.screen(beat??cur):null,
   /** 構成の解析に送る at（拍 0, 0.25, … ごとの元の音源の秒。音の無い所は null） */
@@ -7335,7 +7720,12 @@ async function collectMapCheckInput(){
     meta:{songName:info._songName, subName:info._songSubName, author:info._songAuthorName, mapper:info._levelAuthorName},
     infoRaw:{songTimeOffset:info._songTimeOffset, shuffle:info._shuffle, shufflePeriod:info._shufflePeriod,
       colorSchemes:info._colorSchemes||[], requirements:[...new Set(bms.flatMap(b=>(b._customData&&b._customData._requirements)||[]))]},
-    diffs:diffFiles.map(d=>{ const nj=njsOffExport(d.dnm); return {difficulty:d.dnm, json:d.json, njs:nj.njs, njsOffset:nj.offset}; }),
+    // srcLightBoxes: 元の譜面のライトボックスのグループの数（4種類の EventBoxGroups の要素数の合計。ボックス・イベントの数ではない。NLM は読めず書き出しで消える＝BL評価リストがライトの判定 R10.A・R7.B を対象外にする。無ければ 0・2026-10-27）
+    // NJS の変化: 元の v4 の譜面にあった物（読み込んだクリップの srcNjs）を、v4 と同じ形（njsEvents＋njsEventData）で json に足す＝BL評価リストが読む
+    //（R1.B.8 のイージング・R9・R3.A.1 の重なりの NJS）。書き出す .dat（collectExportDiffs の json）には入れない＝ここで写しを作る
+    diffs:diffFiles.map(d=>{ const nj=njsOffExport(d.dnm), st=projDiffs[d.name.toLowerCase()], ev=srcNjsOf(st&&st.sections);
+      const json=ev?{...d.json, njsEvents:ev.map((e,i)=>({b:e[0],i})), njsEventData:ev.map(e=>({p:e[1],e:e[2],d:e[3]}))}:d.json;
+      return {difficulty:d.dnm, json, njs:nj.njs, njsOffset:nj.offset, srcLightBoxes:srcLbxOf(st&&st.sections)}; }),
     audioDuration:eggLength(),   // 書き出す song.egg の長さ（無音追加・Musicの配置を反映。音源が無ければ null）
     cover };
 }
@@ -7354,6 +7744,89 @@ async function mapCheckJump(dn,o){
   seekEase(o.beat||0);   // カメラも着地点（再生ヘッド）へ寄る
   stat(tf('mc.jumped','{diff} の {beat} 拍目へ移動しました',{diff:dispDiff(dn),beat:Math.round((o.beat||0)*1000)/1000}));
 }
+// ---- 審査の指摘（2026-10-27・画面と状態は js/review/review-panel.js、形は review-txt.js・review-data.js） ----
+// ここは本体との橋渡しだけ: 難易度の名前の表・付け替えた難易度の元のテンポ（C3）・飛ぶ・.txt の保存。保存は buildProjectText の review、
+// 未保存の判定は projSig の rv、履歴は 'review'（読み込み・消す・済みの印・返事）。タイムラインの印は drawLayers の drawReviewMarks
+/** 今の難易度の名前（Easy〜ExpertPlus。無ければ null） */
+function curDiffDn(){ const k=(currentDiffName||'').toLowerCase(); return OUT_DIFFS.find(dn=>k===(dn+'standard.dat').toLowerCase())||null; }
+/** 難易度のクリップの並び（今の難易度は今のクリップ） */
+function diffSecsOf(dn){ return dn===curDiffDn()?sections:((projDiffs[(dn+'Standard.dat').toLowerCase()]||{}).sections||[]); }
+/** 指摘の見出し・ファイル名を読む難易度の名前の表（曲データを読み込んだ時にクリップへ持たせた _difficultyLabel＝srcLabel） */
+function reviewLabels(){ const out=[];
+  for(const dn of OUT_DIFFS){ const s=diffSecsOf(dn).find(x=>x&&x.kind!=='null'&&typeof x.srcLabel==='string'&&x.srcLabel); if(s) out.push({label:s.srcLabel,difficulty:dn}); }
+  return out; }
+/** C3: 曲データを読み込んだ時に拍を付け替えた難易度の、元の譜面のテンポ（srcTp）。付け替えていなければ null */
+function reviewRetime(dn){ const s=diffSecsOf(dn).find(x=>x&&x.kind!=='null'&&srcTpOk(x.srcTp)); return s?s.srcTp:null; }
+/** 指摘の位置（NLM の拍）へ: その難易度へ切り替え、±0.01拍の物（無ければ ±1/16拍の一番近い物。範囲は中の物）を選んで移動。
+ * ノーツ類が無ければ同じ探し方でライトを選ぶ。ロック・単独編集の外・リンクの子の物は選ばない（数だけ返す） */
+async function reviewJump(dn,spots){
+  if(!diffOptOf(dn)) return {kind:'nodiff'};
+  if(!diffIsCurrent(dn)){
+    switchDiffByIndex(OUT_DIFFS.indexOf(dn));
+    for(let i=0;i<40&&!diffIsCurrent(dn);i++) await new Promise(r=>setTimeout(r,50));   // 難易度の読込（非同期）を待つ
+    if(!diffIsCurrent(dn)) return {kind:'fail'};
+  }
+  if(playing) pause();
+  flushFlatEdits();
+  const pool=[];
+  for(const o of notes) pool.push({beat:o.beat,ref:o});
+  for(const o of bombs) pool.push({beat:o.beat,ref:o});
+  for(const o of walls) pool.push({beat:o.beat,ref:o});
+  for(const o of arcs) pool.push({beat:o.b,ref:o});
+  for(const o of chains) pool.push({beat:o.b,ref:o});
+  let r=rvPickTargets(pool,spots), light=false, locked=0;
+  if(r.kind==='none'){ const r2=rvPickTargets(lightEvents.map(ev=>({beat:ev.beat,ref:ev})),spots); if(r2.kind!=='none'){ r=r2; light=true; } }
+  if(light){ selection.clear(); lightSelection=new Set(r.refs); gizmoMode=null; }
+  else { const ok=r.refs.filter(o=>!objLockedN(o)); locked=r.refs.length-ok.length;
+    selection=new Set(ok); lightSelection.clear(); gizmoMode=ok.some(o=>o.kind!=='chain')?'move':null; }
+  seekEase(r.seek);   // カメラも着地点（再生ヘッド）へ寄る
+  return {kind:r.kind,light,n:r.refs.length,locked,seek:r.seek,delta:r.delta};
+}
+/** 書き出した .txt の保存: 書き出しの出力フォルダ（INFO の書き出しノードで選んだフォルダ。譜面のフォルダの1つ上＝譜面の zip に入らない）へ。
+ * 無ければダウンロード。exe 版は app.py の _WRITE_EXTS（.txt）と許可済みの出力フォルダの中だけ書ける */
+async function reviewSaveTxt(name,text){
+  if(outDirHandle){
+    try{ const fh=await outDirHandle.getFileHandle(name,{create:true}); const w=await fh.createWritable(); await w.write(text); await w.close();
+      return {ok:true,where:(outDirHandle.name?outDirHandle.name+'/':'')+name}; }
+    catch(err){ return {ok:false,err:String(err&&err.message||err)}; }
+  }
+  try{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'text/plain'})); a.download=name; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000); return {ok:true,download:true}; }
+  catch(err){ return {ok:false,err:String(err&&err.message||err)}; }
+}
+var reviewPanel=null;   // var＝作る前に resetAllState・projSig・loadLang 等から参照されても TDZ で落ちない（songAna と同じ）
+reviewPanel=installReviewPanel({t,tf,dispDiff,stat,
+  curDiff:curDiffDn, diffs:()=>OUT_DIFFS.map(dn=>({dn,has:!!diffOptOf(dn)})), labels:reviewLabels, retime:reviewRetime, jump:reviewJump,
+  snapshot:()=>snapshot('review'), dirty:()=>{ metaDirty=true; }, collect:collectMapCheckInput, rating:()=>ratingClient,
+  saveTxt:reviewSaveTxt, outBase:()=>((graphIO&&graphIO.out&&graphIO.out.folderName)||(infoBase&&infoBase._songName)||'NLM')});
+/** タイムライン（NLE の数字の帯の下の方）の審査の指摘の印。今の難易度の分だけ。重さの色・済みは薄く・選んでいる指摘は縦の線（範囲は帯） */
+const _rvRects=[];   // 印の当たり判定（最後の描画の時点・キャンバスの px）
+const RV_SEV_COL={X:'#ff5a6a','?':'#f0a03c',S:'#5aa8ff',N:'#a0a6b0','':'#f2c94c'};
+function drawReviewMarks(bx){
+  _rvRects.length=0;
+  const ms=reviewPanel?reviewPanel.marks(curDiffDn()):[]; if(!ms.length) return;
+  const bot=LRULER-MKRH-TPRH;   // 数字の帯の下端（数字は上の方に描いてある）
+  ndg.save(); ndg.beginPath(); ndg.rect(LGUT,0,ndW-LGUT,ndH); ndg.clip();
+  const curM=[];
+  for(const m of ms){ const col=RV_SEV_COL[m.sev||'']||RV_SEV_COL[''];
+    ndg.globalAlpha=m.done?0.35:1; ndg.fillStyle=col;
+    for(const s of m.spots){ const xa=bx(s.a);
+      if(s.b!=null){ const xb=Math.max(bx(s.b),xa+3); if(xb<LGUT-4||xa>ndW+4) continue;
+        ndg.beginPath(); ndg.roundRect(xa,bot-6,xb-xa,4,2); ndg.fill();
+        ndg.beginPath(); ndg.moveTo(xa,bot-9); ndg.lineTo(xa,bot-1); ndg.lineWidth=1.5; ndg.strokeStyle=col; ndg.stroke();
+        _rvRects.push({id:m.id,x:xa-3,y:bot-10,w:xb-xa+6,h:10}); }
+      else { if(xa<LGUT-5||xa>ndW+5) continue;
+        ndg.beginPath(); ndg.moveTo(xa-4,bot-8); ndg.lineTo(xa+4,bot-8); ndg.lineTo(xa,bot-1); ndg.closePath(); ndg.fill();
+        _rvRects.push({id:m.id,x:xa-5,y:bot-10,w:10,h:10}); } }
+    if(m.cur) curM.push(m); }
+  ndg.globalAlpha=1;
+  for(const m of curM){ const col=RV_SEV_COL[m.sev||'']||RV_SEV_COL[''];   // 選んでいる指摘: レーンの上にも位置を出す（範囲は薄い帯）
+    for(const s of m.spots){ const xa=bx(s.a);
+      if(s.b!=null){ const xb=Math.max(bx(s.b),xa+2); ndg.fillStyle=col; ndg.globalAlpha=0.10; ndg.fillRect(xa,LRULER,xb-xa,ndH-LRULER); ndg.globalAlpha=1; }
+      ndg.strokeStyle=col; ndg.lineWidth=1; ndg.setLineDash([4,3]); ndg.beginPath(); ndg.moveTo(Math.round(xa)+0.5,LRULER); ndg.lineTo(Math.round(xa)+0.5,ndH); ndg.stroke(); ndg.setLineDash([]); } }
+  ndg.restore();
+}
+const reviewMarkAt=(sx,sy)=>{ for(let i=_rvRects.length-1;i>=0;i--){ const r2=_rvRects[i]; if(sx>=r2.x&&sx<=r2.x+r2.w&&sy>=r2.y&&sy<=r2.y+r2.h) return r2; } return null; };
 // ---- 曲の解析（テンポの推定・構成の解析・2026-10-19）: 画面・通信・保存の形は js/analysis/song-analysis.js、解析は serve.py の /__analysis/* ----
 // ここは本体の状態との橋渡しだけ（目盛り・at・BPMと無音追加の適用・マーカー・移動）。帯はスペクトログラムの箱の上の段（#anaPane）
 /** 目盛り＝解析した時と比べる値（BPM・無音追加・テンポパート・Musicの配置・音源の名前）。変われば帯に「解析し直してください」 */
@@ -7466,7 +7939,9 @@ songAna=installSongAnalysis({t,tf,FONT,showErr,showOk,stat,
   hoverBeat:()=>tlHoverBeat??hoverBeat, setHover:b=>{ tlHoverBeat=(b==null)?null:Math.max(0,snapV(b)); }});
 // 難易度を測るプラグインの窓口（状態・測定結果）は「難易度を測る」パネルと譜面チェック（BL評価リストの★/Tech）で共有する
 const ratingClient=createRatingClient({t,collect:collectRatingInput});
-const mapCheckPanel=installMapCheckPanel({t,escHtml,dispDiff,collect:collectMapCheckInput,jump:mapCheckJump,autoLight:openAutoLight,coverFix:openCoverFit,rating:ratingClient});
+// AutoModder の判定のプラグインの窓口（譜面チェックの3つ目のタブ。js/automodder/・automodder_plugin.py）
+const amClient=createAutoModderClient({t,collect:collectAutoModderInput});
+const mapCheckPanel=installMapCheckPanel({t,escHtml,dispDiff,collect:collectMapCheckInput,jump:mapCheckJump,autoLight:openAutoLight,coverFix:openCoverFit,rating:ratingClient,automodder:amClient});
 // ---- カバー画像の補正（js/media/cover-fit.js）: 元の画像は変えず、カバーノードの data.fit={mode,bg} を書き出し・譜面チェックの時に当てる ----
 function connectedCoverFit(){ const cid=connectedNodeId('cover'), n=cid&&infoGraph.nodes[cid]; return (n&&n.data.fit)||null; }
 async function openCoverFit(after){   // after=補正した後に呼ぶ（譜面チェックの再実行）
@@ -7493,6 +7968,17 @@ async function collectRatingInput(){
   return {files:[{name:'Info.dat',text:JSON.stringify(info)}, ...diffFiles.map(d=>({name:d.name,text:JSON.stringify(d.json)}))]};
 }
 const ratingPanel=installRatingPanel({t,escHtml,dispDiff,rating:ratingClient});
+// ---- AutoModder の判定（別配布のプラグイン nlm-automodder・automodder_plugin.py）: 書き出すのと同じ Info.dat/.dat と、書き出す song.egg の長さを渡す ----
+async function collectAutoModderInput(){
+  if(!currentDiffName) return {error:t('mc.noChart','チェックする譜面がありません')};
+  stashCurrentDiff(); applyInfoGraph();
+  const diffFiles=collectExportDiffs();
+  if(!diffFiles.length) return {error:t('m:書き出せる難易度がありません（ノーツ/ライトが空です）','書き出せる難易度がありません（ノーツ/ライトが空です）')};
+  const len=eggLength();   // AutoModder は曲の長さを Cold End・Outside・Light に使う（無いと確かめられない）
+  if(!(len>0)) return {error:t('am.noAudio','音源がありません。AutoModder は曲の長さを使うので、音源を読み込んでから確かめてください。')};
+  const info=buildExportInfo(diffFiles,'');
+  return {files:[{name:'Info.dat',text:JSON.stringify(info)}, ...diffFiles.map(d=>({name:d.name,text:JSON.stringify(d.json)}))], songLength:len};
+}
 // ---- 自動ライティング（js/lighting/auto-light.js）: 一番ノーツの多い難易度から作り、中身のある全難易度へ同じものを配る ----
 // 置き方は「ライトのレーンを一番上に1本足し、曲の頭から最後までの1クリップ」。既存のライトには触れない（重なりは利用者がレーン単位で選ぶ）
 function autoLightPlan(){
@@ -7561,7 +8047,7 @@ async function exportMap(forceEgg=false){
   const covN=extraNodes.find(n=>n.kind==='cover'&&graphEdges.some(e=>e.sig==='cover'&&e.fromId===n.id&&e.toId==='out'));
   if(covN&&covN.handle&&dest){
     try{ const f=await covN.handle.getFile(), fit=connectedCoverFit();
-      const r=fit?await fitCoverImage(f,fit):{blob:f,name:f.name};   // 補正の設定がある時だけ補正（無ければ従来どおりバイトコピー）
+      const r=fit?await fitCoverImage(f,fit):{blob:f,name:f.name||covN.name||'cover.png'};   // 補正の設定がある時だけ補正（無ければ従来どおりバイトコピー）。名前の無い Blob でも止まらない
       coverName='cover.'+((r.name.match(/\.([^.]+)$/)||[,'png'])[1].toLowerCase());
       const ch=await dest.getFileHandle(coverName,{create:true}); const cw=await ch.createWritable();
       await cw.write(await r.blob.arrayBuffer()); await cw.close();
@@ -7620,18 +8106,19 @@ async function exportMap(forceEgg=false){
   }
   const info=buildExportInfo(diffFiles, coverName);
   const files2=[['Info.dat',JSON.stringify(info,null,2)], ...diffFiles.map(d=>[d.name,JSON.stringify(d.json)])];
+  const lostNote=exportLostNote(diffFiles);   // 元の譜面から読んだが書き出さない物（ライトボックス・v4 の NJS の変化）
   // --- 書き込み ---
   if(dest){
     try{
       for(const [name,text] of files2){ const fh=await dest.getFileHandle(name,{create:true});
         const w=await fh.createWritable(); await w.write(text); await w.close(); }
       const listed=['Info.dat',...diffFiles.map(d=>d.name),coverName,eggWritten&&'song.egg'].filter(Boolean).join(' / ');
-      showOk(tf('msg.exportedFolder','書き出しました: 「{folder}」に {list}{warn}',{folder:destLabel,list:listed,warn:eggWarn}));
+      showOk(tf('msg.exportedFolder','書き出しました: 「{folder}」に {list}{warn}',{folder:destLabel,list:listed,warn:eggWarn+lostNote}));
     }catch(err){ showErr(tf('msg.exportFail','書き出し失敗: {err}',{err})); }
   } else {   // フォルダ未選択: 従来どおりダウンロード（Info.dat＋難易度のみ・song.egg等は不可）
     for(const [name,text] of files2){ const a=document.createElement('a');
       a.href=URL.createObjectURL(new Blob([text],{type:'application/json'})); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
-    stat('ダウンロードとして書き出しました（出力フォルダ未選択のため）');
+    stat(t('m:ダウンロードとして書き出しました（出力フォルダ未選択のため）','ダウンロードとして書き出しました（出力フォルダ未選択のため）')+lostNote);
   }
 }
 document.getElementById('saveBtn').addEventListener('click',()=>saveProject(false));
@@ -9696,6 +10183,27 @@ function sanitizeInfoGraph(){
 }
 const _coverHandles={};   // カバーノードid→画像handle（ランタイムのみ。名前はdataに保存）
 let _coverB64={};   // カバーノードid→画像のbase64 dataURL（プロジェクトに埋め込んで保存＝再取得に頼らず確実に復元）
+let _coverGen=0;    // 開く/新規のたびに増やす（前のプロジェクトのカバーの自動接続が、開いた後のプロジェクトへ入らないように）
+/** 画像のデータ（Blob）をカバー画像の参照（{name,getFile}）に包む。getFile は名前付きの File を返す（書き出しは拡張子をファイル名から決める）。
+ *  以前は名前の無い Blob を返し、同梱の画像から戻したカバー（ブラウザ版で開き直した時・exe 版で元の画像が無い時）と MEDIA から入れたカバーで、
+ *  補正の無い書き出しが「カバー画像のコピーに失敗」していた（2026-10-27） */
+function coverBlobHandle(name,blob){
+  const f=(blob instanceof File&&blob.name)?blob:new File([blob],name||'cover.png',{type:blob.type||''});
+  return {name:f.name,getFile:async()=>f};
+}
+/** 開く/新規の前（resetAllState）: 前のプロジェクトのカバー画像の控えを全部消す（2026-10-27）。
+ *  控えはカバーノードの id（既定は c1）で持つので、消さないと次のプロジェクトの同じ id のノードへ前の画像が残っていた:
+ *  カバーの無いプロジェクト・新規・画像を戻せないプロジェクト（同梱の画像が無く実パスも無い）で、INFO・右下の表示・譜面チェック・書き出しに
+ *  前の画像が使われ、保存するとその画像がプロジェクトに入った。 */
+function resetCoverState(){
+  _coverGen++;
+  for(const id in _coverHandles) delete _coverHandles[id];
+  _coverB64={};
+  for(const c of _coverImgs.values()) if(c&&c.bmp&&c.bmp.close) try{ c.bmp.close(); }catch(_){}
+  _coverImgs.clear();
+  for(const ex of extraNodes) if(ex&&ex.kind==='cover') ex.handle=null;
+  _coverKey=null;   // 右下の表示も決め直す（読み込み中の前の画像は updateCoverThumb が捨てる）
+}
 function blobToDataURL(blob){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(blob); }); }
 function dataURLToBlob(u){ const [h,b]=String(u).split(','); const mime=(h.match(/:(.*?);/)||[])[1]||'image/png'; const bin=atob(b); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i); return new Blob([a],{type:mime}); }
 async function refreshCoverB64(){   // 保存前に各カバー画像をbase64化（存在するノードのみ）
@@ -9705,15 +10213,16 @@ async function refreshCoverB64(){   // 保存前に各カバー画像をbase64�
   _coverB64=out;
 }
 async function restoreCoversFromB64(pj){   // 読込時: 同梱base64からカバー画像を復元（再取得に頼らない）
-  if(!pj||!pj.coverData) return; let any=false;
+  if(!pj||!pj.coverData) return; let any=false; const gen=_coverGen;
   for(const id in pj.coverData){
+    if(gen!==_coverGen) return;   // 復元の途中で別のプロジェクトを開いた/新規にした
     try{ _coverB64[id]=pj.coverData[id];
       const blob=dataURLToBlob(pj.coverData[id]);
       const nm=(infoGraph.nodes&&infoGraph.nodes[id]&&infoGraph.nodes[id].data&&infoGraph.nodes[id].data.name)||'cover';
-      _coverHandles[id]={name:nm,getFile:async()=>blob}; any=true;
+      _coverHandles[id]=coverBlobHandle(nm,blob); any=true;
       try{ await loadCoverPreview({id:'ig:'+id,handle:_coverHandles[id],name:nm}); }catch(_){}
     }catch(e){} }
-  if(any){ if(typeof applyInfoGraph==='function') applyInfoGraph(); if(typeof refreshInfoCards==='function') refreshInfoCards(); }
+  if(any&&gen===_coverGen){ if(typeof applyInfoGraph==='function') applyInfoGraph(); if(typeof refreshInfoCards==='function') refreshInfoCards(); }
 }
 let _infoSnapT=0,_infoSnapSup=false;   // INFOのUndoスナップショット（連続編集は600msで1回・複合操作は抑制フラグで1回）
 function infoSnapshot(){ if(_infoSnapSup) return; snapshot('info'); }
@@ -9753,7 +10262,7 @@ function applyInfoGraph(){   // アクティブな書き出しに接続された
       if(cv){ cv.name=c.data.name||''; cv.handle=_coverHandles[cid]||null;
         ensureEdges(); if(!graphEdges.some(e2=>e2.sig==='cover'&&e2.fromId===cv.id&&e2.toId==='out')) graphEdges.push({fromId:cv.id,toId:'out',sig:'cover'}); } }
     else if(cv){ cv.name=''; cv.handle=null; }
-    _coverKey=''; _inspCoverKey='';
+    _coverKey=null; _inspCoverKey='';   // null＝右下の表示を決め直す（''だとカバー無しの時に決め直さず、読み込み中の前の画像が後から入った）
   }
   { const pid=connectedNodeId('prev'), p=pid&&infoGraph.nodes[pid];   // 試聴区間（元音源の秒。書き出しで無音追加ぶんを足す）
     infoBase._previewStartTime=p?+p.data.start:PREV_DEF.start; infoBase._previewDuration=p?+p.data.dur:PREV_DEF.dur; }
@@ -9766,6 +10275,17 @@ function applyInfoGraph(){   // アクティブな書き出しに接続された
 }
 // ---- 複数の書き出しノード: 最後に選択したものがアクティブ（書き出し対象）、他は休止=灰色（旧ノードのactiveUids/休止ライン方式） ----
 const _outHandles={};   // oid→フォルダhandle（ランタイムのみ）
+let _outGen=0;          // 開く/新規のたびに増やす（前のプロジェクトの出力先の自動の接続が、開いた後のプロジェクトへ入らないように）
+/** 開く/新規の前（resetAllState）: 前のプロジェクトの書き出し先（outDirHandle・書き出しノードごとの控え _outHandles）を消す（2026-10-27）。
+ *  控えは書き出しノードの id（既定 o1）で持つので、消さないと次のプロジェクトへ前のフォルダが残っていた: カードは開いたプロジェクトの記録
+ *  （空・別のフォルダ）なのに「CustomLevelsフォルダ」が準備済みのまま・「再接続」も出ず、書き出し・審査の指摘の .txt が前のフォルダへ行った
+ *  （exe 版で開いたプロジェクトの実パスが未許可・記録が無い時、新規、ブラウザ版）。開いたプロジェクトの実パスが許可済みなら
+ *  tryAutoRestoreNativeInputs が繋ぎ直す。ブラウザ版は参照がセッション限定なので、開き直したら「再接続」 */
+function resetOutDirState(){
+  _outGen++;
+  outDirHandle=null;
+  for(const oid in _outHandles) delete _outHandles[oid];
+}
 let _infoClip=null;     // Ctrl+Cでコピーしたノード {items:[{kind:'src',t,x,y,data,cover}|{kind:'out',x,y,folderName}]}（コピー時点の実体を保持）
 function setActiveOut(oid){ const oNew=infoGraph.outs[oid]; if(!oNew) return;
   if(infoGraph.activeOut===oid){   // 既にアクティブ: ミラーだけ揃え直す（Undoには積まない）
@@ -9988,6 +10508,7 @@ function refreshInfoCards(){
             const cc=document.createElement('canvas'); cc.width=c.bmp.width; cc.height=c.bmp.height;
             cc.getContext('2d').drawImage(c.bmp,0,0); th.src=cc.toDataURL('image/png'); }
           th.style.display='block'; }
+        else { th.style.display='none'; el._thumbBmp=null; }   // 画像が無い・読めない（名前だけ）＝見本を出さない（以前は前に出していた画像＝前のプロジェクトの画像が残った）。読込中は c.bmp が前の画像
         nm.textContent=n.data.name||''; }
       else { th.style.display='none'; nm.textContent=TL('ui.noneSelected','（未選択）'); el._thumbBmp=null; }
       { const fe=el.querySelector('.nCovFit'), fit=n.data.fit;   // 補正の設定: 書き出しで実際に効く時だけ表示（基準を満たす画像なら何もしないため）
@@ -10212,7 +10733,7 @@ addEventListener('pointerup',e=>{
           stat(tf('msg.infoRewired','「{node}」を書き出し（{oid}）へ繋ぎ直しました',{node:infoNodeName(wi.t),oid:wi.oid})); }
         else if(src){ stat(tf('msg.infoTypeMismatch','タイプが違います（このポートは{node}用）',{node:infoNodeName(wi.t)}));
           if(wi.held) applyInfoGraph(); }
-        else if(wi.held){ applyInfoGraph(); metaDirty=true; stat(tf('msg.infoUnplug','「{node}」の配線をはがしました',{node:INFO_NODE_DEFS[wi.t][0]})); }   // 空き=はがれたまま
+        else if(wi.held){ applyInfoGraph(); metaDirty=true; stat(tf('msg.infoUnplug','「{node}」の配線をはがしました',{node:infoNodeName(wi.t)})); }   // 空き=はがれたまま
       }
     }
     if(wi.pre&&dumpDomain('info')!==wi.pre) pushHist('info',wi.pre);   // 実際に配線が変わった時だけUndoへ
@@ -10232,7 +10753,7 @@ inspEl.addEventListener('contextmenu',e=>{
   const w=infoWorldXY(e), wx=w.x, wy=w.y;
   showMenu(e.clientX,e.clientY,[
     ...Object.keys(INFO_NODE_DEFS).map(k=>[
-      tf('ctx.addInfoNode','＋ {node} ノード',{node:INFO_NODE_DEFS[k][0]}),()=>addSrcNode(k,wx,wy)]),
+      tf('ctx.addInfoNode','＋ {node} ノード',{node:infoNodeName(k)}),()=>addSrcNode(k,wx,wy)]),
     [t('ctx.addOutNode','＋ 書き出しノード'),()=>addOutNode(wx,wy)],
   ]);
 });
@@ -10243,7 +10764,7 @@ function addSrcNode(t,x,y,copyFrom){   // 新規/複製=独立したデータ箱
   infoGraph.nodes[id]={t,x,y,data:src?structuredClone(src.data):defInfoData(t)};
   if(t==='cover'&&copyFrom&&_coverHandles[copyFrom]) _coverHandles[id]=_coverHandles[copyFrom];
   _inSel=new Set([id]); layoutInfoNodes(); infoSelApply(); metaDirty=true;
-  stat(tf('msg.infoNodeAdded','{node}ノードを{action}しました',{node:INFO_NODE_DEFS[t][0],action:copyFrom?TL('word.duplicated','複製'):TL('word.added','追加')})); return id; }
+  stat(tf('msg.infoNodeAdded','{node}ノードを{action}しました',{node:infoNodeName(t),action:copyFrom?TL('word.duplicated','複製'):TL('word.added','追加')})); return id; }
 function deleteSrcNode(id){ const n=infoGraph.nodes[id]; if(!n) return;
   if(_pvPlay&&_pvPlay.id===id) stopPrevPlay();
   infoSnapshot();
@@ -10392,7 +10913,9 @@ function _tick(){
   updateArcEditSlide();   // アークのmu/tmu/巻き方向パネル（選択箱の上に追従）
   updateChainOverlay();
   ensureSelPool(selection.size); let si=0;
-  ensureDupPool(dupNoteSet.size+dupLightSet.size+dupChainCells.size); let di=0;   // 重複の黄色枠（ノーツ/ボム+チェーン頭尾+ライトチップ共用プール。チェーンは最大2マスぶん余分に確保）
+  // ライトの分は画面に出せるチップの数（CHIP_MAX）まで＝それ以上は使われない（2026-10-27。以前は曲全体の重複ライトの数だけ作り、重複ライトが数千ある譜面で
+  // 3Dの部品が数千個増え、three.js が毎フレーム全部の行列を計算して1フレーム0.1〜0.2秒かかっていた）
+  ensureDupPool(dupNoteSet.size+dupChainCells.size+Math.min(dupLightSet.size,CHIP_MAX)); let di=0;   // 重複の黄色枠（ノーツ/ボム+チェーン頭尾+ライトチップ共用プール。チェーンは最大2マスぶん余分に確保）
   swingPendingFlush();   // 選択中に向き/色を変えたノーツが選択から外れたら判定
   if(swingWarnSet.size&&performance.now()-_swingRecheckAt>300) swingWarnRecheck();   // 赤枠のノーツを直したら消す（定期再判定）
   ensureSwingPool(swingWarnSet.size); let wi=0;
@@ -10664,6 +11187,9 @@ document.getElementById('mFileMenu').addEventListener('click',async e=>{
   else if(act==='rating'){ closeFileMenu(); ratingPanel.open(); }
   else if(act==='autolight'){ closeFileMenu(); openAutoLight(); }
   else if(act==='analyze'){ closeFileMenu(); if(songAna) songAna.start(); }   // 曲の解析（テンポ・構成）
+  else if(act==='reviewload'){ closeFileMenu(); reviewPanel.openFile(); }   // 審査の指摘を読み込む（.txt・複数可）
+  else if(act==='reviewpaste'){ closeFileMenu(); reviewPanel.openPaste(); }   // 審査の指摘を貼り付けて読む（Discord の本文）
+  else if(act==='reviewlist'){ closeFileMenu(); reviewPanel.open(); }   // 審査の指摘の一覧
   else if(act==='update'){ closeFileMenu(); updater.manualCheck(); }
 });
 
@@ -10851,6 +11377,12 @@ function openDiffMenu(dn,idx,seg){
 // ---- BPMフィールド（難易度バーの右・Blender式: ホバーで‹›・中央クリック=その場入力。Musicレーン左溝から移設） ----
 // BPM/プレビュー秒の配線は wireStepper で共通化（下部・langSel近く）
 // ---- 設定クイック（難易度バー左: 環境＋ノーツ色）。設定ノードの env/red/blue を直接編集し applyInfoGraph で全体反映 ----
+/** 接続中の設定ノードの環境を env にする（読み込んだ譜面の環境を引き継ぐ時）。Default は空（トップバーの環境の選び方と同じ）。
+ * ファイル由来の文字なので英数字と _ だけ受け付ける。履歴は呼ぶ側 */
+function setConnectedEnv(env){ env=String(env||'').trim();
+  if(!/^[A-Za-z0-9_]{1,64}$/.test(env)) return;
+  const sid=connectedNodeId('set'); if(!sid) return;
+  infoGraph.nodes[sid].data.env=(env==='DefaultEnvironment'?'':env); metaDirty=true; applyInfoGraph(); }
 function quickSetNode(){   // アクティブ書き出しに接続中の設定ノード（無ければ最初の設定ノード）
   let id=connectedNodeId('set');
   if(!id){ for(const k in infoGraph.nodes){ if(infoGraph.nodes[k].t==='set'){ id=k; break; } } }
@@ -10879,6 +11411,12 @@ function syncSetQuick(){   // トップバーの表示を「実効値」へ同�
   if(!v) v='DefaultEnvironment';   // 実効環境名（正規化）
   const short=n=>n.replace(/Environment$/,'');
   const nm=document.getElementById('sqEnvName'); if(nm&&nm.textContent!==short(v)) nm.textContent=short(v);
+  // 3Dプレビューに無い環境（Weave・BTS・Billie 等・曲データを読み込んだ譜面から引き継いだ物）: 名前はそのまま書き出し、プレビューは Default で見せる（pv4EnvOf→
+  // preview-v4 が知らない環境は Default）。そのことを小さな印とツールチップで添える（2026-10-27）。毎フレーム t() で作る＝言語を切り替えればすぐ訳し直される
+  { const noPv=!PV_ENVS.includes(v), mk=document.getElementById('sqEnvNoPv');
+    if(mk&&mk.hidden===noPv){ mk.hidden=!noPv; btn.classList.toggle('noPv',noPv); }
+    const tt=t('ui.envStage','環境（ステージ）')+(noPv?'\n'+tf('ui.envNoPv','「{env}」は3Dプレビューに無い環境のため、プレビューは Default で表示しています（書き出しはこの環境のまま）',{env:short(v)}):'');
+    if(btn.title!==tt) btn.title=tt; }
   const panel=document.getElementById('sqEnvPanel');
   if(panel){ [...panel.children].forEach(r=>r.classList.toggle('on',r.dataset.env===v));
     btn.classList.toggle('on',panel.style.display==='block'); }   // ボタンのハイライト=パネル開閉に同期
@@ -12064,6 +12602,8 @@ let perfFrames=0, perfLast=performance.now();
   try { rt.placeClipLine = placeClipLine; } catch (_) {}
   try { rt.addSongLine = addSongLine; } catch (_) {}
   try { rt.bulkLoadSongData = bulkLoadSongData; } catch (_) {}
+  try { rt.reviewPanel = reviewPanel; } catch (_) {}
+  try { rt.reviewJump = reviewJump; } catch (_) {}
   try { rt.firstFreeTrackIn = firstFreeTrackIn; } catch (_) {}
   try { rt.resetAllState = resetAllState; } catch (_) {}
   try { rt.applyProject = applyProject; } catch (_) {}

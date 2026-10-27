@@ -14,6 +14,7 @@ datas = [
     ('editor.html', '.'),
     ('serve.py', '.'),
     ('rating_plugin.py', '.'),   # 難易度を測る（BL星の近似）プラグインの取り込み・実行。serve.py が import する
+    ('automodder_plugin.py', '.'),   # AutoModder の判定のプラグインの取り込み・実行。serve.py が import する
     ('app_update.py', '.'),      # 本体の自動更新。serve.py・app.py が import する
     ('media_library.py', '.'),   # MEDIA ライブラリ（記録・走査・プレイ記録）。serve.py が import する
     ('map_hash.py', '.'),        # 譜面のハッシュ。media_library.py が import する
@@ -33,7 +34,7 @@ datas = [
 ]
 
 # pywebview の Windows(WebView2) バックエンドと pythonnet を確実に取り込む
-hiddenimports = ['serve', 'rating_plugin', 'app_update', 'media_library', 'map_hash', 'native_paths', 'song_details', 'beatsaver_api',
+hiddenimports = ['serve', 'rating_plugin', 'automodder_plugin', 'app_update', 'media_library', 'map_hash', 'native_paths', 'song_details', 'beatsaver_api',
                  'song_analysis', 'song_analysis.service', 'song_analysis.tempo', 'song_analysis.structure']
 # 曲の解析が使う librosa・numpy・scipy・scikit-learn・numba・llvmlite・soundfile・soxr は、song_analysis から見つかり、
 # pyinstaller-hooks-contrib のフック（librosa は lazy_loader が読む .pyi も・numba・llvmlite・sklearn・soundfile）で取り込まれる。

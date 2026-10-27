@@ -4,6 +4,7 @@ import { runMapCheck, STATUS, CHECK_NAMES } from './mapcheck.js';
 import { runBlCriteria, BL } from './blcriteria.js';
 import { blView } from './blcriteria-view.js';
 import { blStars } from './bl-stars.js';
+import { amView } from '../automodder/automodder-view.js';
 
 // 項目の日本語名（{}はチェックが返す数値）。英語版は lang/en.json の mc.k.* で上書きされる
 const JA = {
@@ -66,7 +67,8 @@ const COVER_FIX_BL = new Set(['coverRatio', 'coverSize', 'coverFormat']);
 export function installMapCheckPanel(api) {
   // autoLight / coverFix (終わったら呼ぶ関数)＝自動ライティング / カバー画像の補正の確認を開く（無ければボタンを出さない）
   // rating＝難易度を測るプラグインの窓口（rating-client.js）。BL評価リストの★/Techを自動で入れる（無ければ手入力だけ）
-  const { t, escHtml, collect, jump, dispDiff, autoLight, coverFix, rating } = api;
+  // automodder＝AutoModder の判定のプラグインの窓口（automodder-client.js）。3つ目のタブ（無ければタブを出さない）
+  const { t, escHtml, collect, jump, dispDiff, autoLight, coverFix, rating, automodder } = api;
   const FIX = { autolight: [autoLight, 'mc.fixAutoLight', '💡 自動ライティング…'], cover: [coverFix, 'mc.fixCover', '🖼 カバー画像を補正…'] };
   const fixBtn = (kind = 'autolight') => FIX[kind][0] ? `<button class="mcFix" data-fix="${kind}">${escHtml(t(FIX[kind][1], FIX[kind][2]))}</button>` : '';
   const fixKindMc = key => LIGHT_FIX_MC.has(key) ? 'autolight' : COVER_FIX_MC.has(key) ? 'cover' : null;
@@ -83,8 +85,8 @@ export function installMapCheckPanel(api) {
 
   let el = null, last = null, busy = false, input = null, blRes = null;
   const expanded = new Set();   // 「他N件」を開いた項目（再描画しても開いたまま）
-  // タブ: 'mc'＝BS Map Check と同じ判定 / 'bl'＝NLM版 BeatLeader評価リスト（開いているタブだけは覚えておく）
-  let tab = 'mc'; try { if (localStorage.getItem('bsnm_mcTab') === 'bl') tab = 'bl'; } catch (_) {}
+  // タブ: 'mc'＝BS Map Check と同じ判定 / 'bl'＝NLM版 BeatLeader評価リスト / 'am'＝AutoModder の判定（開いているタブだけは覚えておく）
+  let tab = 'mc'; try { const v = localStorage.getItem('bsnm_mcTab'); if (v === 'bl' || (v === 'am' && automodder)) tab = v; } catch (_) {}
   const blSt = { onlyIssues: false, expanded };
   const stars = blStars({ t, escHtml, dispDiff, rating });   // ★/Tech の欄（自動計算・手入力。アプリを開いている間だけ保持）
   const blv = blView({ t, escHtml, dispDiff, mcLabel: key => t('mc.k.' + key, JA[key] || key),
@@ -104,6 +106,14 @@ export function installMapCheckPanel(api) {
   // 測り終わった・取り込んだ等 → 判定をやり直して描き直す。★/Techの欄に入力中なら、欄を離れるまで描き直さない（打っている途中の値が消えるため）
   let renderLater = false;
   const typingStars = () => { const a = document.activeElement; return !!(a && a.tagName === 'INPUT' && a.closest('#mcPanel .blStars')); };
+  const amv = automodder ? amView({ t, escHtml, dispDiff, am: automodder }) : null;
+  // AutoModder のタブを見ている時だけ動かす（プラグインがあれば。譜面が前回確かめた時のままなら動かし直さない）
+  const autoAm = async () => {
+    if (!automodder || tab !== 'am' || !isOpen()) return;
+    await automodder.ensureStatus();   // PCの中の確認だけ（GitHubへは通信しない）
+    if (automodder.installed() && tab === 'am' && isOpen()) automodder.run({ ifChanged: true });
+  };
+  if (automodder) automodder.subscribe(() => { if (isOpen() && tab === 'am') render(); });
   if (rating) rating.subscribe(() => {
     if (!isOpen()) return;
     runBl();
@@ -115,18 +125,19 @@ export function installMapCheckPanel(api) {
     el = document.createElement('div'); el.id = 'mcPanel';
     el.innerHTML = `<div class="mcHead"><span class="mcTitle"></span><span class="mcHeadBtns">
         <button class="mcRerun"></button><button class="mcClose" aria-label="close">✕</button></span></div>
-      <div class="mcTabs"><button class="mcTab" data-tab="mc"></button><button class="mcTab" data-tab="bl"></button></div>
+      <div class="mcTabs"><button class="mcTab" data-tab="mc"></button><button class="mcTab" data-tab="bl"></button>${automodder ? '<button class="mcTab" data-tab="am"></button>' : ''}</div>
       <div class="mcSum"></div><div class="mcBody"></div><div class="mcFoot"></div>`;
     document.body.appendChild(el);
     el.querySelector('.mcClose').addEventListener('click', close);
     el.querySelector('.mcRerun').addEventListener('click', () => run());
     el.querySelectorAll('.mcTab').forEach(b => b.addEventListener('click', () => {
       tab = b.dataset.tab; try { localStorage.setItem('bsnm_mcTab', tab); } catch (_) {}
-      el.querySelector('.mcBody').scrollTop = 0; render(); autoRate();
+      el.querySelector('.mcBody').scrollTop = 0; render(); autoRate(); autoAm();
     }));
     const body = el.querySelector('.mcBody');
     body.addEventListener('click', ev => {   // 拍チップと「他N件」は描画し直すので委譲で受ける（パネル本体は固定要素）
       if (stars.onClick(ev)) { runBl(); render(); return; }   // ★/Tech の欄のボタン（自動計算・取り込み・自動に戻す）
+      if (amv && amv.onClick(ev)) { render(); return; }   // AutoModder のタブのボタン（取り込み・もう一度・更新の確認）
       const fx = ev.target.closest('.mcFix');
       if (fx) { const fn = FIX[fx.dataset.fix] && FIX[fx.dataset.fix][0]; if (fn) fn(() => run()); return; }   // 直したらチェックし直す
       const more = ev.target.closest('.mcMore');
@@ -134,7 +145,9 @@ export function installMapCheckPanel(api) {
       const chip = ev.target.closest('.mcBeat'); if (!chip || !last) return;
       const ref = chip.dataset.ref.split(':');
       let dn = null, o = null;
-      if (ref[0] === 'bl') {   // bl:項目:所見:対象
+      if (ref[0] === 'am') {   // am:結果:物（AutoModder のタブ）
+        const r = amv && amv.ref(ref); if (r) { dn = r.dn; o = r.o; }
+      } else if (ref[0] === 'bl') {   // bl:項目:所見:対象
         const r = blRes && blRes.rules && blRes.rules[+ref[1]], f = r && r.findings[+ref[2]];
         if (f && f.objs) { dn = f.d; o = f.objs[+ref[3]]; }
       } else {
@@ -148,6 +161,7 @@ export function installMapCheckPanel(api) {
     body.addEventListener('change', ev => {   // BL評価リストの「違反・要確認だけ」と★/Tech（入力を確定した時だけ描き直す）
       const x = ev.target;
       if (x.classList.contains('blOnlyChk')) { blSt.onlyIssues = x.checked; render(); return; }
+      if (amv && amv.onChange(ev)) return;   // AutoModder のタブの版の選択
       // 描き直しは、クリックした次の欄にフォーカスが移ってから（同期で描き直すと、移る先の欄が消えてフォーカスが外れる）
       if (stars.onChange(x)) { runBl(); setTimeout(render, 0); }
     });
@@ -200,10 +214,14 @@ export function installMapCheckPanel(api) {
   function render() {
     if (!el) return;
     el.classList.toggle('blMode', tab === 'bl');
+    el.classList.toggle('amMode', tab === 'am');
     el.querySelectorAll('.mcTab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
     el.querySelector('.mcTab[data-tab="mc"]').textContent = t('mc.tabMc', 'BS Map Check と同じ判定');
     el.querySelector('.mcTab[data-tab="bl"]').textContent = t('mc.tabBl', 'NLM版 BL評価リスト');
+    const amTab = el.querySelector('.mcTab[data-tab="am"]');
+    if (amTab) { amTab.textContent = t('mc.tabAm', 'AutoModder'); amTab.title = t('mc.tabAmTip', 'AutoModder（既定の設定）の判定を、別配布のプラグインで動かした結果'); }
     if (tab === 'bl') return renderBl();
+    if (tab === 'am') return renderAm();
     el.querySelector('.mcTitle').textContent = t('mc.title', '譜面チェック（BeatLeader基準）');
     el.querySelector('.mcRerun').textContent = busy ? t('mc.running', 'チェック中…') : t('mc.rerun', '↻ 再チェック');
     el.querySelector('.mcRerun').disabled = busy;
@@ -224,7 +242,7 @@ export function installMapCheckPanel(api) {
         : (sortByStatus(d.results).map(([r, ri]) => itemHTML(r, di, ri)).join('') || `<div class="mcNone">${escHtml(t('mc.none', '問題は見つかりませんでした'))}</div>`);
       parts.push(`<details class="mcSec" open><summary>${escHtml(dispDiff(d.difficulty))}${countsHTML(statusCounts(d.results))}</summary>${items}</details>`);
     });
-    const opened = [...body.querySelectorAll('details.mcSec:not(.blSec)')].map(x => x.open), sc = body.scrollTop;
+    const opened = [...body.querySelectorAll('details.mcSec:not(.blSec):not(.amSec)')].map(x => x.open), sc = body.scrollTop;
     body.innerHTML = parts.join('');
     body.querySelectorAll('details.mcSec').forEach((x, i) => { if (i < opened.length) x.open = opened[i]; });   // 再チェックしても開閉とスクロール位置は保つ
     body.scrollTop = sc;
@@ -250,6 +268,20 @@ export function installMapCheckPanel(api) {
     if (fk) { const n = body.querySelector(`.blStars input[data-${fk[0]}="${CSS.escape(fk[1])}"]`); if (n) n.focus(); }   // 入力中の★/Techの欄はフォーカスを戻す
   }
 
+  function renderAm() {
+    el.querySelector('.mcTitle').textContent = t('mc.title', '譜面チェック（BeatLeader基準）');
+    const ab = automodder.state.busy === 'run';
+    el.querySelector('.mcRerun').textContent = busy || ab ? t('mc.running', 'チェック中…') : t('mc.rerun', '↻ 再チェック');
+    el.querySelector('.mcRerun').disabled = busy || ab;
+    el.querySelector('.mcFoot').innerHTML = amv.foot();
+    el.querySelector('.mcSum').textContent = '';
+    const body = el.querySelector('.mcBody');
+    const opened = new Map([...body.querySelectorAll('details[data-sec]')].map(x => [x.dataset.sec, x.open])), sc = body.scrollTop;
+    body.innerHTML = amv.render({ expanded }, CHIP_MAX);
+    body.querySelectorAll('details[data-sec]').forEach(x => { if (opened.has(x.dataset.sec)) x.open = opened.get(x.dataset.sec); });   // 開閉とスクロール位置は保つ
+    body.scrollTop = sc;
+  }
+
   async function run() {
     if (busy) return; busy = true; render();
     try {
@@ -259,7 +291,7 @@ export function installMapCheckPanel(api) {
     } catch (e) { last = { error: String(e && e.message || e) }; input = null; }
     runBl();
     busy = false; render();
-    autoRate();
+    autoRate(); autoAm();
   }
   function open() { if (!el) build(); el.style.display = 'flex'; render(); run(); }
   function close() { if (el) el.style.display = 'none'; }

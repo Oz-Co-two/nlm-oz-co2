@@ -39,12 +39,12 @@ def test_write_only_inside_approved_dir(t):
 
 
 def test_write_extensions(t):
-    '''書き込める拡張子は _WRITE_EXTS だけ（.dat/.egg/.json/画像）。実行ファイル系は不可・大文字小文字は無視'''
+    '''書き込める拡張子は _WRITE_EXTS だけ（.dat/.egg/.json/.txt/画像）。実行ファイル系は不可・大文字小文字は無視'''
     app, acc, out, store, base = _setup()
-    t.eq(app._WRITE_EXTS, {".dat", ".egg", ".json", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}, "許可拡張子の一覧")
-    for n in ("Info.dat", "song.egg", ".nlm-egg.json", "cover.png", "cover.JPG", "A.Dat"):
+    t.eq(app._WRITE_EXTS, {".dat", ".egg", ".json", ".txt", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}, "許可拡張子の一覧")
+    for n in ("Info.dat", "song.egg", ".nlm-egg.json", "cover.png", "cover.JPG", "A.Dat", "Song_review_reply.txt"):
         t.ok(acc.can_write(str(out / n)), n)
-    for n in ("evil.exe", "evil.bat", "evil.cmd", "evil.lnk", "evil.ps1", "evil.dll", "evil.js", "evil", "evil.dat.exe", "a.txt"):
+    for n in ("evil.exe", "evil.bat", "evil.cmd", "evil.lnk", "evil.ps1", "evil.dll", "evil.js", "evil", "evil.dat.exe", "evil.txt.exe", "a.txt:ads"):
         t.ok(not acc.can_write(str(out / n)), n)
 
 

@@ -15,9 +15,11 @@
 <link rel="stylesheet" href="css/editor3d.css">
 <link rel="stylesheet" href="css/chrome.css">
 <link rel="stylesheet" href="css/mapcheck.css">
+<link rel="stylesheet" href="css/automodder.css">
 <link rel="stylesheet" href="css/rating.css">
 <link rel="stylesheet" href="css/update.css">
 <link rel="stylesheet" href="css/analysis.css">
+<link rel="stylesheet" href="css/review.css">
 </head>
 <body>
 <div id="bootCover"></div>
@@ -41,6 +43,10 @@
       <button data-act="rating"><span data-i18n="menu.rating">難易度を測る（BeatLeaderの星の近似）…</span><span class="mkey"></span></button>
       <button data-act="autolight"><span data-i18n="menu.autoLight">自動ライティング…</span><span class="mkey"></span></button>
       <button data-act="analyze"><span data-i18n="menu.analyze">曲を解析（テンポ・構成）…</span><span class="mkey"></span></button>
+      <hr>
+      <button data-act="reviewload"><span data-i18n="menu.reviewLoad">審査の指摘を読み込む…</span><span class="mkey"></span></button>
+      <button data-act="reviewpaste"><span data-i18n="menu.reviewPaste">審査の指摘を貼り付けて読む…</span><span class="mkey"></span></button>
+      <button data-act="reviewlist"><span data-i18n="menu.reviewList">審査の指摘の一覧…</span><span class="mkey"></span></button>
       <hr>
       <button data-act="update"><span data-i18n="menu.update">更新を確認…</span><span class="mkey"></span></button>
     </div>
@@ -95,7 +101,7 @@
         <div id="nodeColBar"><div id="nodeColModeLabel" class="ncLabel" data-i18n-t="ui.tabNleInfo" title="Tabで NLE ⇄ INFO 切替"></div></div>
         <div id="diffTools">
           <div id="setQuick" data-i18n-t="ui.envStage" title="環境（ステージ）">
-            <button id="sqEnvBtn" data-i18n-t="ui.envStage" title="環境（ステージ）"><span id="sqEnvName">Default</span><span class="sqCaret">▼</span></button>
+            <button id="sqEnvBtn" data-i18n-t="ui.envStage" title="環境（ステージ）"><span id="sqEnvName">Default</span><span id="sqEnvNoPv" hidden>⚠</span><span class="sqCaret">▼</span></button>
             <div id="sqEnvPanel" class="tbpanel"></div>
           </div>
           <div id="noteCols" data-i18n-t="ui.noteColors" title="ノーツ色（左＝赤／右＝青）">

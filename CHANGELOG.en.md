@@ -8,6 +8,83 @@ For basic usage, see the [tutorial](docs/tutorial.en.md), the [advanced tutorial
 <!-- Format: one "## v1.2.3-oz" heading per version. Top-level bold items ("- **...**") are the headlines shown in the in-app
 update notice (tools/make_release.py puts them into update.json). Keep the same versions and the same number of headlines as CHANGELOG.md. -->
 
+## v2.1.0-oz
+
+- **NLM can now load ranking review notes and help you check them one by one on the map**
+  Review notes in the "beat - text" form (a .txt file or the text of a Discord message), such as the ones you receive in BeatLeader's ranking review,
+  can be loaded with "Load review notes…" or "Paste review notes…" in the File menu.
+  - The notes are listed in the "📝 Review notes" panel by difficulty, in the order they were written. Click a row to switch to that difficulty
+    and jump to that beat with the notes there selected (if nothing is exactly on that beat, the nearest objects are selected).
+  - The NLE's beat ruler shows a mark (▼) where there are notes. Click a mark to go to that note in the list.
+  - Mark notes you have fixed as "done", and add a reply to each note. The loaded notes, done marks and replies are saved in the project, and Ctrl+Z undoes changes.
+  - "Export…" writes the notes with your replies as a .txt in the same form (to send back to the reviewer). It can also write the results of NLM's map check
+    (the NLM BL criteria list and more) as an English .txt in the same form (AutoModder's "Import Mod" can read it too). Copy it to the clipboard or save it to the output folder.
+  - For difficulties whose beats were converted by "📥 Load song data" (see the "Load song data" item below), the beats in the notes are read as the original map's beats
+    and converted to NLM's beats.
+  - The size of the list text (11–20 px) can be changed with the "Aa" slider at the left of the count row, or with Ctrl+wheel over the list.
+- **The map check has a new "AutoModder" tab (an optional add-on plugin)**
+  It runs the automatic checks of AutoModder (a ChroMapper extension that reviewers often use) unchanged inside NLM and shows the results.
+  - To use it, install the add-on plugin nlm-automodder (about 12 MB, for Windows) with "📥 Install the plugin…" in the tab
+    (NLM connects to GitHub only when you press the install or update-check button).
+  - The results are listed for the song info (Info.dat) and each difficulty, most severe first (Error (Unrankable), Warning (Questionable) and so on). Click a beat to jump there.
+  - Each difficulty is checked with AutoModder's default settings. AutoModder differs from the current BeatLeader criteria in places (the R5.A vision block formula,
+    the wall dodge rate and so on). It is not an official BeatLeader or AutoModder tool, and the results are not ranking decisions.
+    The tab has an amber border so that it isn't mistaken for BS Map Check or the NLM BL criteria list.
+  - AutoModder uses the song length, so load the audio before checking.
+- **v4 maps can now be loaded**
+  Songs in the newer format (Info.dat 4.x) can now be put into the NLE by dragging them from MEDIA or with "📥 Load song data" (before, they could only be listed and their audio placed).
+  - The tempo is read from AudioData.dat. For lights, the basic lights and boosts are read.
+  - NLM still exports in the v3 format. "NJS events", which v3 doesn't have, and "light boxes", which NLM can't read, are lost on export.
+    NLM tells you at the bottom of the screen when loading and when exporting.
+  - The NJS events are still used by the NLM BL criteria list.
+- **Far fewer false findings in the NLM BL criteria list**
+  We checked it against 189 BeatLeader ranked maps and fixed the places where maps that passed the review were reported as violations.
+  The share of difficulties with no violation went from about 80% to 99%.
+  - The angle offset of notes (the fine angle) was calculated in the wrong direction, and fast streams merged separate swings into one (R4.B.1, R4.B.2). Both are fixed.
+    Notes of the same color that are slightly off (less than 1 ms) only because of rounding when saved are now treated as placed at the same time.
+  - Chains: a zero-length chain is no longer treated as reversed (R6.B.1), the curve is judged by the direction from the head position to each link (R6.B.2, R6.B.3),
+    and tiny overhangs from calculation rounding (up to 0.1 cell) are no longer violations (R6.C.2).
+  - R3.B (blocked swing start) now only reports objects that are still there when you swing (within 40 ms) (it used to appear in 84% of the ranked difficulties; now 2%).
+  - R7.B (bomb lighting) now judges the same way as the reviewers' tool (AutoModder). Brief dark moments of flashing lights no longer trigger it
+    (needs review went from 38% to 7% of the ranked difficulties).
+  - R8.A (wall dodges) uses the current criteria's numbers (250 ms to dodge, 235 ms as an exception; 2, 3.8 and 4 dodges per second).
+    Whether your head really has to move is approximated, so going over the limits is reported as needs review, not as a violation.
+  - R8.C (short walls) ignores decorative walls that are entirely outside the four lanes. Objects inside a time skip (the BPM briefly set very high)
+    are reported as needs review instead of violations in R8.C and R3.A.1 (overlaps).
+  - R4.A.6 (chain length) no longer counts almost-simultaneous shapes as sliders, and doesn't compare when there are no sliders or too few (fewer than 3).
+  - For difficulties whose original map had light boxes, the lighting checks (R10.A, R7.B) become manual checks, because NLM can't read those lights.
+- **Fixed timing offsets and missing parts when bringing in other people's maps with "📥 Load song data"**
+  - Maps whose BPM changes at the very start (beat 0), maps whose BPM changes differ between difficulties, and v2-format BPM changes (event type 100)
+    are now loaded with the correct tempo (before, the notes could drift from the music). For maps whose BPM changes differ between difficulties, NLM uses the tempo
+    shared by the most difficulties and converts the beats of the other difficulties so that their timing stays the same (it tells you which difficulties were converted).
+  - The environment (stage) of the loaded map is now carried over to the export (it used to become Default; if a song is already loaded, the current environment stays).
+    If the environment is not available in the 3D preview, ⚠ appears next to the environment name at the top of the screen and the preview shows Default
+    (the export keeps the original environment).
+  - v3 maps written with zero values left out could break the 3D view and editing, and export arc tails with the head's direction. Fixed.
+  - When a map has light boxes (the newer lighting system introduced in v3) or difficulties other than Standard (such as OneSaber, which NLM doesn't load),
+    NLM now tells you instead of dropping them silently. Light boxes can't be edited in NLM and are lost on export.
+  - Boosts (light color switching) in v3 maps are now loaded (before, they were not loaded and were lost on export).
+- **Maps with a huge number of lights no longer freeze NLM after loading**
+  Loading a map with around 100,000 lights used to make the screen sluggish, as if frozen, from then on. Fixed (it is ready in a few seconds).
+  - While loading, NLM shows the progress, such as "Loading audio…" and "Loading map… Hard (1/3)".
+  - When all difficulties together have 150,000 lights or more, NLM tells you once, when opening or loading ("This project has N lights in total"),
+    because editing may pause for a moment now and then while checking for unsaved changes.
+- **Bug fixes**
+  - In the English UI, the node name in the message shown when adding a node in INFO was still in Japanese. Fixed.
+  - After saving, just switching difficulties (with the difficulty buttons, the number keys or a beat in the map check) turned on the "unsaved" lamp
+    and asked for confirmation when closing, even though nothing had changed. Fixed.
+  - When exporting in the v3 format, boosts (light color switching) are now written to the place v3 defines for them (colorBoostBeatmapEvents)
+    (before, they were written in a way v3 no longer uses, so they might not work as boosts in the game).
+  - After opening an empty difficulty, moving to another difficulty and opening it again, notes and lights could not be placed
+    (the message said "... wiring is disconnected"). Fixed.
+  - After opening a project with a cover image and then opening another project, the previous cover image could stay in the bottom-right corner. Fixed.
+    When the next project had no cover image, or after New, the previous cover image was used for export and the map check, and saving put it into that project.
+  - Export failed with "Failed to copy cover image" for a cover restored from the image stored in the project (when the original image file was not found)
+    and for a cover placed from MEDIA together with the song info. Fixed.
+  - After opening another project or starting a new one, the previous project's output folder could stay "ready", so exports and saved review .txt files
+    went into that folder. Fixed. If the opened project's output folder has been chosen on this PC before, it still connects automatically;
+    otherwise "Reconnect" is shown.
+
 ## v2.0.0-oz
 
 - **NLM can now analyze a song to suggest the BPM and lead-in silence, and to show its structure (verse, chorus, ...)**

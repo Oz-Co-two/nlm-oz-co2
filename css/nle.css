@@ -129,6 +129,9 @@
 
    /* 最長ステージ(Kaleidoscope)+3文字ぶんで固定幅→ボタン幅もキャレット位置も一定 */
   #sqEnvBtn .sqCaret{font-size:8px;color:#7a7a7a;}
+  /* 3Dプレビューに無い環境の印（ツールチップに説明・2026-10-27）。出ている間は名前の幅を印＋すき間のぶん縮める＝ボタンの幅・▼の位置は変わらない */
+  #sqEnvNoPv{color:#e6b450;font-size:11px;line-height:1;}
+  #sqEnvBtn.noPv #sqEnvName{width:86px;}
 
    /* ▼は.dfArrと同じ控えめ */
   #sqEnvPanel{top:30px;min-width:150px;max-height:340px;overflow-y:auto;}

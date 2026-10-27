@@ -242,7 +242,7 @@ def _open_file_arg():
 _AUDIO_EXTS = {'.egg', '.ogg', '.oga', '.opus', '.mp3', '.m4a', '.aac', '.wav', '.flac', '.weba', '.webm'}
 _IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'}
 _READ_EXTS = _AUDIO_EXTS | _IMAGE_EXTS
-_WRITE_EXTS = {'.dat', '.egg', '.json'} | _IMAGE_EXTS   # Info.dat/各難易度.dat/song.egg/.nlm-egg.json/cover.*
+_WRITE_EXTS = {'.dat', '.egg', '.json', '.txt'} | _IMAGE_EXTS   # Info.dat/各難易度.dat/song.egg/.nlm-egg.json/cover.*/審査の指摘の形の書き出し(.txt・2026-10-27)
 
 # パスの比較・分類（_npath/_lpath/_path_kind/_is_under）は MEDIAライブラリ（media_library.py）と共用するため native_paths.py へ移した。
 # UNC を字面だけで判定する考え方の説明もそちら。ここでは同じ名前のまま使う（テストも app._npath 等で呼ぶ）
