@@ -5,7 +5,8 @@ import json
 
 from misc_helpers import click_in_view, click_sel, open_fixture_ready, wait_until
 from e2e_helpers import place_at
-from automodder_helpers import (AM_DONE, AM_INSTALLED, AM_NONE, PANEL_DONE, am_acts, am_calls, am_result, am_spy, open_mapcheck, to_am)
+from automodder_helpers import (AM_DONE, AM_INSTALLED, AM_NONE, PANEL_DONE, am_acts, am_calls, am_result, am_spy, open_mapcheck, reopen_mapcheck,
+                                to_am)
 
 
 def _txt(ed, sel):
@@ -58,9 +59,9 @@ def test_am_tab_not_installed(t):
     t.eq(am_acts(ed), ["status"], "説明を開いただけでは通信しない")
     click_in_view(ed, "#mcPanel .amCancel", "やめる")
     wait_until(ed, "!document.querySelector('#mcPanel .amBox')&&!!document.querySelector('#mcPanel .amOpen')", label="説明を閉じる")
-    # タブを覚える: 閉じて開き直すと AutoModder のタブのまま（状態は覚えているので通信を増やさない）
+    # タブを覚える: 閉じて INFO のボタンで開き直すと AutoModder のタブのまま（状態は覚えているので通信を増やさない）
     click_sel(ed, "#mcPanel .mcClose", "閉じる")
-    open_mapcheck(ed)
+    reopen_mapcheck(ed)
     t.eq(ed.js("document.getElementById('mcPanel').classList.contains('amMode')"), True, "開き直しても AutoModder のタブ")
     ed.wait(0.3)
     t.eq(am_acts(ed), ["status"], "開き直しても通信を増やさない")
@@ -177,7 +178,7 @@ def test_am_rerun_rules(t):
     # 譜面を直して開き直す → 直した内容で動かす
     click_sel(ed, "#mcPanel .mcClose", "閉じる")
     place_at(ed, 1, 2)
-    open_mapcheck(ed)
+    reopen_mapcheck(ed)   # 前回の AutoModder のタブで開く
     wait_until(ed, "window.__am.calls.filter(c=>c.act==='run').length===3", label="直した後は動かし直す")
     calls = [c for c in am_calls(ed) if c["act"] == "run"]
     hard = lambda c: json.loads(next(f for f in c["body"]["files"] if f["name"] == "HardStandard.dat")["text"])

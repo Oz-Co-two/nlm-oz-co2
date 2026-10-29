@@ -12,7 +12,9 @@
   #rtPanel button:hover{background:var(--widget2);}
   #rtPanel button:disabled,#rtPanel select:disabled{opacity:.6;cursor:default;}
   #rtPanel .rtPlug{display:flex;align-items:center;gap:8px;padding:7px 14px;border-bottom:1px solid #ffffff0d;color:var(--textmute);}
-  #rtPanel .rtPlugTxt{flex:1;}
+  #rtPanel .rtPlugTxt{flex:1;min-width:0;}
+  #rtPanel .rtPlugBtns button,#rtPanel .rtPlugBtns select{white-space:nowrap;flex:none;}   /* 版が2つ以上で版の選択が出ても［更新を確認］を折り返さない（3行に割れていた） */
+  #rtPanel .rtPlugBtns select{width:auto;}   /* 全体の select は width:100%（base.css）＝そのままでは行いっぱいに広がる */
   #rtPanel .rtMsg{padding:6px 14px;font-size:11.5px;line-height:1.5;}
   #rtPanel .rtMsg:empty{display:none;}
   #rtPanel .rtMsg.ok{color:var(--green);}

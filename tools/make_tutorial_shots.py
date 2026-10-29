@@ -227,14 +227,14 @@ def main():
           {t:'#pvpane',n:1,at:'in',pad:-4},{t:'#nodecol',n:2,at:'in',pad:-4},{t:'#main',n:3,at:'in',pad:-4},
           {t:'#maintb',n:4,at:'l'},{t:'#transportBar',n:5,at:'l'}]""")
 
-        # 02 ファイルメニュー（メニューの下端まで写す＝審査の指摘など下の方の項目も見える）
-        t.click_el("#mFileBtn"); ed.wait(0.5)
-        fm = t.rect("#mFileMenu")
-        t.shot("02-file-menu", marks="[{t:'#mFileMenu button[data-act=loadsong]',n:1,at:'r'}]", clip=(0, 0, 900, round(fm["y"] + fm["h"]) + 16))
+        # 02 譜面作りのメニュー（メニューの下端まで写す。画像の名前はファイルメニューにあったころのまま）
+        t.click_el("#mMapBtn"); ed.wait(0.5)
+        fm = t.rect("#mMapMenu")
+        t.shot("02-file-menu", marks="[{t:'.mbMenu button[data-act=loadsong]',n:1,at:'r'}]", clip=(0, 0, 900, round(fm["y"] + fm["h"]) + 16))
         # 02b 曲を取り込んだ時の「曲を解析しますか？」。撮影の環境（cdp.Editor.TEST_SETTINGS）は聞かない設定なので、
         # 読み込む直前にキーを消して初めて使う人と同じにする（tests/_lib/analysis_helpers.py の ask_on）。撮った後は［今はしない］
         ana_h.ask_on(ed)
-        t.click_el("#mFileMenu button[data-act=loadsong]")
+        t.click_el(".mbMenu button[data-act=loadsong]")
         wait_js(ed, "!!document.querySelector('#dirtyDlg[data-ana=ask]')", "「曲を解析しますか？」が出ません")
         ed.move(1700, 1060); ed.wait(0.4)
         d = t.rect("#dirtyDlg")
@@ -272,8 +272,8 @@ def main():
         ana_h.ana_mock(ed, tempo=TEMPO_BASIC, structure=ana_h.STRUCT,
                        status_s1=[running_s, {"waitFor": "s", "then": running_s}] + ana_h.status_seq("structure", ana_h.STRUCT, steps=()))
         ana_h.guide_on(ed)
-        t.click_el("#mFileBtn"); ed.wait(0.5)
-        t.click_el("#mFileMenu button[data-act=analyze]")
+        t.click_el("#mMapBtn"); ed.wait(0.5)
+        t.click_el(".mbMenu button[data-act=analyze]")
         wait_js(ed, "!!document.querySelector('#dirtyDlg.anaTempo')", "テンポの確認の画面が出ません")
         ed.move(1700, 1060); ed.wait(0.3)
         d = t.rect("#dirtyDlg")

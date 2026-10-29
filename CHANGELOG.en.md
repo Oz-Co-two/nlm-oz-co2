@@ -8,6 +8,38 @@ For basic usage, see the [tutorial](docs/tutorial.en.md), the [advanced tutorial
 <!-- Format: one "## v1.2.3-oz" heading per version. Top-level bold items ("- **...**") are the headlines shown in the in-app
 update notice (tools/make_release.py puts them into update.json). Keep the same versions and the same number of headlines as CHANGELOG.md. -->
 
+## v2.1.1-oz
+
+- **The menus are now split by the flow of your work**
+  The items that were all in one "File" menu are now in "File", "Mapping", "Check", "Review" and "Help".
+  - File: New, Open, Save, Add folder to MEDIA
+  - Mapping: Load music file, Analyze song, Create clips from the analysis and Export section starts as markers (same as the band menu), Auto lighting,
+    Export custom song (same as [▶ Export custom song] in INFO; new)
+  - Check: Map check (opens the tab you want: same as BS Map Check, NLM BL criteria list, or AutoModder), Estimate difficulty
+  - Review: Load, paste, list and export review notes
+  - Preferences: like the other menus, it now opens a menu with "Preferences…" (it used to open the settings right away).
+  - Help: Tutorial, Advanced tutorial and Changelog (open in your browser), Shortcuts (view and change), Check for updates,
+    About NLM (version, license and the versions of installed plugins)
+  - The shortcuts shown in the menu now follow the keys you set in Preferences (they used to show the default keys even after you changed them).
+- **Installed plugins now tell you about their new versions at startup too**
+  If you have installed the "Estimate difficulty" plugin (nlm-rating) or the map check's "AutoModder" plugin (nlm-automodder), NLM checks them
+  for new versions right after checking for app updates. When there is one, it shows the changes (the plugin's changelog headlines) in the same
+  kind of dialog as app updates.
+  - "Update" downloads and installs it. No restart is needed. The previous version is kept, so you can switch back with the version selector in the panel (tab).
+  - A version you chose "Don't update" for isn't shown at startup again until a newer one comes out. You can still update later with
+    "Check for updates…" in the Help menu or "Check for updates" in the panel.
+  - "Check for updates…" in the Help menu also checks installed plugins after the app.
+  - Plugins you haven't installed are not checked (NLM doesn't contact GitHub for them). Unchecking "At startup, check for new versions of the app
+    and installed plugins" in Preferences turns off both.
+- **Fixed old wording staying on screen for people who used an earlier version**
+  The exe version copies the UI text (translations) into the lang folder next to the exe the first time it starts, so when a later version
+  reworded an existing item, people who had used NLM before kept seeing the old wording (new items were shown fine). Now, if the copied text is
+  exactly an earlier version's wording, the current wording is shown. Text you edited yourself in the lang folder is still shown as you wrote it.
+- **Updated the "Estimate difficulty" note for BeatLeader's October reweight**
+  The nlm-rating plugin v0.2.0 supports BeatLeader's October 2026 reweight (no NLM update needed: update it with "Check for updates" in the panel).
+  BeatLeader adjusts each map's Acc from players' scores, so the panel's note no longer says "Acc can come out lower".
+  - Fixed the panel's "Check for updates" button wrapping onto three lines when two or more plugin versions are installed (when the version selector is shown).
+
 ## v2.1.0-oz
 
 - **NLM can now load ranking review notes and help you check them one by one on the map**

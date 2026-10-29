@@ -1,7 +1,8 @@
 // AutoModder の判定のプラグイン nlm-automodder の状態と通信（serve.py の /__automodder/* → automodder_plugin.py）。
 // 作りは「難易度を測る」の rating-client.js と同じ。run({ifChanged:true}) は、渡す中身（書き出しと同じ Info.dat/.dat と曲の長さ）が
 // 前回うまく確かめられた時と同じなら動かし直さない（譜面チェックのタブを開くたびに exe を起動しない）。
-// GitHub への通信（install / check）は利用者がボタンを押した時だけ。status / run は PC の中だけで終わる。
+// GitHub への通信（install / check）は利用者がボタンを押した時だけ（起動時の更新の確認は js/update/update-dialog.js が別に行う）。
+// status / run は PC の中だけで終わる。
 // サーバーの失敗コード → 表示文（am.err.<code>）
 const ERR = {
   network: 'GitHub に接続できませんでした。ネット接続を確認してください。',

@@ -293,7 +293,14 @@ export function installMapCheckPanel(api) {
     busy = false; render();
     autoRate(); autoAm();
   }
-  function open() { if (!el) build(); el.style.display = 'flex'; render(); run(); }
+  /** 開いて確かめ直す。want＝そのタブで開く（メニューの3つの項目。'mc'/'bl'/'am'・無ければ前回のタブ） */
+  function open(want) {
+    if (want === 'mc' || want === 'bl' || (want === 'am' && automodder)) {
+      if (want !== tab && el) el.querySelector('.mcBody').scrollTop = 0;
+      tab = want; try { localStorage.setItem('bsnm_mcTab', tab); } catch (_) {}
+    }
+    if (!el) build(); el.style.display = 'flex'; render(); run();
+  }
   function close() { if (el) el.style.display = 'none'; }
   function isOpen() { return !!el && el.style.display !== 'none'; }
   return { open, close, run, isOpen };

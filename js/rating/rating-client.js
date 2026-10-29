@@ -2,7 +2,8 @@
 // 「難易度を測る」パネル（rating-panel.js）と、譜面チェックの NLM版 BL評価リスト（R5.A の★/Tech・R11.H.5 の★の並び。bl-stars.js）で
 // 同じものを使う＝どちらで測っても結果を共有する。measure({ifChanged:true}) は、測る中身（書き出しと同じ Info.dat/.dat）が
 // 前回うまく測れた時と同じなら測り直さない。
-// GitHub への通信（install / check）は利用者がボタンを押した時だけ。status / measure は PC の中だけで終わる。
+// GitHub への通信（install / check）は利用者がボタンを押した時だけ（起動時の更新の確認は js/update/update-dialog.js が別に行う）。
+// status / measure は PC の中だけで終わる。
 export const RATING_MODS = ['SS', 'FS', 'SFS'];   // 通常速度(none)の下に並べる速度違い
 // サーバーの失敗コード → 表示文（rt.err.<code>）
 const ERR = {
@@ -69,7 +70,8 @@ export function createRatingClient({ t, collect }) {
     try {
       const j = await post('install');
       if (!j.ok) S.msg = { err: true, text: errText(j), act: 'install' };
-      else { S.st = j; S.latest = null; ok = true; S.msg = { ok: true, text: t('rt.installed', 'v{v} を取り込みました。').replace('{v}', j.current), act: 'install' }; }
+      // sig を消す＝前の版で測った結果を「同じ中身なので測り直さない」にしない（起動時の更新の知らせから取り込んだ時も、次に開いた時に測り直す）
+      else { S.st = j; S.latest = null; sig = null; ok = true; S.msg = { ok: true, text: t('rt.installed', 'v{v} を取り込みました。').replace('{v}', j.current), act: 'install' }; }
     } catch (e) { S.msg = { err: true, text: exText(e), act: 'install' }; }
     S.busy = ''; emit();
     return ok && installed();

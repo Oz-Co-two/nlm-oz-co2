@@ -645,7 +645,7 @@ def media_library(ed, t):
         # ---- 11-2: 環境設定の MEDIA タブ ----
         # exe 版の画面（［ファイルを選ぶ…］がある）で撮るため、exe 版の窓口（pywebview）のプレイ記録の選択だけを置く。撮った後に外す
         ed.js("window.pywebview={api:{lib_pick_playdata:async()=>null}};true")
-        t.click_el("#mbSettings"); ed.wait(0.6)
+        t.click_el("#mbSettings"); ed.wait(0.3); t.click_el(".mbMenu button[data-act=settings]"); ed.wait(0.6)
         t.click_el("#settingsBox .setTab[data-tab=media]")
         wait_until(ed, "!!document.getElementById('libPlayState').textContent&&!!document.getElementById('libNetState').textContent",
                    "環境設定の MEDIA タブの状態が出ません")
@@ -836,14 +836,14 @@ def review_notes(ed, t):
     # ★/Tech（10-5 の R5.A）は「難易度を測る」の結果を使うので、プラグインがあれば先に測っておく
     if (PLUGIN_DIR / "current.json").exists():
         shutil.copytree(PLUGIN_DIR, Path(ed.data_dir) / "plugins" / "rating")
-        t.click_el("#mFileBtn"); ed.wait(0.5)
-        t.click_el("#mFileMenu button[data-act=rating]")
+        t.click_el("#mCheckBtn"); ed.wait(0.5)
+        t.click_el(".mbMenu button[data-act=rating]")
         wait_until(ed, "!!document.querySelector('#rtPanel .rtTable, #rtPanel .rtErr')", "難易度を測るの結果が出ません", timeout=90)
         t.click_el("#rtPanel .rtClose"); ed.wait(0.4)
 
     # ---- 10-2: 貼り付けの画面（Discord の本文の例） ----
-    t.click_el("#mFileBtn"); ed.wait(0.5)
-    t.click_el("#mFileMenu button[data-act=reviewpaste]")
+    t.click_el("#mReviewBtn"); ed.wait(0.5)
+    t.click_el(".mbMenu button[data-act=reviewpaste]")
     wait_until(ed, "!!document.querySelector('#dirtyDlg[data-rv=rvPasteDlg] .rvPasteText')", "貼り付けの画面が出ません")
     ed.js(f"(a=>{{ a.value={json.dumps(RV_PASTE)}; a.dispatchEvent(new Event('input',{{bubbles:true}})); a.scrollTop=0; return 1; }})(document.querySelector('#dirtyDlg .rvPasteText'))")
     ed.move(1700, 1060); ed.wait(0.3)
@@ -940,8 +940,8 @@ def automodder_shots(ed, t):
     """9章 AutoModder のタブ（09-8 取り込みの案内・09-7 結果）。譜面チェックを開き、プラグインの無い状態で取り込みの案内を撮り、
     プラグインを置いて［GitHub から取り込む］→ 結果を撮る。曲の情報がそろった書き出しノードがアクティブな間に撮る（Info.dat の欄に
     曲名が空のエラーが並ばないように）。撮った後はタブを BS Map Check へ戻して閉じる"""
-    t.click_el("#mFileBtn"); ed.wait(0.5)
-    t.click_el("#mFileMenu button[data-act=mapcheck]")
+    t.click_el("#mCheckBtn"); ed.wait(0.5)
+    t.click_el(".mbMenu button[data-act=mapcheck]")
     wait_until(ed, "!!document.querySelector('#mcPanel .mcSum')", "譜面チェックが開きません")
     move_panel(ed, "#mcPanel")
     t.click_el("#mcPanel .mcTab[data-tab=am]")
@@ -1001,8 +1001,8 @@ def setup(ed, ask=False):
     ed.wait(0.5)
     if ask:
         ana_h.ask_on(ed)   # テストの環境は既定で聞かない＝キーを消す（初めて使う人と同じ）
-    t.click_el("#mFileBtn"); ed.wait(0.5)
-    t.click_el("#mFileMenu button[data-act=loadsong]"); ed.wait(2.5)
+    t.click_el("#mMapBtn"); ed.wait(0.5)
+    t.click_el(".mbMenu button[data-act=loadsong]"); ed.wait(2.5)
     if ask:
         ask_dialog(ed, t)
     beat = 0.0
@@ -1231,7 +1231,7 @@ def main():
         ed.move(1200, 300); ed.key("Tab"); ed.wait(1.0)   # NLEへ戻す
 
         # ---- 11章・1章: 環境設定 ----
-        t.click_el("#mbSettings"); ed.wait(0.6)
+        t.click_el("#mbSettings"); ed.wait(0.3); t.click_el(".mbMenu button[data-act=settings]"); ed.wait(0.6)
         # 「曲の解析」の2つのチェックは、テストの環境（聞かない・案内しない）でなく初めて使う人と同じ（オン）に見せる（表示だけ・撮った後に戻す）
         # アプリケーション設定の欄は箱の中でスクロールする＝「ノーツのレーンの本数」が欄の上端に来るまでスクロールして、新しい項目（③④）を見せる
         ed.js("""(()=>{ for(const id of ['anaAskOn','anaGuideOn']) document.getElementById(id).checked=true;
@@ -1258,8 +1258,8 @@ def main():
             shutil.copytree(PLUGIN_DIR, Path(ed.data_dir) / "plugins" / "rating")
         else:
             print("プラグインが見つからないので、未導入の画面を撮ります:", PLUGIN_DIR)
-        t.click_el("#mFileBtn"); ed.wait(0.5)
-        t.click_el("#mFileMenu button[data-act=mapcheck]"); ed.wait(3.0)
+        t.click_el("#mCheckBtn"); ed.wait(0.5)
+        t.click_el(".mbMenu button[data-act=mapcheck]"); ed.wait(3.0)
         move_panel(ed, "#mcPanel")
         beat_chip = ed.js("(()=>{const b=document.querySelector('#mcPanel .mcBeat'); if(b) b.id='tutBeat'; return !!b})()")
         marks = "{t:'#mcPanel .mcTabs',n:1,at:'l'},{t:'#mcPanel .mcSum',n:2,at:'l'},{t:'#mcPanel .mcRerun',n:3,at:'l'}"
@@ -1301,8 +1301,8 @@ def main():
         COVER = "(async()=>JSON.stringify((await window._dbgApp.mapCheckInput()).cover))()"
         wait_until(ed, COVER + ".then(c=>c!=='null')", "選んだカバー画像が書き出しに入りません")   # 画像の作成（toBlob）はヘッドレスだと遅い
         ed.move(1200, 300); ed.key("Tab"); ed.wait(1.0)   # NLEへ戻す
-        t.click_el("#mFileBtn"); ed.wait(0.5)
-        t.click_el("#mFileMenu button[data-act=mapcheck]")
+        t.click_el("#mCheckBtn"); ed.wait(0.5)
+        t.click_el(".mbMenu button[data-act=mapcheck]")
         wait_until(ed, "!!document.querySelector('#mcPanel .mcFix[data-fix=cover]')",
                    lambda: "カバー画像を補正のボタンが出ません: " + str(ed.js(COVER)))
         t.click_el("#mcPanel .mcFix[data-fix=cover]")
@@ -1343,8 +1343,8 @@ def main():
         t.click_el("#tutOut1 h3"); ed.wait(0.5)   # アクティブな書き出しノードを元に戻す（難易度を測るの画像を前と同じ状態で撮る）
         ed.move(1200, 300); ed.key("Tab"); ed.wait(1.0)   # NLEへ戻す
 
-        t.click_el("#mFileBtn"); ed.wait(0.5)
-        t.click_el("#mFileMenu button[data-act=rating]")
+        t.click_el("#mCheckBtn"); ed.wait(0.5)
+        t.click_el(".mbMenu button[data-act=rating]")
         move_panel(ed, "#rtPanel")
         for _ in range(120):   # 測定（別プロセス）の完了を待つ
             ed.wait(0.5)

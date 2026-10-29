@@ -545,6 +545,11 @@ PyInstallerでビルド後、配布フォルダ`NLM-app/`の`exe`と`_internal`�
 各版の太字の見出し（更新のお知らせに出る）が入る。APP_VERSION・ビルド結果・CHANGELOG の先頭の版が揃っていないと止まる。
 **リリースには zip と update.json の両方を添付すること**（update.json が無いと、旧版のアプリに更新が知らされない）。
 
+`python tools/lang_history.py` — 公開した版（git のタグ `v*-oz` と原作 0.8 beta）の訳のうち、今の同梱と文が違う物の表
+`lang/history/released.json` を作り直す（`--check` は足りない物の一覧を出すだけ）。exe の隣の訳がこの表の文（＝昔の同梱の文そのまま）なら
+serve.py は使わない＝同じキーのまま直した文が今の利用者にも出る。**公開済みの訳の文を直したら、公開の前に作り直してコミットする**
+（make_release.py がビルド結果の表で確かめ、足りなければ止まる）。
+
 `python tools/update_test.py` — ネットに繋がず、ローカルの偽の配布元で自動更新を通しで確かめる
 （更新内容の絞り込み・SHA-256 照合・改ざん/zip slip の拒否・差し替え・失敗時の復元・利用者データを触らないこと・更新後の片付け・CHANGELOG の日英の対応）。
 本物の exe の差し替え役は `NonLinearMapper.exe --apply-update --target <配布フォルダ> --pid 0 --lang ja --no-launch`

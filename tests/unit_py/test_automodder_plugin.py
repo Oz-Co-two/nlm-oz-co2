@@ -479,3 +479,37 @@ def test_real_plugin_if_available(t):
     hot = [r for r in res["results"] if r["difficulty"] == "Expert" and r["name"] == "Hot Start" and r["severity"] == "Error"]
     t.ok(hot and hot[0]["objects"] and hot[0]["objects"][0]["beat"] == 1.0, f"Hot Start のエラー（拍1）: {hot[:1]}")
     t.ok(any(r["difficulty"] is None and r["name"] == "BPM" for r in res["results"]), "曲の情報の結果もある")
+
+
+def test_check_newer_and_notes(t):
+    '''check は取り込み済みのどの版より新しいかと、その間の版の更新内容（新しい順・形と長さを整えた物）を返す（起動時の更新の知らせ用）'''
+    p, d = _plugin()
+    p.install_zip(_zip(ver="0.1.0"), "0.1.0")
+    notes = [{"version": "0.2.0", "ja": ["二", "x" * 400], "en": ["two", None]},
+             {"version": "0.1.0", "ja": ["一"], "en": ["one"]}, {"version": "v0.3.0", "ja": ["版が不正"]}]
+    orig = ap.AutoModderPlugin._get
+    try:
+        ap.AutoModderPlugin._get = staticmethod(lambda url, limit: json.dumps(_manifest(ver="0.2.0", notes=notes)).encode())
+        L = p.check()["latest"]
+        t.eq((L["version"], L["newer"], L["installed"]), ("0.2.0", True, False), "新しい版がある")
+        t.eq(L["notes"], [{"version": "0.2.0", "ja": ["二", "x" * 300], "en": ["two"]}], "取り込み済みより新しい版だけ・整えた形")
+        ap.AutoModderPlugin._get = staticmethod(lambda url, limit: json.dumps(_manifest(ver="0.1.0", notes=notes)).encode())
+        L = p.check()["latest"]
+        t.eq((L["newer"], L["notes"]), (False, []), "最新を取り込み済み")
+    finally:
+        ap.AutoModderPlugin._get = orig
+
+
+def test_open_notes_url_fixed(t):
+    '''「詳しく見る」はその版のリリースのページだけを開く（版の形でなければリリースの一覧）'''
+    import webbrowser
+    p, _ = _plugin()
+    opened, orig = [], webbrowser.open
+    try:
+        webbrowser.open = lambda url: opened.append(url)
+        for v in ("0.1.0", "x", None):
+            p.open_notes(v)
+    finally:
+        webbrowser.open = orig
+    base = "https://github.com/Oz-Co-two/nlm-automodder/releases"
+    t.eq(opened, [base + "/tag/v0.1.0", base, base], "開く先は固定")

@@ -70,6 +70,11 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   「同梱版(`_internal/lang`)を土台にexe隣の版をキー単位で上書き」して返す。旧版の`lang/`を持つ利用者でも
   新機能の訳が欠けない（2026-09-27）。新しい設定項目(`bsnm_*`)は「キーが無い＝初期値」で動くように書くこと
   （旧`settings.json`は存在するキーだけlocalStorageへ流し込む方式＝`js/settings-mirror.js`。CSP導入でeditor.htmlから分離）。
+  ただし exe隣の文が**公開した版の同梱の文そのまま**なら使わない（2026-10-28・`serve.py`の`_merge_lang`）。以前は同じキーのまま直した文が
+  今の利用者に届かなかった（初回に写した古い文が勝つ）。表は`lang/history/released.json`＝公開した版（git のタグ`v*-oz`と原作 0.8 beta）の訳のうち
+  今の同梱と違う文（`tools/lang_history.py`が作る。exe隣へは写らない＝`_seed`は lang/ の直下の .json だけ）。利用者が書き換えた文は表に無いので優先する。
+  **公開済みの訳の文を直したら、公開の前に`python tools/lang_history.py`で表を作り直してコミットする**（`make_release.py`はビルド結果の表で確かめて、
+  足りなければ止まる。unit_py の`test_lang_history_covers_released`も同じ確かめ）。
 - **第三者のライセンス表示**（2026-10-19）: `LICENSE` と `THIRD_PARTY_NOTICES.txt` は `nlm.spec` が exe の隣へ写し、`app_update.py` の
   `REPLACE_ITEMS` にも入っている（自動更新でも入れ替わる。`make_release.py` は無ければ止まる）。**部品を足した・版を上げた時は、ビルドした
   `_internal` の実際の中身（DLL・dist-info・埋め込みモジュール）で THIRD_PARTY_NOTICES.txt を直す**（pip の一覧だけで決めない）。
@@ -174,7 +179,7 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 
 - 画面・通信・保存の形は `js/analysis/song-analysis.js`（見た目は `css/analysis.css`）。editor-app.js は本体の状態との橋渡しだけ（`anaGrid`・`anaAtGrid`・
   `anaApplyTempo`・`anaExportMarkers`・`anaSeek`）。解析は serve.py の `/__analysis/*`（upload→tempo→status→structure→status、cancel。すべて POST）。
-- 入口はファイルメニューと、スペクトログラムの溝の［🎼 曲を解析］（音源がある・結果が無い時だけ）。ボタン1つで テンポ→（今の BPM・無音追加と違えば
+- 入口は譜面作りのメニューと、スペクトログラムの溝の［🎼 曲を解析］（音源がある・結果が無い時だけ）。ボタン1つで テンポ→（今の BPM・無音追加と違えば
   確認の画面: 提案／候補B＝半拍ずらし／適用しない。**自動では変えない**。急に出るので Enter では押さない）→今の目盛りで構成→帯、まで進む。
   BPM・無音追加の欄は履歴に積まないので、適用は専用の履歴の領域 `'tempo'`（BPM・`songNode.offset`）で1回の Ctrl+Z で戻す。
   溝のボタンは目立たせるため配置モードと同じ紫（`--accent`）の塗り（2026-10-20・利用者の要望。英語でも溝の 128px に収まる）。
@@ -336,8 +341,8 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   `formatReviewText`（実物と同じ手書きの形＝難易度の見出しの行＋`拍, 拍 - 文`・CRLF）。実物の書き方の揺れと読み方の決まりは、ファイルの冒頭と `parseReviewText` のコメント。
   拍は丸めずに返し、項目は書かれた順。`severity:'keep'` は印のある項目にだけ印を付ける（返事を付けて返す時。`true` は印の無い項目に `(N)`＝AutoModder 用）。
 - **画面の作り**（利用者が PC から離れている間に担当が決めた。後で利用者が見て直す前提）:
-  - 入口: ファイルメニューの「審査の指摘を読み込む…」（.txt を選ぶ・複数可＝難易度ごとのファイル）・「審査の指摘を貼り付けて読む…」（Discord の本文を貼る欄）・
-    「審査の指摘の一覧…」。一覧の見出しにも［読み込む…］［貼り付け…］［書き出す…］。
+  - 入口: 審査のメニューの「指摘を読み込む（.txt）…」（.txt を選ぶ・複数可＝難易度ごとのファイル）・「指摘を貼り付けて読む…」（Discord の本文を貼る欄）・
+    「指摘の一覧…」・「書き出す（返事・NLM の確かめの結果）…」。一覧の見出しにも［読み込む…］［貼り付け…］［書き出す…］。
   - 読み込みの確認（`#dirtyDlg[data-rv=rvImport]`）: ファイルごとの数・読み方の注意（`warnings`）・難易度の分からない指摘は見出しの名前ごとに難易度を選ぶ（既定は今の難易度）・
     C3 の印・今ある指摘に足すか置き換えるか。難易度の名前の表 `labels` は「曲データを読み込む」がクリップに持たせた `srcLabel`（Info.dat の `_difficultyLabel`・
     v4 は `customData.difficultyLabel` を `infoToV2` が写す）。NLM は難易度の名前を書き出さないので、それ以外の経路で作った譜面では表が空＝見出しを選ぶ。
@@ -378,7 +383,7 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 
 ## 自動ライティング（2026-10-03）
 
-- 入口は3つ: ファイルメニュー「自動ライティング…」・LIGHTINGのツールバー「自動ライト」・譜面チェックのライト不足の項目の
+- 入口は3つ: 譜面作りのメニュー「自動ライティング…」・LIGHTINGのツールバー「自動ライト」・譜面チェックのライト不足の項目の
   「💡 自動ライティング…」（対象の項目は`mapcheck-panel.js`の`LIGHT_FIX_MC`/`LIGHT_FIX_BL`。作成後にチェックをやり直す）。生成は`js/lighting/auto-light.js`（`generateAutoLights`）、配置は`editor-app.js`の`autoLightPlan`/`applyAutoLight`。
 - 狙いは譜面チェックのライト項目（BS Map Check の`insufficientLight`、BL評価リストの R10.A・R7.B）を満たすこと。**R10.Aの数に入るのは
   環境の表(`BASIC_TRACKS[env].l`)の種別だけ**（Defaultなら0〜4。リング回転/ズーム・レーザー速度は数えない）で、分母は曲の長さ（拍）。
@@ -511,8 +516,9 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 ## 難易度を測る（BeatLeaderの星の近似・2026-10-02）
 
 - 計算は**本体に同梱しない別配布のプラグイン** nlm-rating（https://github.com/Oz-Co-two/nlm-rating ・MIT・.NETの自己完結exe・zip約19MB）。
-  BeatLeaderの公開コード（RatingAPI＋beatleader-analyzer server-dev）を使う。本家と同じ星は保証できない（Accが本家より2〜9%低い譜面がある）
-  ので、画面には「近似値・公式ツールではない」と必ず出す。比較テスト・上流の追従手順はプラグイン側のREADME。
+  BeatLeaderの公開コード（RatingAPI＋RatingAPI が submodule で指す beatleader-analyzer）を使う。本家と同じ星は保証できない
+  （本家の Acc は RatingAPI の値にプレイヤーのスコアから譜面ごとに決める倍率を掛けた物＝portaBLe の AccReweighter。譜面だけでは計算できない。
+  v0.2.0＝2026-10 のリウェイトから。Pass・Tech・予測精度は本家と一致）ので、画面には「近似値・公式ツールではない」と必ず出す。比較テスト・上流の追従手順はプラグイン側のREADME。
 - NLM側: `rating_plugin.py`（取り込み・更新・実行）＋`serve.py`の`/__rating/*`（POST）＋`js/rating/rating-client.js`（状態・通信・測定結果）
   ＋`js/rating/rating-panel.js`（表示）。入力は譜面チェックと同じ`collectExportDiffs()`/`buildExportInfo()`（`collectRatingInput`）。
 - `rating-client.js`は「難易度を測る」パネルと譜面チェックのBL評価リスト（R5.A・R11.H.5の★/Tech）で**1つを共有**する（どちらで測っても両方に出る）。
@@ -560,7 +566,7 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 
 - `app_update.py`（確認・ダウンロード・照合・展開・差し替え）＋`serve.py`の`/__update/*`（POST）＋`js/update/update-dialog.js`。
   起動時の確認はexe版だけ・環境設定`bsnm_updateCheck`で OFF 可・通信の失敗は黙って無視。「更新しない」の版は`bsnm_updateSkip`
-  （それより新しい版が出るまで起動時に出さない。ファイルメニューの「更新を確認…」からは常に出す）。
+  （それより新しい版が出るまで起動時に出さない。ヘルプのメニューの「更新を確認…」からは常に出す）。
 - 最新リリースに添付した`update.json`（`tools/make_release.py`が作る）を読む。中身は zip の SHA-256・サイズと、
   `CHANGELOG.md`/`CHANGELOG.en.md`の各版の行頭の太字（`- **〜**`）＝更新のお知らせに出す見出し。
   **変更点は README ではなく CHANGELOG に日英両方で書く**（版の並び・見出しの数が日英で違うと make_release が止まる）。
@@ -576,6 +582,18 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - 差し替え役として起動された時は`app.py`の`main()`の先頭で抜ける（画面・サーバー・関連付けの登録をしない。登録すると
   .nlmf が消える予定の`_update/`の exe を指してしまう）。
 - 取得先URLは`app_update.py`に固定。JS から受け取るのは言語（と更新内容を開く版番号）だけ。
+- **取り込み済みのプラグインの更新の知らせ**（2026-10-28・v2.1.1-oz から・利用者の要望）: `update-dialog.js` の `autoCheck` が本体の確認に続けて、
+  `installUpdater` に渡した `plugins`（editor-app.js。難易度を測る＝`ratingClient`・AutoModder＝`amClient`）を1つずつ確かめる。条件は本体と同じ（exe 版・
+  `bsnm_updateCheck`）。取り込んでいない（status の current が無い）プラグインは check しない＝GitHub へ行かない。新しい版（取り込み済みのどの版より新しく、
+  protocol が合う）なら本体と同じ形の画面: 更新内容・［更新しない］（プラグインごとの `bsnm_rtUpdSkip`/`bsnm_amUpdSkip` に版を記録＝起動時は出さない）・
+  ［更新する］（パネルと共有の `client.install()`＝パネルも新しい版になる・再起動なし）。「詳しく見る」はその版のリリースのページ（各プラグインの `open_notes`・
+  `/__rating/openNotes` 等。版の形を確かめ URL は固定）。画面は1つずつ（`flow`＝前の画面が閉じてから次。本体の画面が先）。ヘルプのメニューの「更新を確認…」も
+  本体に続けてプラグインを確かめ、どれも新しくなければ結果をまとめて出す。
+  - 更新内容はプラグインの manifest.json の `notes`（プラグインの build.py が CHANGELOG.md/CHANGELOG.en.md の太字の見出しから作る＝本体の update.json と同じ形・
+    版は `0.2.0`）。プラグインの `check()` が取り込み済みより新しい版の分だけを整えて返す（`_clean_notes`）。notes の無い古い manifest は「更新内容の情報がありません」。
+    公開済みの版の文だけを直す時は、リリースの manifest.json を `build.py notes` で作り直して差し替える（プラグインの README）。
+  - テスト: `tests/e2e_misc/test_plugin_update.py`（応答は偽物・起動時の確認は読み込みの前に差す＝`tests/_lib/plugin_update_helpers.py` の `pu_on_load`/`pu_off`）、
+    unit_py の `test_check_newer_and_notes`・`test_open_notes_url_fixed`（両プラグイン）、visual の `plugin_update`、英語の点検（`plugin_update_tour`）。
 
 ## 曲の解析（テンポ・構成・本体に同梱・2026-10-19）
 
@@ -823,6 +841,27 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - LIGHTINGで3Dの上にマウスがある時の数字キー: 1/2/3＝色を選ぶ（`lightCol1〜3`・①/②/白、クロマ時は左/右/白＝Cパイの先頭3つ）。ここでは数字で難易度を変えない
   （4/5も何もしない・利用者と決めた仕様）。NLE・INFO等の上では今までどおり数字＝難易度切替。
 
+## メニューバー（作業の流れで分ける・2026-10-28）
+
+- 見出しは ファイル／譜面作り／確かめる／審査／環境設定／ヘルプ（利用者と決めた。英語は File / Mapping / Check / Review / Preferences / Help）。
+  「環境設定」も他と同じく押すと開き、中は「環境設定…」（`data-act=settings`→`openSettings`）の1行だけ（2026-10-29・利用者の要望: 押してすぐ設定の画面だと
+  下にメニューが出ず不具合に見える）。見出しの id は以前の `#mbSettings` のまま＝テストで設定の画面を開く時は見出し→項目の2回押す（`misc_helpers.open_prefs`）。
+  部品は editor.html の `.mbWrap`（見出し `.mbtn`・中身 `.mbMenu`）、開閉と項目は editor-app.js の
+  「メニューバー」の塊（`openMenu`・`syncMenu`・`runMenuAct`。全部閉じるのは名前が1つだったころのままの `closeFileMenu`）。
+  押すと開き、開いている間は見出しへマウスを動かすだけで切り替わる・Esc か外側のクリックで閉じる。項目は `data-act`（以前の名前はそのまま使っている）。
+- 開く時に `syncMenu` が今の状態へ合わせる: ショートカットの表示は `data-key`＝ACTIONS の今の割り当て（以前は「Ctrl O」の決め打ちで、変えても古いまま）・
+  ブラウザで開く項目は `data-ext`（↗）・解析の結果が無ければ「解析の結果からクリップを作る…」「セクションの頭にマーカーを書き出す」を灰色にして理由をツールチップ・
+  解析中は「曲を解析」が「曲の解析をやめる」。**メニューに項目を足したら `runMenuAct` に足し、テストの `ITEMS`（`tests/e2e_misc/test_menus.py`）も直す。**
+- 確かめるの「譜面チェック」の3項目は `mapCheckPanel.open('mc'|'bl'|'am')`＝そのタブで開く（INFO の［🔍 譜面チェック］は前回のタブのまま）。
+  譜面作りの一番下の「カスタム曲を書き出す…」は INFO の［カスタム曲書き出し］と同じ `exportFromInfo`（2026-10-29 にファイルから移した・利用者の要望）。
+- ヘルプのページ（チュートリアル・上級編・Oz-Co2版・原作）とライセンスの文書（LICENSE・THIRD_PARTY_NOTICES.txt。exe の隣→本体のフォルダの順に探してメモ帳で開く）は
+  serve.py の `/__help/open`・`/__help/openFile`。JS が送るのは名前（`HELP_DOCS`・`HELP_FILES` のキー）と言語だけ＝URL・パスは serve.py に固定。
+  変更履歴は本体の更新の「詳しく見る」と同じ `/__update/openNotes`（版なし）。テストのサーバーは `NLM_NO_OPEN=1`（cdp.py が設定）で実際には開かず、開く物を応答の `opened` で返す。
+- 「NLM について」（`js/help/about-dialog.js`・見た目は `css/help.css`）: 版・原作者の表記・著作権の表示・GPLv3 と無保証（GPLv3 の「適切な法的告知」）・
+  取り込み済みのプラグインの版（`client.ensureStatus()`＝PC の中の確認だけ）。著作権の行は LICENSE の冒頭と同じにする。
+- テストでメニューの項目を押す時は `ed.menu_head(act)`（cdp.py。項目の入っているメニューの見出し）と `cdp.MENU_ITEM`。共通の部品 `file_menu(ed, act)`
+  （info_helpers・project_helpers）はどのメニューの項目でも押せる（名前はメニューが1つだったころのまま）。
+
 ## 表示言語（日本語・英語・2026-10-04）
 
 - 訳の仕組みは5つ: JSの文言は`t('キー','日本語')`/`tf()`、HTMLは`data-i18n`（文字）/`data-i18n-t`（title）/`data-i18n-ph`（placeholder）、
@@ -830,13 +869,16 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   `sk:`（説明）/`skk:`（操作）、パネルの日本語の表は接頭辞＋キー（`mc.k.`・`bl.r.`・`act.`=ショートカット編集の操作名など）。
   **新しい文言は日本語を直書きせず、`lang/ja.json`と`lang/en.json`の両方にキーを足す。**
 - `m:`キーは文面が変わると当たらなくなる（黙って日本語に戻る）。メッセージの日本語を直したら`en.json`の`m:`キーも直す。
+- **公開済みの訳の文を同じキーのまま直したら、`tools/lang_history.py`で表を作り直す**（上の「翻訳の互換」。作り直さないと、exe隣の古い文が
+  今の利用者の画面で勝つ。`make_release.py`が止めて知らせる）。使わなくなったキーは同梱の lang から消す（exe の隣の古い物は残るが使われない）。
 - 言語を切り替えた時に訳し直されるのは、`data-i18n`系の付いた要素と`loadLang()`が呼び直す描画だけ。
   **一度だけ組み立てる画面（INFOのノードのカードなど）に文言を入れる時は`data-i18n`を付ける**（付けないと前の言語のまま残る）。
 - 訳し漏れは`tests/e2e_misc/test_english_ui.py`で見つける（英語で起動して主な画面を回り、画面の文字・ツールチップ・キャンバスに描いた文字・
   メッセージから日本語を探す。見つけた全文は`test-out/english_ui.txt`）。画面・ダイアログを足したら`english_ui_helpers.tour()`にも足す。
 - exe版（app.py）は`config/settings.json`の`bsnm_lang`を`_ui_lang()`で読み、ファイル選択ダイアログの種類名・エクスプローラーの種類名を合わせる。
   serve.py はエラーを文言ではなく種類（例: `exists`）で返し、JSが訳す。
-- 表示言語の初期値は日本語（`bsnm_lang`が無い時）。英語の案内では「左上の2つ目のメニュー『環境設定』→『言語 / Language』」と位置で説明する。
+- 表示言語の初期値は日本語（`bsnm_lang`が無い時）。英語の案内では「メニューバーの『審査』と『ヘルプ』の間の『環境設定』→『言語 / Language』」と位置で説明する（2026-10-28 のメニューの整理までは「左上の2つ目」）。
+  **メニューバーの並びを変えたら、README.en.md・docs/tutorial.en.md・はじめにお読みください.txt のこの案内も直す。**
 - 英語版のチュートリアルの画像は`tools/make_tutorial_shots.py --en`・`make_advanced_shots.py --en`で`docs/images/tutorial-en/`・`tutorial-advanced-en/`へ撮る。
 
 ## 削除済み機能（意図的）

@@ -44,6 +44,84 @@ RATING_CACHE = RatingCache(DATA_DIR)
 # NLM_ANALYSIS_DIR はその置き場の差し替え（テスト用）
 ANALYSIS = AnalysisService(os.environ.get('NLM_ANALYSIS_DIR') or None)
 
+# ヘルプのメニュー・「NLM について」から開くページと文書（/__help/*・2026-10-28）。JS から受け取るのは下の表の名前と言語だけ
+# （URL・ファイルの場所はここに固定）。文書は exe の隣（DATA_DIR）を先に、無ければ BASE_DIR を探してメモ帳で開く。
+# NLM_NO_OPEN=1 は実際には開かない（自動テスト用。開く物を応答の opened で返す）
+HELP_REPO = 'https://github.com/Oz-Co-two/nlm-oz-co2'
+HELP_DOCS = {
+    'tutorial': {'ja': HELP_REPO + '/blob/master/docs/tutorial.md', 'en': HELP_REPO + '/blob/master/docs/tutorial.en.md'},
+    'advanced': {'ja': HELP_REPO + '/blob/master/docs/tutorial-advanced.md', 'en': HELP_REPO + '/blob/master/docs/tutorial-advanced.en.md'},
+    'home': {'ja': HELP_REPO, 'en': HELP_REPO + '/blob/master/README.en.md'},
+    'original': {'ja': 'https://helba.flashhub.net/nlm/', 'en': 'https://helba.flashhub.net/nlm/'},
+}
+HELP_FILES = {'license': 'LICENSE', 'notices': 'THIRD_PARTY_NOTICES.txt'}
+_NO_OPEN = os.environ.get('NLM_NO_OPEN') == '1'
+
+
+def _help_open_url(url):
+    import webbrowser
+    webbrowser.open(url)
+
+
+def _help_open_file(path):
+    if os.name == 'nt':   # 拡張子の無い LICENSE も開けるようにメモ帳を名指しする
+        subprocess.Popen(['notepad.exe', path])
+    else:
+        import webbrowser, pathlib
+        webbrowser.open(pathlib.Path(path).as_uri())
+
+# ---- 翻訳の合成（/lang/*.json） ----
+# 同梱版を土台に exe隣の版（DATA_DIR/lang）をキー単位で重ねる。exe隣の lang/ は初回の起動で写した後は更新されない
+# （ユーザー編集を守るため）ので、丸ごと差し替えだと旧版の lang/ を持つ利用者には新機能の訳が欠ける（アップデート時の互換対策 2026-09-27）。
+# ただし exe隣の文が「公開した版の同梱の文そのまま」（lang/history/released.json の表＝tools/lang_history.py が作る）なら使わない
+# （2026-10-28）。そうしないと、同じキーのまま直した文が今の利用者に届かない。利用者が書き換えた文は表に無いので今までどおり優先する。
+_lang_old_cache = None
+
+
+def _lang_old():
+    """{ファイル名: {キー: {公開した版にあった、今と違う文…}}}（読めなければ空＝今までどおり exe隣の文を全部使う）"""
+    global _lang_old_cache
+    if _lang_old_cache is None:
+        out = {}
+        try:
+            with open(os.path.join(LANG_SEED_DIR, 'history', 'released.json'), 'r', encoding='utf-8') as f:
+                files = json.load(f).get('files')
+            for name, m in (files.items() if isinstance(files, dict) else ()):
+                if isinstance(m, dict):
+                    out[name] = {k: {s for s in v if isinstance(s, str)} for k, v in m.items() if isinstance(v, list)}
+        except Exception:
+            out = {}
+        _lang_old_cache = out
+    return _lang_old_cache
+
+
+def _read_lang(path):
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else None
+    except Exception:
+        return None   # 壊れたファイルは無視して他方を使う
+
+
+def _merge_lang(name):
+    """/lang/<name> の中身（同梱・exe隣のどちらにも無ければ None）"""
+    seed = _read_lang(os.path.join(LANG_SEED_DIR, name)) if os.path.isfile(os.path.join(LANG_SEED_DIR, name)) else None
+    user = None
+    if os.path.normcase(os.path.abspath(LANG_DIR)) != os.path.normcase(os.path.abspath(LANG_SEED_DIR)):   # dev は同じフォルダ
+        p = os.path.join(LANG_DIR, name)
+        user = _read_lang(p) if os.path.isfile(p) else None
+    if seed is None and user is None:
+        return None
+    merged = dict(seed or {})
+    old = _lang_old().get(name, {})
+    for k, v in (user or {}).items():   # 後勝ち＝ユーザー側の訳が優先
+        if k in merged and isinstance(v, str) and v != merged[k] and v in old.get(k, ()):
+            continue   # 昔の同梱の文そのまま（初回の起動で写した物）＝今の同梱の文を使う
+        merged[k] = v
+    return merged
+
+
 def _safe(name):
     # ファイル名を安全化（パストラバーサル・不正文字の除去）。ディレクトリ部は捨てる
     name = os.path.basename(str(name or ''))
@@ -200,22 +278,12 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 except Exception as e:
                     obj = {'ok': False, 'error': str(e)}
             return self._reply(200, obj)
-        # 翻訳は「同梱版を土台に exe隣の版で上書き」してキー単位で合成して返す。
-        # exe隣の lang/ は初回にシードされた後は更新されない（ユーザー編集を守るため）ので、
-        # 丸ごと差し替えだと旧版の lang/ を持つ利用者には新機能の訳が欠ける（アップデート時の互換対策 2026-09-27）。
+        # 翻訳は「同梱版を土台に exe隣の版で上書き」してキー単位で合成して返す（_merge_lang）
         lp = unquote(self.path.split('?', 1)[0])
         m = re.fullmatch(r'/lang/([A-Za-z0-9_-]+\.json)', lp)
         if m:
-            merged, found = {}, False
-            for d in (LANG_SEED_DIR, LANG_DIR):   # 後勝ち＝ユーザー側の訳が優先
-                p = os.path.join(d, m.group(1))
-                if os.path.isfile(p):
-                    try:
-                        with open(p, 'r', encoding='utf-8') as f:
-                            merged.update(json.load(f)); found = True
-                    except Exception:
-                        pass   # 壊れたファイルは無視して他方を使う
-            if found:
+            merged = _merge_lang(m.group(1))
+            if merged is not None:
                 return self._reply(200, merged)
         if lp == '/config/settings.json':   # 保存（__settings/save）と同じ鍵の中で読む＝保存の途中を返さない
             with _settings_lock:
@@ -385,6 +453,9 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 return self._reply(200, rp.use(self._body().get('version')))
             if act == 'measure':
                 return self._reply(200, rp.measure(self._body()))
+            if act == 'openNotes':   # 更新のお知らせの「詳しく見る」（その版のリリースのページ。版の形は rating_plugin が確かめる）
+                b = self._body()
+                return self._reply(200, rp.open_notes(b.get('version') if isinstance(b, dict) else None))
         except PluginError as e:
             return self._reply(200, {'ok': False, 'error': e.code, 'detail': e.detail})
         return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
@@ -410,6 +481,9 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 except ValueError:
                     raise AutoModderError('badInput')
                 return self._reply(200, ap.run(b))
+            if act == 'openNotes':   # 更新のお知らせの「詳しく見る」（その版のリリースのページ。版の形は automodder_plugin が確かめる）
+                b = self._body()
+                return self._reply(200, ap.open_notes(b.get('version') if isinstance(b, dict) else None))
         except AutoModderError as e:
             return self._reply(200, {'ok': False, 'error': e.code, 'detail': e.detail})
         return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
@@ -437,6 +511,34 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 return self._reply(200, UPDATER.open_releases())
         except UpdateError as e:
             return self._reply(200, {'ok': False, 'error': e.code, 'detail': e.detail})
+        return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
+
+    def _help(self):
+        # ヘルプ: 決まったページをブラウザで・決まった文書をメモ帳で開く（名前は HELP_DOCS・HELP_FILES。それ以外は bad-request）
+        act = self.path[len('/__help/'):]
+        try:
+            b = self._body()
+        except ValueError:
+            b = None
+        b = b if isinstance(b, dict) else {}
+        lang = 'en' if b.get('lang') == 'en' else 'ja'
+        if act == 'open':
+            doc = HELP_DOCS.get(b.get('doc')) if isinstance(b.get('doc'), str) else None
+            if not doc:
+                return self._reply(200, {'ok': False, 'error': 'bad-request'})
+            if not _NO_OPEN:
+                _help_open_url(doc[lang])
+            return self._reply(200, {'ok': True, 'opened': doc[lang]})
+        if act == 'openFile':
+            name = HELP_FILES.get(b.get('name')) if isinstance(b.get('name'), str) else None
+            if not name:
+                return self._reply(200, {'ok': False, 'error': 'bad-request'})
+            path = next((p for p in (os.path.join(DATA_DIR, name), os.path.join(BASE_DIR, name)) if os.path.isfile(p)), None)
+            if not path:
+                return self._reply(200, {'ok': False, 'error': 'missing'})
+            if not _NO_OPEN:
+                _help_open_file(path)
+            return self._reply(200, {'ok': True, 'opened': name})
         return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
 
     def _reply_bytes(self, data, ctype):
@@ -629,6 +731,8 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 return self._automodder()
             if self.path.startswith('/__lib/'):   # MEDIA ライブラリ。詳細は _lib
                 return self._lib()
+            if self.path.startswith('/__help/'):   # ヘルプのページ・ライセンスの文書を開く。詳細は _help
+                return self._help()
             os.makedirs(ASSET_DIR, exist_ok=True)
             if self.path == '/__asset/save':
                 b = self._body()

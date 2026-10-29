@@ -286,7 +286,7 @@ def test_clips_refused_and_cancel(t):
     st2["sections"][0]["end"] = 4
     st2["sections"].insert(1, {"start": 4, "end": 8, "label": "S9", "count": 1, "chorus": False, "name": ""})
     ana_mock(ed, tempo=TEMPO_SAME, structure=st2)
-    ed.js("document.querySelector('#mFileMenu button[data-act=analyze]').click();true")
+    ed.js("document.querySelector('.mbMenu button[data-act=analyze]').click();true")
     wait_until(ed, "(a=>!a.running&&a.labels.length===5)(window._dbgApp.analysis())", label="裏で解析し直す")
     _clear_toast(ed)
     clips_ok(ed)

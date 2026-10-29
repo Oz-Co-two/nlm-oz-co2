@@ -29,9 +29,11 @@
   .pieitem.piecolor span{font-size:10px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000,0 0 3px #000;}
   .pieitem.piecolor.hot{border-color:#fff;box-shadow:0 0 0 3px var(--accent);}
 
-  #mFileMenu .mkey{color:#8a8a8a;font-size:11px;}
+  .mbMenu .mkey{color:#8a8a8a;font-size:11px;}
 
-  #mFileMenu button:hover .mkey{color:#eee;}
+  .mbMenu button:hover:not(:disabled) .mkey{color:#eee;}
+
+  .mbMenu button:disabled .mkey{color:#55555a;}
 
   #modeKeys{position:absolute;top:44px;left:14px;z-index:15;pointer-events:none;   /* ツールバー(z14)より前=どこへ動かしても持ち手が埋もれない */
     display:flex;flex-direction:column;gap:1px;

@@ -156,7 +156,7 @@ def test_analysis_same_tempo_no_dialog(t):
 
 def test_analysis_progress_and_cancel(t):
     '''解析中は帯に進み具合と［やめる］（その間も編集できる＝帯の外は普通に操作できる）。［やめる］で作業の取り消しを送り、帯は消える。
-    遅れて届いた結果は使わない。ファイルメニューから2回目を押しても重ねて始めない'''
+    遅れて届いた結果は使わない。解析中の譜面作りのメニューは「曲の解析をやめる」'''
     ed = _open(t)
     ana_mock(ed, status_t1=[{"ok": True, "state": "running", "stage": "tempo", "progress": 0.4},
                             {"waitFor": "late", "then": {"ok": True, "state": "done", "stage": "tempo", "progress": 1, "result": TEMPO}}])
@@ -165,8 +165,9 @@ def test_analysis_progress_and_cancel(t):
     a = ana(ed)
     t.eq((a["shown"], a["startBtn"], a["msg"]), (True, False, "曲を解析中: テンポを推定 40%やめる"), "帯に進み具合と［やめる］")
     t.eq(ed.js("document.querySelector('#anaMsg .amBar i').style.width"), "17%", "全体の進み具合のバー（テンポは5〜35%の間）")
-    start_from_menu(ed)
-    t.eq(ed.js("document.getElementById('stat').textContent"), "曲を解析しています（やめる時は帯の［やめる］）", "2回目は重ねて始めない")
+    click_sel(ed, "#mMapBtn")   # 解析中のメニューは「やめる」（重ねて始める入口は無い。押した時は test_analysis_mapping_menu）
+    t.eq(ed.js("document.querySelector('#mMapMenu button[data-act=analyze]').textContent"), "曲の解析をやめる", "解析中のメニュー")
+    ed.key("Escape")
     t.eq(len(ana_calls(ed, "upload")), 1, "送ったのは1回だけ")
     # 解析中も編集できる（BPM の欄を変えられる）
     click_sel(ed, "#bpmField .bfA[data-k=up]")
@@ -229,7 +230,7 @@ def test_analysis_running_msg_left_and_motion(t):
     ed.wait(0.1)
     m = _msg_box(ed)
     t.eq((m["pulse"], m["flow"]), ("none", "none"), "動きを減らす設定では止める")
-    ed.call("Emulation.setEmulatedMedia", features=[])
+    ed.call("Emulation.setEmulatedMedia", features=[{"name": "prefers-reduced-motion", "value": "no-preference"}])   # cdp の既定へ戻す（[] だと PC の設定になる）
     # ［やめる］は押せる
     click_sel(ed, "#anaMsg .amBtn")
     wait_until(ed, "!window._dbgApp.analysis().shown", label="やめる")
@@ -333,6 +334,44 @@ def test_analysis_band_click_rename_markers_clear(t):
     t.no_errors()
 
 
+def test_analysis_mapping_menu(t):
+    '''譜面作りのメニュー（2026-10-28）: 解析の結果が無い時は「解析の結果からクリップを作る…」「セクションの頭にマーカーを書き出す」が灰色（理由は
+    ツールチップ）。解析中は「曲を解析」が「曲の解析をやめる」に変わり、押すとやめる。結果があれば2つとも帯の「⋯」と同じ働き'''
+    ed = _open(t)
+    items = "Object.fromEntries([...document.querySelectorAll('#mMapMenu button')].map(b=>[b.dataset.act,[b.textContent,b.disabled,b.title]]))"
+    click_sel(ed, "#mMapBtn")
+    m = ed.js(items)
+    t.eq(m["analyze"], ["曲を解析（テンポ・構成）…", False, ""], "曲を解析")
+    for act in ("anaclips", "anamarkers"):
+        t.eq(m[act][1:], [True, "曲の構成を解析した結果がありません（先に「曲を解析」）"], f"{act}: 結果が無い＝灰色と理由")
+    click_sel(ed, ".mbMenu button[data-act=anamarkers]")
+    t.ok(ed.js("document.getElementById('mMapMenu').style.display==='block'"), "灰色の項目は押しても何もしない（メニューも閉じない）")
+    ed.key("Escape")
+    # 解析中＝「やめる」
+    ana_mock(ed, status_t1=[{"ok": True, "state": "running", "stage": "tempo", "progress": 0.4}])
+    click_sel(ed, "#anaStartBtn")
+    wait_until(ed, "!!window._dbgApp.analysis().running", label="解析中")
+    click_sel(ed, "#mMapBtn")
+    t.eq(ed.js(items)["analyze"][0], "曲の解析をやめる", "解析中は「やめる」")
+    click_sel(ed, ".mbMenu button[data-act=analyze]")
+    wait_until(ed, "!window._dbgApp.analysis().shown", label="やめると帯が消える")
+    t.eq([c["body"] for c in ana_calls(ed, "cancel")], [{"job": "t1"}], "作業の取り消しを送る")
+    # 結果がある＝帯の「⋯」と同じ
+    run_analysis(ed, "none")
+    click_sel(ed, "#mMapBtn")
+    m = ed.js(items)
+    t.eq((m["analyze"][0], m["anaclips"][1:], m["anamarkers"][1:]), ("曲を解析（テンポ・構成）…", [False, ""], [False, ""]), "結果があれば押せる")
+    click_sel(ed, ".mbMenu button[data-act=anamarkers]")
+    wait_until(ed, "window._dbgApp.nle().markers.length===4", label="マーカー")
+    t.eq([(x["beat"], x["name"]) for x in nle(ed)["markers"]], [(0, "イントロ S1"), (8, "Aメロ S2"), (16, "サビ S3"), (24, "Aメロ S2")],
+         "セクションの頭にマーカー")
+    click_sel(ed, "#mMapBtn"); click_sel(ed, ".mbMenu button[data-act=anaclips]")
+    wait_until(ed, "!!document.querySelector('#dirtyDlg[data-ana=clips] .ddBtns button')", label="解析からクリップを作る画面")
+    ed.key("Escape")
+    wait_until(ed, "!document.querySelector('#dirtyDlg[data-ana=clips]')", label="閉じる")
+    t.no_errors()
+
+
 def test_analysis_tempo_result_from_menu(t):
     '''帯の「⋯」→「テンポの推定結果…」で見返せる（適用した方には「（今の設定）」・押せない）。ここから候補Bを適用すると BPM・無音追加が変わり、帯は「解析し直して」になる'''
     ed = _open(t)
@@ -380,7 +419,7 @@ def test_analysis_stale_and_reanalyze_keeps_names(t):
     for sec in st2["sections"]:
         sec["label"] = {"S2": "S3", "S3": "S2"}.get(sec["label"], sec["label"])
     ana_mock(ed, tempo=TEMPO_SAME, structure=st2)
-    click_sel(ed, "#mFileBtn"); click_sel(ed, "#mFileMenu button[data-act=analyze]")
+    click_sel(ed, "#mMapBtn"); click_sel(ed, ".mbMenu button[data-act=analyze]")
     wait_until(ed, "(a=>!a.running&&a.labels[1]!=='ばーす S2')(window._dbgApp.analysis())", label="解析し直した帯")
     t.eq(ana(ed)["labels"], ["イントロ S1", "ばーす S3", "サビ S2★", "ばーす S3"], "名前は同じ位置の番号（S3）へ引き継ぐ")
     t.eq(ana(ed)["data"]["names"], {"S3": "ばーす"}, "保存も新しい番号で")
@@ -472,7 +511,7 @@ def test_analysis_english_wording(t):
     ed.load_fixture("basic", settle=0.3)
     wait_until(ed, "window._dbgApp.analysis().startBtn", label="［Analyze song］")
     t.eq(ed.js("document.getElementById('anaStartBtn').textContent"), "🎼 Analyze song", "溝のボタン")
-    t.eq(ed.js("document.querySelector('#mFileMenu button[data-act=analyze]').textContent"), "Analyze song (tempo & structure)…", "ファイルメニュー")
+    t.eq(ed.js("document.querySelector('.mbMenu button[data-act=analyze]').textContent"), "Analyze song (tempo & structure)…", "ファイルメニュー")
     ana_mock(ed)
     click_sel(ed, "#anaStartBtn")
     wait_tempo_dialog(ed)

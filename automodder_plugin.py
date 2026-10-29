@@ -11,7 +11,8 @@
 # 安全のための約束:
 #  - 取得先 URL はここに固定。JS から URL・パス・版以外の値を受け取らない（版も「取り込み済みの一覧」と照合する）
 #  - zip は manifest.json の SHA-256・サイズと照合してから展開し、展開時にフォルダ外へ出る名前を拒否する
-#  - 通信は利用者がボタンを押した時だけ（自動確認はしない）
+#  - GitHub への通信は、利用者がボタンを押した時と、起動時の更新の確認（取り込み済みの時だけ・環境設定で OFF にできる・
+#    js/update/update-dialog.js。2026-10-28 から）だけ
 #  - 署名なし exe の実行になるので、取得先固定＋ハッシュ照合は外さないこと
 #  - プラグインの出力は画面に出すので、知っている項目・形だけを通す（文字は長さを切る。画面では textContent／escHtml で出す）
 import hashlib, json, math, os, re, shutil, subprocess, threading, urllib.error, urllib.request, zipfile
@@ -21,7 +22,8 @@ EXE = 'nlm-automodder.exe'
 REPO = 'Oz-Co-two/nlm-automodder'
 MANIFEST_URL = f'https://github.com/{REPO}/releases/latest/download/manifest.json'
 ZIP_URL = f'https://github.com/{REPO}/releases/download/v{{ver}}/{{name}}'
-PROTOCOL = 1                 # NLM が話せるプラグインとの通信仕様の版（プラグイン側 Program.Protocol と同じ値）
+RELEASE_URL = f'https://github.com/{REPO}/releases/tag/v{{ver}}'   # 更新のお知らせの「詳しく見る」（リリースの説明＝日英）
+PROTOCOL = 1                # NLM が話せるプラグインとの通信仕様の版（プラグイン側 Program.Protocol と同じ値）
 PLATFORM = 'win-x64'
 MAX_ZIP = 100 * 1024 * 1024  # 取得する zip の上限（実物は約 12MB）
 MAX_UNZIP = 300 * 1024 * 1024  # 展開後の合計の上限（実物は約 29MB）
@@ -77,6 +79,21 @@ class PluginError(Exception):
 
 def _vtuple(v):
     return tuple(int(x) for x in v.split('.'))
+
+
+def _clean_notes(notes):
+    """manifest.json の更新内容（版ごとの見出し・プラグインの build.py が CHANGELOG から作る）。画面に出す文字なので形と長さだけ整える
+    （表示は textContent。rating_plugin.py と同じ）"""
+    out = []
+    for n in (notes if isinstance(notes, list) else [])[:200]:
+        if not isinstance(n, dict) or not isinstance(n.get('version'), str) or not _VER_RE.fullmatch(n['version']):
+            continue
+        item = {'version': n['version']}
+        for lang in ('ja', 'en'):
+            xs = n.get(lang)
+            item[lang] = [str(x)[:300] for x in xs[:60] if isinstance(x, str)] if isinstance(xs, list) else []
+        out.append(item)
+    return out
 
 
 def _child_env():
@@ -198,15 +215,27 @@ class AutoModderPlugin:
         return m
 
     def check(self):
-        """GitHub の最新版を調べる（取り込みはしない）"""
+        """GitHub の最新版を調べる（取り込みはしない）。newer＝取り込み済みのどの版より新しい、notes＝それより新しい版の更新内容（新しい順）"""
         m = self._check_manifest(self._get(MANIFEST_URL, 64 * 1024))
         st = self.status()
         am = m.get('automodder')
+        lv = _vtuple(m['version'])
+        top = max((_vtuple(i['version']) for i in st['installed']), default=(0, 0, 0))
+        notes = sorted((n for n in _clean_notes(m.get('notes')) if top < _vtuple(n['version']) <= lv),
+                       key=lambda n: _vtuple(n['version']), reverse=True)
         st['latest'] = {'version': m['version'], 'protocol': m['protocol'], 'size': m['zip']['size'],
                         'compatible': m['protocol'] == PROTOCOL,
                         'automodder': am if isinstance(am, str) and _VER_RE.fullmatch(am) else None,
-                        'installed': any(i['version'] == m['version'] for i in st['installed'])}
+                        'installed': any(i['version'] == m['version'] for i in st['installed']),
+                        'newer': lv > top, 'notes': notes}
         return st
+
+    def open_notes(self, ver):
+        """その版のリリースのページを既定のブラウザで開く（版の形でなければリリースの一覧）。取得先は REPO に固定"""
+        import webbrowser
+        ver = ver if isinstance(ver, str) and _VER_RE.fullmatch(ver) else None
+        webbrowser.open(RELEASE_URL.format(ver=ver) if ver else f'https://github.com/{REPO}/releases')
+        return {'ok': True}
 
     def install(self):
         """最新版を取得し、SHA-256 を照合して plugins/automodder/<版>/ へ展開する。成功したらその版を使う版にする"""

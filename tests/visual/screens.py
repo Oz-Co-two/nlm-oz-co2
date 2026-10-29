@@ -37,7 +37,7 @@ COMMON_MASK = [
     (-20, 0, 20, 4000),  # そのアイコンは右端20pxにはみ出して描かれることもある（x が負＝右端から）
 ]
 # 浮いている層（メニュー・パネル）。この中の部品と外の部品の重なりは「上に出している」とみなす。position:fixed の要素は自動で入る
-COMMON_POPUPS = ['#mFileMenu', '#ctxmenu', '.tbpanel', '.ctxsub', '#pie']
+COMMON_POPUPS = ['.mbMenu', '#ctxmenu', '.tbpanel', '.ctxsub', '#pie']
 # 崩れ検出の対象にしない所
 COMMON_IGNORE = ['.__visMark']
 
@@ -198,6 +198,13 @@ def am_mock_installed(ed):
     automodder_helpers.am_spy(ed, {"install": automodder_helpers.AM_INSTALLED, "run": automodder_helpers.am_result()})
 
 
+def plugin_update_mock(ed):
+    """プラグインの更新の知らせ: メニューの「更新を確認…」の応答を偽物にする（本体は最新・難易度を測るに v0.2.0・AutoModder は未導入。
+    tests/_lib/plugin_update_helpers.py。通信・取り込みはしない）"""
+    import plugin_update_helpers   # tests/_lib（nlmtest が読み込み先に足している）
+    plugin_update_helpers.mock_manual_rating_newer(ed)
+
+
 def mock_song_details(ed):
     """全曲データの状態の応答を見本（2026-10-12 06:30 時点のデータ）に差し替える（環境設定の MEDIA タブの状態の表示を毎回同じにする）"""
     h = _e2e_helpers()
@@ -317,6 +324,15 @@ SCENES = [
     Scene('通常画面', FIXTURE, [
         Screen('main', '素材を読み込んだ通常画面（MEDIA・NLE・NOTES）'),
         Screen('file_menu', 'ファイルメニュー', steps=[click('#mFileBtn')], leave=[click('#mFileBtn')]),
+        Screen('map_menu', '譜面作りのメニュー（解析の結果が無い＝下の2つは灰色）', steps=[click('#mMapBtn')], leave=[click('#mMapBtn')]),
+        Screen('check_menu', '確かめるのメニュー', steps=[click('#mCheckBtn')], leave=[click('#mCheckBtn')]),
+        Screen('review_menu', '審査のメニュー', steps=[click('#mReviewBtn')], leave=[click('#mReviewBtn')]),
+        Screen('prefs_menu', '環境設定のメニュー（「環境設定…」の1行）', steps=[click('#mbSettings')], leave=[click('#mbSettings')]),
+        Screen('help_menu', 'ヘルプのメニュー', steps=[click('#mHelpBtn')], leave=[click('#mHelpBtn')]),
+        Screen('about', '「NLM について」（ヘルプのメニュー。プラグインは未導入）',
+               steps=[click('#mHelpBtn'), click('.mbMenu button[data-act=about]'),
+                      until("[...document.querySelectorAll('#dirtyDlg[data-dlg=about] .abPlVer')].every(e=>e.textContent!=='…')", what='プラグインの版')],
+               leave=[key('Escape'), until("!document.querySelector('#dirtyDlg[data-dlg=about]')", what='閉じる')]),
         Screen('diff_menu', '難易度のメニュー（選択中の難易度をもう一度クリック）',
                steps=[click('#diffBar .dfSeg.on')], leave=[key('Escape'), js("document.getElementById('ctxmenu').style.display='none'")]),
         Screen('snap_panel', 'スナップの一覧（ツールバー）', steps=[click('#tbSnapBtn')], leave=[click('#tbSnapBtn')]),
@@ -337,7 +353,7 @@ SCENES = [
         Screen('preview', 'PREVIEW（左上でTab）', steps=[tab('pv', 1.5)]),
     ]),
     Scene('環境設定', FIXTURE, [
-        Screen('settings_app', '環境設定: アプリケーション設定', steps=[click('#mbSettings', 0.6)]),
+        Screen('settings_app', '環境設定: アプリケーション設定', steps=[click('#mbSettings'), click('.mbMenu button[data-act=settings]', 0.6)]),
         Screen('settings_vol', '環境設定: 音量設定', steps=[click('#settingsBox .setTab[data-tab=vol]')]),
         Screen('settings_preview', '環境設定: Preview設定', steps=[click('#settingsBox .setTab[data-tab=preview]')]),
         Screen('settings_cam', '環境設定: カメラ設定', steps=[click('#settingsBox .setTab[data-tab=cam]')]),
@@ -349,7 +365,7 @@ SCENES = [
     ]),
     Scene('譜面チェック', FIXTURE, [
         Screen('mapcheck', '譜面チェックのパネル（BS Map Check）',
-               steps=[click('#mFileBtn'), click('#mFileMenu button[data-act=mapcheck]'), until("!!document.querySelector('#mcPanel .mcSum')")]),
+               steps=[click('#mCheckBtn'), click('.mbMenu button[data-act=mapcheck]'), until("!!document.querySelector('#mcPanel .mcSum')")]),
         Screen('mapcheck_bl', '譜面チェックのパネル（NLM版 BL評価リスト）', steps=[click('#mcPanel .mcTab[data-tab=bl]', 1.0)]),
         Screen('mapcheck_bl_stars', 'BL評価リスト: R5.A の★/Tech の欄（プラグイン未導入・取り込みの説明）',
                steps=[until("!!document.querySelector('#mcPanel .blRtOpen')"),
@@ -413,8 +429,13 @@ SCENES = [
     ]),
     Scene('難易度を測る', FIXTURE, [
         Screen('rating', '難易度を測るのパネル（プラグイン未導入）',
-               steps=[click('#mFileBtn'), click('#mFileMenu button[data-act=rating]'),
+               steps=[click('#mCheckBtn'), click('.mbMenu button[data-act=rating]'),
                       until("!!document.querySelector('#rtPanel .rtTable, #rtPanel .rtIntro, #rtPanel .rtErr')")]),
+        Screen('plugin_update', 'プラグインの更新の知らせ（メニューの「更新を確認…」・難易度を測るに v0.2.0。応答は偽物）',
+               steps=[plugin_update_mock, click('#mHelpBtn'), click('.mbMenu button[data-act=update]'),
+                      until("!!document.querySelector('#updDlg .udNotes li')", what='プラグインの更新の知らせ')],
+               leave=[click('#updDlg .udBtns button:not(.pri)'), until("!document.getElementById('updDlgBg')", what='知らせを閉じる'),
+                      js("(()=>{if(window.__puOrig){window.fetch=window.__puOrig;delete window.__puOrig;} return 1})()", 0.2, name='偽物を外す')]),
     ]),
 ]
 

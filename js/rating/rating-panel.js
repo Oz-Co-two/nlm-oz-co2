@@ -66,7 +66,7 @@ export function installRatingPanel(api) {
     // お知らせ（エラー・更新確認の結果）
     const me = el.querySelector('.rtMsg');
     me.className = 'rtMsg' + (msg ? (msg.err ? ' err' : ' ok') : ''); me.textContent = msg ? msg.text : '';
-    el.querySelector('.rtFoot').innerHTML = escHtml(t('rt.foot', 'BeatLeader の公開ソースコードで計算した近似値です。本家の値と異なる場合があります（特に Acc は本家より低めに出ることがあります）。BeatLeader の公式ツールではありません。'))
+    el.querySelector('.rtFoot').innerHTML = escHtml(t('rt.foot', 'BeatLeader の公開ソースコードで計算した近似値です。本家の値と異なる場合があります（特に Acc は、本家ではプレイヤーのスコアから譜面ごとの補正が掛かります）。BeatLeader の公式ツールではありません。'))
       + `<br><span class="rtFootSub">${escHtml(t('rt.footSub', 'ノーツが20個未満の難易度は測れません。速度違い: SS=0.85倍 / FS=1.2倍 / SFS=1.5倍。'))}</span>`;
     renderBody();
   }

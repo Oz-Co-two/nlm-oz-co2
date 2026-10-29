@@ -222,8 +222,8 @@ def export_click(ed, folder_name=None):
 
 # ---- 環境設定 ----
 def open_prefs(ed):
-    """メニュー「環境設定」を本物のクリックで開く"""
-    click_sel(ed, "#mbSettings", "環境設定メニュー")
+    """メニュー「環境設定」→「環境設定…」を本物のクリックで開く"""
+    file_menu(ed, "settings")
     wait_until(ed, "document.getElementById('settingsBg').style.display==='flex'", label="環境設定が開く")
 
 

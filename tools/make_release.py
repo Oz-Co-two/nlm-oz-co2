@@ -8,6 +8,8 @@
   ビルド結果に揃っていないと止まる（zip は dist/NonLinearMapper の中身を全部入れる）。
 - update.json の更新内容は CHANGELOG.md / CHANGELOG.en.md の「## v〇.〇.〇-oz」ごとの、行頭の太字（- **〜**）。
   日英で版の並びと見出しの数が違うと止まる（英語表示で抜けが出ないように）。
+- ビルド結果の lang/history/released.json（公開した版の訳のうち今と違う文の表・tools/lang_history.py）が、公開した全部の版の文を
+  含んでいないと止まる（足りないと、exe の隣の古い訳が、同じキーのまま直した文を今の利用者の画面で上書きする）。
 - できた zip を app_update.py と同じ検査（照合・展開・版の確認）に通してから終わる。
 - 公開はこの後に手で行う（gh release create <タグ> <zip> <update.json> ...）。update.json を添付し忘れると、
   旧版のアプリは「最新リリースに update.json が無い」ので更新を知らせられない。
@@ -21,6 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools"))
 import app_update  # noqa: E402
 
 DIST = ROOT / "dist" / "NonLinearMapper"
@@ -119,6 +122,12 @@ def main():
     missing = [n for n in app_update.REPLACE_ITEMS if not (DIST / n).exists()]
     if missing:   # 案内文・ライセンス（LICENSE・THIRD_PARTY_NOTICES.txt）は nlm.spec がビルドの最後に写す
         fail(f"{DIST} に {', '.join(missing)} がありません。nlm.spec でビルドし直してください")
+    # 公開した版の訳の表（exe の隣の古い訳が、直した文を上書きしないように。tools/lang_history.py）
+    import lang_history
+    miss = lang_history.missing(ROOT, DIST / "_internal" / "lang")
+    if miss:
+        fail(f"ビルド結果の lang/history/released.json に、公開した版の訳が {len(miss)} 件足りません（例: {miss[0]}）。"
+             "python tools/lang_history.py で作り直してからビルドし直してください")
     lgpl_sources()
     notes = build_notes(ver)
     OUT.mkdir(parents=True, exist_ok=True)

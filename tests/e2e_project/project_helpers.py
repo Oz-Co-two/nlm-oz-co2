@@ -6,6 +6,7 @@
 """
 import json
 
+from cdp import MENU_ITEM
 from e2e_helpers import wait_until
 
 _FAKE_JS = r"""(()=>{
@@ -74,10 +75,11 @@ def _click_el(ed, sel):
 
 
 def file_menu(ed, act):
-    """ファイルメニューを開いて data-act=act の項目を押す（new/open/save/saveas/savecopy）"""
-    _click_el(ed, "#mFileBtn")
-    wait_until(ed, "document.getElementById('mFileMenu').style.display==='block'", label="ファイルメニューが開く")
-    _click_el(ed, f"#mFileMenu button[data-act='{act}']")
+    """メニューバーの data-act=act の項目を、それが入っているメニューを開いて押す（名前はメニューが1つだったころのまま）"""
+    head = ed.menu_head(act)
+    _click_el(ed, head)
+    wait_until(ed, f"document.querySelector({json.dumps(head)}).parentElement.querySelector('.mbMenu').style.display==='block'", label="メニューが開く")
+    _click_el(ed, MENU_ITEM.format(act=act))
 
 
 # ---- 未保存の3択ダイアログ ----

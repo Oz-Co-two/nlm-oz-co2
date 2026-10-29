@@ -219,8 +219,13 @@ def tour(ed):
         ed.call("Input.dispatchKeyEvent", type="keyUp", key=k, code=code, windowsVirtualKeyCode=vk, nativeVirtualKeyCode=vk); ed.wait(0.3)
     # 配置色のパレット
     click_sel(ed, "#tbColSw", "配置色"); ed.wait(0.5); scan(ed, "カラーパレット"); ed.key("Escape"); ed.click(1700, 1000); ed.wait(0.3)
-    # ファイルメニュー
-    click_sel(ed, "#mFileBtn", "ファイル"); ed.wait(0.4); scan(ed, "ファイルメニュー"); ed.key("Escape"); ed.click(1700, 1000); ed.wait(0.3)
+    # メニューバーの全部のメニュー（2026-10-29 から6つ）・「NLM について」
+    for head, name in (("#mFileBtn", "ファイル"), ("#mMapBtn", "譜面作り"), ("#mCheckBtn", "確かめる"), ("#mReviewBtn", "審査"), ("#mbSettings", "環境設定"),
+                       ("#mHelpBtn", "ヘルプ")):
+        click_sel(ed, head, name); ed.wait(0.4); scan(ed, f"{name}のメニュー"); ed.key("Escape"); ed.wait(0.3)
+    click_sel(ed, "#mHelpBtn", "ヘルプ"); ed.wait(0.3); click_sel(ed, ".mbMenu button[data-act=about]", "NLM について")
+    wait_until(ed, "[...document.querySelectorAll('#dirtyDlg[data-dlg=about] .abPlVer')].every(e=>e.textContent!=='…')", label="NLM について")
+    scan(ed, "NLM について"); ed.key("Escape"); ed.wait(0.3)
     # 環境設定の全タブ
     open_prefs(ed)
     for tab in ("app", "vol", "preview", "cam", "keys", "media"):
@@ -247,18 +252,18 @@ def tour(ed):
     click_sel(ed, "#diffBar .dfSeg.on", "選択中の難易度"); ed.wait(0.4); scan(ed, "難易度のメニュー"); hide_menu(ed)
     link_tour(ed)   # 難易度のメニューを使うので、上の点検の後に
     # 譜面チェック（2つのタブ）・自動ライティング・難易度を測る
-    click_sel(ed, "#mFileBtn", "ファイル"); ed.wait(0.3); click_sel(ed, "#mFileMenu button[data-act=mapcheck]", "譜面チェック")
+    click_sel(ed, "#mCheckBtn", "確かめる"); ed.wait(0.3); click_sel(ed, ".mbMenu button[data-act=mapcheck]", "譜面チェック")
     wait_until(ed, "!!document.querySelector('#mcPanel .mcSum, #mcPanel .mcOk')", label="譜面チェックの結果")
     scan(ed, "譜面チェック")
     click_sel(ed, "#mcPanel .mcTab[data-tab=bl]", "BL評価リスト"); ed.wait(0.6); scan(ed, "BL評価リスト")
     click_sel(ed, "#mcPanel .mcTab[data-tab=mc]", "BS Map Check"); click_sel(ed, "#mcPanel .mcClose", "閉じる"); ed.wait(0.3)
     from automodder_helpers import am_tour   # 譜面チェックの AutoModder のタブ（未導入・取り込みの説明・結果。応答は偽物）
     am_tour(ed, scan)
-    click_sel(ed, "#mFileBtn", "ファイル"); ed.wait(0.3); click_sel(ed, "#mFileMenu button[data-act=autolight]", "自動ライティング")
+    click_sel(ed, "#mMapBtn", "譜面作り"); ed.wait(0.3); click_sel(ed, ".mbMenu button[data-act=autolight]", "自動ライティング")
     wait_until(ed, "!!document.getElementById('dirtyDlg')", label="自動ライティングの確認"); scan(ed, "自動ライティングの確認")
     ed.key("Escape"); ed.wait(0.3)
     ed.js("(()=>{const b=document.querySelector('#dirtyDlg button:not(.pri)'); if(b) b.click(); return 1})()"); ed.wait(0.3)
-    click_sel(ed, "#mFileBtn", "ファイル"); ed.wait(0.3); click_sel(ed, "#mFileMenu button[data-act=rating]", "難易度を測る")
+    click_sel(ed, "#mCheckBtn", "確かめる"); ed.wait(0.3); click_sel(ed, ".mbMenu button[data-act=rating]", "難易度を測る")
     wait_until(ed, "!!document.querySelector('#rtPanel .rtTable, #rtPanel .rtIntro, #rtPanel .rtErr')", label="難易度を測る")
     scan(ed, "難易度を測る")
     ed.js("(()=>{const b=document.querySelector('#rtPanel .rtClose, #rtPanel .mcClose'); if(b) b.click(); return 1})()"); ed.wait(0.3)
@@ -275,6 +280,8 @@ def tour(ed):
     from review_helpers import review_tour   # 審査の指摘（2026-10-27）: 読み込みの確認・一覧・飛んだ知らせ・書き出し・貼り付け・消すの確認
     review_tour(ed, scan)
     import_tour(ed)
+    from plugin_update_helpers import plugin_update_tour   # 本体とプラグインの更新の知らせ（2026-10-28）: 知らせ・更新した通知・まとめ（応答は偽物）
+    plugin_update_tour(ed, scan)
 
 
 def import_tour(ed):

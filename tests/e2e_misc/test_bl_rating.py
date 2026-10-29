@@ -24,8 +24,9 @@ _MC_DONE = ("(()=>{const p=document.getElementById('mcPanel');return !!p&&p.styl
             "&&!p.querySelector('.mcRerun').disabled&&p.querySelector('.mcBody').children.length>0})()")
 
 
-def _open_mapcheck(ed):
-    file_menu(ed, "mapcheck")
+def _open_mapcheck(ed, act="mapcheck"):
+    """確かめるのメニューから譜面チェックを開く（mapcheck＝BS Map Check のタブ・mapcheckbl＝BL評価リストのタブ）"""
+    file_menu(ed, act)
     wait_until(ed, _MC_DONE, timeout=20, label="チェック結果の表示")
 
 
@@ -88,10 +89,10 @@ def test_bl_stars_auto(t):
     # ↻ 再計算 → 測り直す
     click_in_view(ed, "#mcPanel .blRtRun", "↻ 再計算")
     wait_until(ed, "window.__rt.calls.filter(c=>c.act==='measure').length===2", label="再計算")
-    # 譜面を直して開き直す（タブは BL評価リストのまま）→ 直した内容を測る
+    # 譜面を直して、メニューの「譜面チェック（NLM版 BL評価リスト）…」で開き直す → 直した内容を測る
     click_sel(ed, "#mcPanel .mcClose", "閉じる")
     place_at(ed, 1, 2)
-    _open_mapcheck(ed)
+    _open_mapcheck(ed, "mapcheckbl")
     wait_until(ed, "window.__rt.calls.filter(c=>c.act==='measure').length===3", label="直した後は測り直す")
     hard = json.loads(next(f for f in rating_calls(ed)[-1]["body"]["files"] if f["name"] == "HardStandard.dat")["text"])
     first = json.loads(next(f for f in rating_calls(ed)[1]["body"]["files"] if f["name"] == "HardStandard.dat")["text"])

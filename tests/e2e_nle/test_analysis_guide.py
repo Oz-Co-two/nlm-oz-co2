@@ -252,7 +252,7 @@ def test_guide_waits_for_other_dialog(t):
     ana_mock(ed, tempo=TEMPO_SAME, status_s1=[{"waitFor": "s", "then": status_seq("structure", STRUCT)[-1]}])
     start_from_menu(ed)
     wait_until(ed, "(a=>a.running&&a.running.stage==='structure')(window._dbgApp.analysis())", label="構成の解析中")
-    click_sel(ed, "#mbSettings")
+    click_sel(ed, "#mbSettings"); click_sel(ed, ".mbMenu button[data-act=settings]")
     wait_until(ed, "getComputedStyle(document.getElementById('settingsBg')).display!=='none'", label="環境設定")
     ana_go(ed, "s")
     wait_until(ed, "!window._dbgApp.analysis().running&&window._dbgApp.analysis().shown", label="解析が終わる")
@@ -282,7 +282,7 @@ def test_guide_never_and_prefs(t):
     wait_until(ed, "!window._dbgApp.analysis().running", label="解析し直す")
     _no_guide(ed, "次から出さない")
     # 環境設定で戻す（「曲の解析」のまとまりの中）
-    click_sel(ed, "#mbSettings")
+    click_sel(ed, "#mbSettings"); click_sel(ed, ".mbMenu button[data-act=settings]")
     wait_until(ed, "!!document.getElementById('anaGuideOn').checkVisibility()", label="環境設定のアプリケーション設定")
     t.eq(ed.js("document.getElementById('anaGuideOn').closest('.row').querySelector('[data-i18n=\"set.anaAsk\"]').textContent"), "曲の解析", "「曲の解析」のまとまり")
     t.eq(ed.js("document.querySelector('[data-i18n=\"set.anaGuideOn\"]').textContent"), "解析が終わったら、次の手順を案内する", "チェックの文")

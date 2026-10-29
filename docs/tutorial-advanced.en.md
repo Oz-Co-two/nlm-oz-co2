@@ -945,7 +945,7 @@ Start it in one of these ways.
 
 - **Analyze** in "**Analyze this song?**", which appears when you load a song (see "[When you load a song](#when-you-load-a-song)" below)
 - The purple **🎼 Analyze song** at the left of the spectrogram, below the Music row of the NLE (shown only while there are no analysis results)
-- **Analyze song (tempo & structure)…** in the File menu
+- **Analyze song (tempo & structure)…** in the Mapping menu
 
 ![The display while analyzing. ① Progress ② Stop](images/tutorial-advanced-en/06-1-analyze-running.png)
 
@@ -969,9 +969,9 @@ When you load a new song, NLM asks "**Analyze this song?**". It also tells you w
 | ① | What the analysis can do | A suggested tempo (BPM and lead-in), the structure band, creating clips from the structure, and how long it takes |
 | ② | Don't ask again | Check it and close the dialog to stop being asked (you can turn it back on in Preferences; [chapter 11](#application)) |
 | ③ | Analyze | Start the analysis right away |
-| ④ | Not now | Close without doing anything (Esc does the same). To analyze later, use 🎼 Analyze song or the File menu |
+| ④ | Not now | Close without doing anything (Esc does the same). To analyze later, use 🎼 Analyze song or the Mapping menu |
 
-- You are asked when you bring in a new song: with "Load music file…" in the File menu, by putting a song from MEDIA into the Music row, or with "Load song data"
+- You are asked when you bring in a new song: with "Load music file…" in the Mapping menu, by putting a song from MEDIA into the Music row, or with "Load song data"
 - You are not asked when the song is loaded automatically as you open a project, or when you reconnect the song. You are also not asked if that song already has analysis results
 - Because this dialog pops up right after loading a song, the Enter key doesn't press any button
 
@@ -1067,6 +1067,8 @@ Right-click the band (or press **⋯** in the gutter) to open the menu.
 | ④ | Tempo estimate… | Show the tempo confirmation dialog again (you can apply from here too) |
 | ⑤ | Analyze again | Analyze again with the current BPM, lead-in and Music placement ("Stop analyzing" while it is running) |
 | ⑥ | Clear analysis results | Remove the band (can be undone with Ctrl + Z) |
+
+"Create clips…" and "Export section starts as markers" are also in the **Mapping** menu of the menu bar ("Create clips from the analysis…" and so on; you can use them only when there are analysis results).
 
 ### Exporting to markers
 
@@ -1214,7 +1216,7 @@ or to quickly clear "not enough lights" in the map check.
 You can start it from any of these:
 
 - **Auto light** on the LIGHTING mode toolbar (①)
-- **Auto lighting…** in the File menu
+- **Auto lighting…** in the Mapping menu
 - **💡 Auto lighting…**, shown next to map check items about too few lights ([chapter 9](#common-items-and-how-to-fix-them))
 
 ![The Auto light button on the toolbar](images/tutorial-advanced-en/07-3-auto-light-button.png)
@@ -1360,8 +1362,9 @@ You can also keep the panel open while you fix the map and check again with one 
 
 ### Map check (same as BS Map Check)
 
-Open it from **Map check (BeatLeader criteria)…** in the File menu, or from
+Open it from **Map check (same as BS Map Check)…** in the Check menu, or from
 **🔍 Map check (BeatLeader criteria)** on the export node of the INFO screen. The check starts as soon as it opens.
+The Check menu also has items that open the **NLM BL criteria list** and **AutoModder** tabs.
 
 The judgement is the same as the map check site [BS Map Check](https://github.com/KivalEvan/BeatSaber-MapCheck)
 with the BeatLeader preset.
@@ -1526,7 +1529,7 @@ the values are calculated and filled in automatically when you open the BL crite
 
 ### Estimate difficulty (approximate BeatLeader ★)
 
-Open it from **Estimate difficulty (approx. BeatLeader stars)…** in the File menu, or from
+Open it from **Estimate difficulty (approx. BeatLeader stars)…** in the Check menu, or from
 **★ Estimate difficulty (approx. BL stars)** on the export node of the INFO screen.
 
 #### The first time: install the plugin
@@ -1536,10 +1539,13 @@ It is not included in NLM, so press **Install from GitHub** in the panel to inst
 
 - The downloaded file is checked against the publisher's information (SHA-256) before use
 - The installed plugin is saved in the `plugins` folder of the app. It is kept when you update NLM
-- NLM connects to the internet only when you press the button
+- NLM connects to the internet only when you press the button, and for the update check at startup (only once the plugin is installed)
 - When the installation finishes, the measurement starts right away
 
-Use **Check for updates** to look for a newer version of the plugin.
+Use **Check for updates** to look for a newer version of the plugin. From v2.1.1-oz on, once the plugin is installed, NLM also checks at startup
+and, if there is a new version, shows its changes in the same kind of dialog as app updates (**Update** installs it, with no restart needed.
+If you choose **Don't update**, you can still update later with **Check for updates…** in the Help menu or **Check for updates** in the panel).
+You can turn off the startup check with "At startup, check for new versions of the app and installed plugins" in Preferences.
 If you have installed two or more versions, a field to choose the version appears, so you can go back to an older one.
 
 #### Reading the results
@@ -1567,7 +1573,8 @@ If you fix the map with the panel open, press **↻ Measure again**. Results mea
 - **Difficulties with fewer than 20 notes cannot be measured**
 
 > **These are approximations.** They are calculated with the source code published by BeatLeader, but may differ from the values on the BeatLeader website
-> (Acc in particular can come out lower). This is not an official BeatLeader tool.
+> (in particular, BeatLeader adjusts each map's Acc from players' scores. Maps without enough scores yet, right after they are ranked, have no adjustment,
+> so the values here correspond to what a map gets right after it is ranked). This is not an official BeatLeader tool.
 
 #### Ways to use it
 
@@ -1617,7 +1624,8 @@ The add-on plugin nlm-automodder (about 12 MB, Windows only) is needed. It is no
 
 - The downloaded file is checked against the publisher's information (SHA-256) before use
 - The installed plugin is saved in the `plugins` folder of the app. It is kept when you update NLM
-- NLM connects to the internet only when you press the install or **Check for updates** button
+- NLM connects to the internet only when you press the install or **Check for updates** button, and for the update check at startup
+  (only once the plugin is installed). New versions are announced the same way as for "Estimate difficulty"
 
 > **AutoModder differs from the current BeatLeader criteria in places** (the R5.A vision block time formula, the wall dodge rate and so on).
 > When its results differ from the NLM BL criteria list, check against the written BeatLeader criteria.
@@ -1652,11 +1660,11 @@ Load them into NLM to jump to each note and fix it, mark what you have fixed as 
 
 ### Loading review notes
 
-Load them from these items in the File menu.
+Load them from these items in the Review menu.
 
 | Menu | When to use it |
 |---|---|
-| **Load review notes…** | Choose the .txt files with the notes. You can choose files split by difficulty all at once |
+| **Load review notes (.txt)…** | Choose the .txt files with the notes. You can choose files split by difficulty all at once |
 | **Paste review notes…** | Paste the text of a Discord message into the field that appears and press **Read** (or **Ctrl + Enter**) |
 | **Review notes list…** | Opens the list of loaded notes (shows the list again after you closed it) |
 
@@ -1763,7 +1771,7 @@ So when you load notes for such a difficulty, the confirmation window shows a ch
 
 ### Exporting review notes
 
-**Export…** in the list makes a .txt in the same form as the notes. Choose one of two kinds.
+**Export…** in the list (or **Export (replies / NLM check results)…** in the Review menu) makes a .txt in the same form as the notes. Choose one of two kinds.
 
 ![The export window (NLM's check results). ① What to export ② Options ③ Preview ④ Copy / save](images/tutorial-advanced-en/10-5-review-export.png)
 
@@ -1902,7 +1910,7 @@ This is so that NLM never writes to an unknown export location planted in a proj
 **How to fix**
 
 - Output folder and cover image: select them again with "**🔌 Reconnect output folder / cover image**" on the export node of the INFO screen
-- Song: select it again with **File → Load music file…**
+- Song: select it again with **Mapping → Load music file…**
 
 Once you have selected them again, they are connected automatically from the next time.
 

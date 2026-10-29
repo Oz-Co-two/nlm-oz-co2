@@ -20,38 +20,83 @@
 <link rel="stylesheet" href="css/update.css">
 <link rel="stylesheet" href="css/analysis.css">
 <link rel="stylesheet" href="css/review.css">
+<link rel="stylesheet" href="css/help.css">
 </head>
 <body>
 <div id="bootCover"></div>
 <div id="menubar">
   <img src="icons/app_icon.svg" alt="">
   <span id="mbTitle">Non-Linear Mapper</span>
-  <div id="mFileWrap">
+  <!-- メニューバー（作業の流れで分ける・2026-10-28）。項目は data-act で editor-app.js の runMenuAct が受ける。
+       .mkey は data-key（ショートカットの操作の id）があれば今の割り当てを、data-ext があればブラウザで開く印を入れる。
+       文を変えたキーは新しい名前にする（exe の隣の lang/ の古い訳がキー単位で優先されるため） -->
+  <div class="mbWrap" id="mFileWrap">
     <button class="mbtn" id="mFileBtn" data-i18n="menu.file">ファイル</button>
-    <div id="mFileMenu">
+    <div class="mbMenu" id="mFileMenu">
       <button data-act="new"><span data-i18n="menu.new">新規</span><span class="mkey"></span></button>
-      <button data-act="open"><span data-i18n="menu.open">開く…</span><span class="mkey">Ctrl O</span></button>
+      <button data-act="open"><span data-i18n="menu.open">開く…</span><span class="mkey" data-key="open"></span></button>
       <hr>
-      <button data-act="save"><span data-i18n="menu.save">保存</span><span class="mkey">Ctrl S</span></button>
-      <button data-act="saveas"><span data-i18n="menu.saveAs">名前を付けて保存…</span><span class="mkey">Shift Ctrl S</span></button>
+      <button data-act="save"><span data-i18n="menu.save">保存</span><span class="mkey" data-key="save"></span></button>
+      <button data-act="saveas"><span data-i18n="menu.saveAs">名前を付けて保存…</span><span class="mkey" data-key="saveAs"></span></button>
       <button data-act="savecopy"><span data-i18n="menu.saveCopy">コピーを保存…</span><span class="mkey"></span></button>
       <hr>
-      <button data-act="loadsong"><span data-i18n="menu.loadSong">音楽ファイルを読み込む…</span><span class="mkey"></span></button>
       <button data-act="addfolder"><span data-i18n="menu.addFolder">MEDIAにフォルダを追加…</span><span class="mkey"></span></button>
-      <hr>
-      <button data-act="mapcheck"><span data-i18n="menu.mapCheck">譜面チェック（BeatLeader基準）…</span><span class="mkey"></span></button>
-      <button data-act="rating"><span data-i18n="menu.rating">難易度を測る（BeatLeaderの星の近似）…</span><span class="mkey"></span></button>
-      <button data-act="autolight"><span data-i18n="menu.autoLight">自動ライティング…</span><span class="mkey"></span></button>
-      <button data-act="analyze"><span data-i18n="menu.analyze">曲を解析（テンポ・構成）…</span><span class="mkey"></span></button>
-      <hr>
-      <button data-act="reviewload"><span data-i18n="menu.reviewLoad">審査の指摘を読み込む…</span><span class="mkey"></span></button>
-      <button data-act="reviewpaste"><span data-i18n="menu.reviewPaste">審査の指摘を貼り付けて読む…</span><span class="mkey"></span></button>
-      <button data-act="reviewlist"><span data-i18n="menu.reviewList">審査の指摘の一覧…</span><span class="mkey"></span></button>
-      <hr>
-      <button data-act="update"><span data-i18n="menu.update">更新を確認…</span><span class="mkey"></span></button>
     </div>
   </div>
-  <button class="mbtn" id="mbSettings" data-i18n="menu.settings">環境設定</button>
+  <div class="mbWrap" id="mMapWrap">
+    <button class="mbtn" id="mMapBtn" data-i18n="menu.mapping">譜面作り</button>
+    <div class="mbMenu" id="mMapMenu">
+      <button data-act="loadsong"><span data-i18n="menu.loadSong">音楽ファイルを読み込む…</span><span class="mkey"></span></button>
+      <hr>
+      <button data-act="analyze"><span data-i18n="menu.analyze">曲を解析（テンポ・構成）…</span><span class="mkey"></span></button>
+      <button data-act="anaclips"><span data-i18n="menu.anaClips">解析の結果からクリップを作る…</span><span class="mkey"></span></button>
+      <button data-act="anamarkers"><span data-i18n="menu.anaMarkers">セクションの頭にマーカーを書き出す</span><span class="mkey"></span></button>
+      <hr>
+      <button data-act="autolight"><span data-i18n="menu.autoLight">自動ライティング…</span><span class="mkey"></span></button>
+      <hr>
+      <button data-act="export"><span data-i18n="menu.export">カスタム曲を書き出す…</span><span class="mkey"></span></button>
+    </div>
+  </div>
+  <div class="mbWrap" id="mCheckWrap">
+    <button class="mbtn" id="mCheckBtn" data-i18n="menu.check">確かめる</button>
+    <div class="mbMenu" id="mCheckMenu">
+      <button data-act="mapcheck"><span data-i18n="menu.mcMc">譜面チェック（BS Map Check と同じ判定）…</span><span class="mkey"></span></button>
+      <button data-act="mapcheckbl"><span data-i18n="menu.mcBl">譜面チェック（NLM版 BL評価リスト）…</span><span class="mkey"></span></button>
+      <button data-act="mapcheckam"><span data-i18n="menu.mcAm">譜面チェック（AutoModder）…</span><span class="mkey"></span></button>
+      <hr>
+      <button data-act="rating"><span data-i18n="menu.rating">難易度を測る（BeatLeaderの星の近似）…</span><span class="mkey"></span></button>
+    </div>
+  </div>
+  <div class="mbWrap" id="mReviewWrap">
+    <button class="mbtn" id="mReviewBtn" data-i18n="menu.review">審査</button>
+    <div class="mbMenu" id="mReviewMenu">
+      <button data-act="reviewload"><span data-i18n="menu.rvLoad">指摘を読み込む（.txt）…</span><span class="mkey"></span></button>
+      <button data-act="reviewpaste"><span data-i18n="menu.rvPaste">指摘を貼り付けて読む…</span><span class="mkey"></span></button>
+      <hr>
+      <button data-act="reviewlist"><span data-i18n="menu.rvList">指摘の一覧…</span><span class="mkey"></span></button>
+      <button data-act="reviewexport"><span data-i18n="menu.rvExport">書き出す（返事・NLM の確かめの結果）…</span><span class="mkey"></span></button>
+    </div>
+  </div>
+  <!-- 環境設定も他と同じく押すと下に開く（見出しだけのボタンだと、押しても何も出ない不具合に見えるため・2026-10-29）。見出しの id は以前のまま -->
+  <div class="mbWrap" id="mPrefsWrap">
+    <button class="mbtn" id="mbSettings" data-i18n="menu.settings">環境設定</button>
+    <div class="mbMenu" id="mPrefsMenu">
+      <button data-act="settings"><span data-i18n="menu.settingsOpen">環境設定…</span><span class="mkey"></span></button>
+    </div>
+  </div>
+  <div class="mbWrap" id="mHelpWrap">
+    <button class="mbtn" id="mHelpBtn" data-i18n="menu.help">ヘルプ</button>
+    <div class="mbMenu" id="mHelpMenu">
+      <button data-act="tutorial"><span data-i18n="menu.tutorial">チュートリアル</span><span class="mkey" data-ext="1"></span></button>
+      <button data-act="advanced"><span data-i18n="menu.advanced">上級編チュートリアル</span><span class="mkey" data-ext="1"></span></button>
+      <button data-act="keys"><span data-i18n="menu.keys">ショートカットの一覧・変更…</span><span class="mkey"></span></button>
+      <button data-act="changelog"><span data-i18n="menu.changelog">変更履歴</span><span class="mkey" data-ext="1"></span></button>
+      <hr>
+      <button data-act="update"><span data-i18n="menu.update">更新を確認…</span><span class="mkey"></span></button>
+      <hr>
+      <button data-act="about"><span data-i18n="menu.about">NLM について…</span><span class="mkey"></span></button>
+    </div>
+  </div>
   <span style="flex:1"></span>
 </div>
 <div id="wrap">
@@ -318,7 +363,7 @@
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="anaAskOn" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.anaAskOn">曲を読み込んだ時に、解析するか聞く</span></label>
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:3px;flex-wrap:wrap"><input id="anaGuideOn" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.anaGuideOn">解析が終わったら、次の手順を案内する</span></label></div>
     <div class="row" style="margin-top:9px"><div class="t" data-i18n="set.updateCheck">更新の確認</div>
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="updateCheckOn" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.updateCheckOn">起動時に新しいバージョンがあるか確認する（GitHub に接続します）</span></label></div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:5px;flex-wrap:wrap"><input id="updateCheckOn" type="checkbox" checked style="width:auto"><span class="t" data-i18n="set.updateCheckOn">起動時に、本体と取り込み済みのプラグインの新しい版があるか確認する（GitHub に接続します）</span></label></div>
   </div>
   <div class="setPanel" data-panel="vol">
     <div class="slRow"><div class="t"><span data-i18n="set.volMaster">マスター音量</span> <span id="volMVal">50</span>%</div>

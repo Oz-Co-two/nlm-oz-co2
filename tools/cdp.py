@@ -86,6 +86,10 @@ def _free_port():
         return s.getsockname()[1]
 
 
+MENU_ITEM = ".mbMenu button[data-act={act}]"   # メニューバーの項目（どのメニューの中でも）。見出しは Editor.menu_head(act)
+REDUCED_MOTION_OFF = [{"name": "prefers-reduced-motion", "value": "no-preference"}]   # Emulation.setEmulatedMedia の既定（Editor.start）
+
+
 class CdpError(RuntimeError):
     pass
 
@@ -313,6 +317,8 @@ class Editor:
         # ネットへ出ない（記録したライブラリを読むと画面が全曲データの取得を頼む＝毎回 jsDelivr から約10MB を取りに行かないように）。
         # 実際に取得して確かめる時だけ、先に NLM_NO_NET=0 を設定しておく
         os.environ.setdefault("NLM_NO_NET", "1")
+        # ヘルプのページ・ライセンスの文書を実際には開かない（ブラウザ・メモ帳が勝手に開かないように。開く物は応答の opened で返る）
+        os.environ.setdefault("NLM_NO_OPEN", "1")
         sys.path.insert(0, str(ROOT))
         if "serve" in sys.modules:
             del sys.modules["serve"]
@@ -359,6 +365,9 @@ class Editor:
         self.call("Log.enable")   # 通信の失敗（Failed to load resource）等も受け取る。errors() には入れない＝診断用（tests/visual の例外の記録）
         self.call("Emulation.setDeviceMetricsOverride", width=self.width, height=self.height, deviceScaleFactor=1, mobile=False)
         self.call("Emulation.setFocusEmulationEnabled", enabled=True)   # 常に前面・フォーカス中として扱う（描画ループを止めない）
+        # 「動きを減らす」は PC の設定（Windows のアニメーション効果）に左右されないよう、減らさない側に固定する（2026-10-29・アニメーション効果が
+        # オフの PC で解析中の知らせの縞・明滅が止まり、テストが落ちた）。減らす時を確かめるテストは reduce にして、終わったら REDUCED_MOTION_OFF へ戻す
+        self.call("Emulation.setEmulatedMedia", features=REDUCED_MOTION_OFF)
         self.call("Page.bringToFront")
         if self.max_fps:   # このタブで開くページ全部（reload も）に、ページのJSより先に入る
             self.call("Page.addScriptToEvaluateOnNewDocument", source=_fps_cap_js(self.max_fps))
@@ -514,6 +523,15 @@ class Editor:
             d = r["exceptionDetails"]
             raise CdpError("JS例外: " + (d.get("exception", {}).get("description") or d.get("text", "")))
         return r.get("result", {}).get("value")
+
+    def menu_head(self, act):
+        """メニューバーの項目（data-act=act）が入っているメニューの見出しのボタンの CSS セレクタ（'#mFileBtn' など）。
+        項目そのものは MENU_ITEM.format(act=act)。メニューを作業の流れで分けた（2026-10-28）ので、項目からメニューを引く"""
+        hid = self.js("(()=>{const b=document.querySelector(" + json.dumps(MENU_ITEM.format(act=act)) + ");"
+                      "const w=b&&b.closest('.mbWrap');return w?w.querySelector('.mbtn').id:null})()")
+        if not hid:
+            raise CdpError(f"メニューの項目がありません: {act}")
+        return "#" + hid
 
     def wait(self, seconds):
         """待つ（その間に届いたコンソール/例外イベントも回収する）"""

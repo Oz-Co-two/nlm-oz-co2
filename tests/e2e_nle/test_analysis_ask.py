@@ -78,7 +78,7 @@ def test_ask_after_media_load_and_buttons(t):
         "曲の構成（イントロ・Aメロ・サビ…と細かい区切り）を NLE の帯で表示します（クリックでその位置へ・名前の付け直し・マーカーへ書き出し）",
         "構成から空のクリップをまとめて作れます（同じくり返しは自動でリンク＝1回目のサビを打てば2回目以降にも入ります）",
         "1曲 30秒〜1分。解析中も編集できます。解析は PC の中で行い、曲をネットへ送りません"], "解析すると何ができるか")
-    t.eq(d["note"], "後で解析する時は、スペクトログラムの左の［🎼 曲を解析］か、ファイルメニューの「曲を解析（テンポ・構成）…」から。", "後で解析する入口")
+    t.eq(d["note"], "後で解析する時は、スペクトログラムの左の［🎼 曲を解析］か、譜面作りのメニューの「曲を解析（テンポ・構成）…」から。", "後で解析する入口")
     t.eq((d["never"], d["neverOn"]), ("次から聞かない（環境設定で戻せます）", False), "「次から聞かない」（既定は外れている）")
     t.eq([(b["v"], b["text"], b["pri"]) for b in d["btns"]], [("go", "解析する", True), ("later", "今はしない", False)], "ボタン")
     t.eq(ed.js("getComputedStyle(document.getElementById('anaStartBtn')).backgroundColor"), "rgb(129, 96, 227)", "［曲を解析］は配置モードと同じ紫（--accent）")
@@ -122,14 +122,14 @@ def test_ask_file_paths(t):
     ed.js("""(async()=>{ const blob=await (await fetch('tools/fixtures/basic.wav',{cache:'no-store'})).blob();
       const f=new File([blob],'picked.wav',{type:'audio/wav'});
       window.showOpenFilePicker=async()=>[{name:f.name,kind:'file',getFile:async()=>f}]; return true; })()""")
-    click_sel(ed, "#mFileBtn"); click_sel(ed, "#mFileMenu button[data-act=loadsong]")
+    click_sel(ed, "#mMapBtn"); click_sel(ed, ".mbMenu button[data-act=loadsong]")
     wait_until(ed, "JSON.parse(window._dbg.rt.buildProjectText()).graph.song.name==='picked.wav'", label="ファイル選択で読み込む")
     _wait_ask(ed)
     _press(ed, "later")
     # exe 版（pywebview のダイアログ）
     ed.js(_NATIVE_JS)
     ed.js("window.__natAsk.queue.push('C:\\\\NLMTest\\\\Music\\\\native.wav');true")
-    click_sel(ed, "#mFileBtn"); click_sel(ed, "#mFileMenu button[data-act=loadsong]")
+    click_sel(ed, "#mMapBtn"); click_sel(ed, ".mbMenu button[data-act=loadsong]")
     wait_until(ed, "JSON.parse(window._dbg.rt.buildProjectText()).graph.song.name==='native.wav'", label="ネイティブのダイアログで読み込む")
     _wait_ask(ed)
     _press(ed, "later")
@@ -217,7 +217,7 @@ def test_ask_waits_for_other_dialog(t):
     '''他の画面（環境設定）が出ている間は重ねずに待ち、閉じたら出す'''
     ed = _open(t)
     _ask_on(ed)
-    click_sel(ed, "#mbSettings")
+    click_sel(ed, "#mbSettings"); click_sel(ed, ".mbMenu button[data-act=settings]")
     wait_until(ed, "document.getElementById('settingsBg').style.display!=='none'&&document.getElementById('settingsBg').style.display!==''", label="環境設定")
     _load_media(ed)
     ed.wait(0.8)
@@ -244,7 +244,7 @@ def test_ask_never_and_prefs(t):
     _load_media(ed, "song3.wav")
     _no_ask(ed, "次から聞かない")
     # 環境設定で戻す
-    click_sel(ed, "#mbSettings")
+    click_sel(ed, "#mbSettings"); click_sel(ed, ".mbMenu button[data-act=settings]")
     wait_until(ed, "!!document.getElementById('anaAskOn').checkVisibility()", label="環境設定のアプリケーション設定")
     t.eq(ed.js("document.querySelector('[data-i18n=\"set.anaAsk\"]').textContent"), "曲の解析", "項目の見出し")
     t.eq(ed.js("document.querySelector('[data-i18n=\"set.anaAskOn\"]').textContent"), "曲を読み込んだ時に、解析するか聞く", "チェックの文")
@@ -281,7 +281,7 @@ def test_ask_english(t):
     t.eq((d["title"], d["lead"]), ("Analyze this song?", "Analyzing the song lets you:"), "題と前置き")
     t.eq(len(d["points"]), 4, "箇条は4つ")
     t.ok(d["points"][1].startswith("See the song's structure (intro, verse, chorus… and segments)"), f"構成の箇条: {d['points'][1]}")
-    t.eq(d["note"], "To analyze later, use [🎼 Analyze song] at the left of the spectrogram or \"Analyze song (tempo & structure)…\" in the File menu.", "後で解析する入口")
+    t.eq(d["note"], "To analyze later, use [🎼 Analyze song] at the left of the spectrogram or \"Analyze song (tempo & structure)…\" in the Mapping menu.", "後で解析する入口")
     t.eq(d["never"], "Don't ask again (you can turn it back on in Preferences)", "次から聞かない")
     t.eq([b["text"] for b in d["btns"]], ["Analyze", "Not now"], "ボタン")
     t.ok(not re.search(r"[぀-ゟ゠-ヺー-ヿ㐀-䶿一-鿿]", d["text"]), f"日本語が残らない: {d['text']}")

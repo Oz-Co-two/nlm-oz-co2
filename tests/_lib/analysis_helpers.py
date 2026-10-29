@@ -105,9 +105,9 @@ def click_sel(ed, sel):
 
 
 def start_from_menu(ed):
-    """ファイルメニューの「曲を解析（テンポ・構成）…」"""
-    click_sel(ed, "#mFileBtn")
-    click_sel(ed, "#mFileMenu button[data-act=analyze]")
+    """譜面作りのメニューの「曲を解析（テンポ・構成）…」"""
+    click_sel(ed, "#mMapBtn")
+    click_sel(ed, ".mbMenu button[data-act=analyze]")
 
 
 def wait_tempo_dialog(ed):

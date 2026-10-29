@@ -93,6 +93,15 @@ def open_mapcheck(ed):
     wait_until(ed, PANEL_DONE, timeout=20, label="チェック結果の表示")
 
 
+def reopen_mapcheck(ed):
+    """INFO の［🔍 譜面チェック］で開き直す＝前回のタブのまま開く口（メニューの「譜面チェック」は 2026-10-28 から決まったタブで開く）"""
+    from info_helpers import click_sel, to_info
+    from e2e_helpers import wait_until
+    to_info(ed)
+    click_sel(ed, "#iMapCheck", "譜面チェックのボタン")
+    wait_until(ed, PANEL_DONE, timeout=20, label="チェック結果の表示")
+
+
 def to_am(ed):
     from info_helpers import click_sel
     from e2e_helpers import wait_until

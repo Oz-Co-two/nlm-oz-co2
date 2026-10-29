@@ -5,8 +5,8 @@
 This tutorial walks you step by step through loading a song, placing notes, exporting the map so it can be played in Beat Saber, and saving your project.
 
 > **Switching the UI to English**
-> NLM starts in Japanese. Click **環境設定** (Preferences — the second menu at the top left, next to ファイル)
-> and set **言語 / Language** to **English** on the first tab. The screenshots in this tutorial show the English UI (v2.0.0-oz).
+> NLM starts in Japanese. Click **環境設定** (Preferences — in the menu bar at the top left, between 審査 and ヘルプ),
+> choose **環境設定…** in the menu that opens, and set **言語 / Language** to **English** on the first tab. The screenshots in this tutorial show the English UI (v2.0.0-oz).
 
 This tutorial covers only the basic flow. For the details of each panel, see the original
 [reference manual](https://helba.flashhub.net/nlm/manual/) (Japanese).
@@ -47,6 +47,17 @@ Faster workflows and the checks before publishing are covered in the [advanced t
 The "TAB" next to the headings of ① to ③ means: **put the mouse over that area and press Tab to switch the view**
 (for example, Tab over ③ switches NOTES ⇄ LIGHTING). You can also click the "TAB" and the name next to it to switch.
 
+The menu bar at the very top is arranged in the order you work.
+
+| Menu | What is in it |
+|---|---|
+| **File** | New, open and save projects, add a folder to MEDIA |
+| **Mapping** | Load a music file, analyze the song (tempo & structure), auto lighting, export the custom song |
+| **Check** | Map check (same as BS Map Check, NLM BL criteria list, AutoModder), estimate difficulty |
+| **Review** | Load, list and export ranking review notes |
+| **Preferences** | Settings for volume, display, shortcuts and more (choose "Preferences…" in the menu that opens) |
+| **Help** | Tutorials, the shortcut list, the changelog, update check, About NLM |
+
 The small floating windows listing shortcuts can be closed with the ✕ at their top right (you can show them again from Preferences).
 Press — to fold one into a single line showing only its title (Standard, NOTES, and so on); press it again to unfold it.
 They are closed in the rest of the images to keep them easy to read.
@@ -57,9 +68,9 @@ They are closed in the rest of the images to keep them easy to read.
 
 ### Load the song
 
-Choose **File → Load music file…** from the menu and open your song file.
+Choose **Mapping → Load music file…** from the menu and open your song file.
 
-![The "Load music file…" item in the File menu](images/tutorial-en/02-file-menu.png)
+![The "Load music file…" item in the Mapping menu](images/tutorial-en/02-file-menu.png)
 
 Supported formats include ogg / egg / mp3 / wav / flac / m4a.
 Songs in formats other than ogg are converted to the Beat Saber format (song.egg) with ffmpeg when you export.
@@ -76,7 +87,7 @@ When you load a song, you are asked "Analyze this song?".
 | ③ | Don't ask again | Check this before closing, and this question is not shown from then on |
 
 - The analysis runs on your PC; the song is never sent over the internet. You can keep editing while it runs
-- To analyze later, use **🎼 Analyze song** at the left of the spectrogram (⑧ in the image below) or **File → Analyze song (tempo & structure)…** in the menu
+- To analyze later, use **🎼 Analyze song** at the left of the spectrogram (⑧ in the image below) or **Mapping → Analyze song (tempo & structure)…** in the menu
 - If you turned the question off with ③, turn it back on in **Preferences** → "Application" → "Song analysis" → "Ask whether to analyze when a song is loaded"
 - It is not shown when you open a project, or when the song already has analysis results
 
@@ -113,7 +124,7 @@ If they are off by the same amount from the very start, shift the start of the s
 
 ### Analyze the song
 
-Press **🎼 Analyze song** (⑧), or choose **File → Analyze song (tempo & structure)…** from the menu, to examine the tempo and the structure of the song.
+Press **🎼 Analyze song** (⑧), or choose **Mapping → Analyze song (tempo & structure)…** from the menu, to examine the tempo and the structure of the song.
 Pressing **Analyze** in the question shown when you load a song starts it in the same way.
 It takes longer than Detect BPM, but it suggests **the lead-in as well as the BPM**.
 It takes about 30 seconds to a minute per song. **You can keep editing while it runs.**
@@ -327,7 +338,7 @@ The lines between the nodes show which settings are used for the export. Everyth
 ### Export
 
 When every "Required" item in the export node's checklist has a ✓, you are ready.
-Press **▶ Export custom song**.
+Press **▶ Export custom song** (or choose **Mapping → Export custom song…** from the menu; it does the same).
 
 ![The export node. The required items have a ✓](images/tutorial-en/14-export.png)
 
@@ -390,4 +401,4 @@ Once you are used to the basics, try these features too. They are explained in t
   Click a band to jump there, or place markers at the start of each part (see chapter 6 of the advanced tutorial, [Analyzing the song (tempo and structure)](tutorial-advanced.en.md#6-analyzing-the-song-tempo-and-structure)).
   Press **🧩 Create clips** at the left of the band to create empty NLE clips that follow the bands (repeats of the same part are linked automatically; see [Creating clips from the analysis](tutorial-advanced.en.md#creating-clips-from-the-analysis) in the advanced tutorial)
 - **Markers**: place a marker with Ctrl + E and jump between markers with Ctrl + [ / ]
-- **Review notes**: load ranking review notes in the "beat - text" form (.txt files or Discord messages) with **Load review notes…** in the File menu, then click a row in the list to jump to that spot. Mark fixed notes as done, add replies, and export them in the same form (see chapter 10 of the advanced tutorial, [Responding to review notes](tutorial-advanced.en.md#10-responding-to-review-notes))
+- **Review notes**: load ranking review notes in the "beat - text" form (.txt files or Discord messages) with **Review → Load review notes (.txt)…** in the menu, then click a row in the list to jump to that spot. Mark fixed notes as done, add replies, and export them in the same form (see chapter 10 of the advanced tutorial, [Responding to review notes](tutorial-advanced.en.md#10-responding-to-review-notes))

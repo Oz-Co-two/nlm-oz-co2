@@ -398,7 +398,7 @@ export function installSongAnalysis(D) {
     dlg.appendChild(el('div', 'aaLead', t('ana.ask.lead', '曲を解析すると、次のことができます。')));
     const ul = el('ul', 'aaList'); dlg.appendChild(ul);
     for (const [k, ja] of ASK_POINTS) ul.appendChild(el('li', '', t('ana.ask.' + k, ja)));
-    dlg.appendChild(el('div', 'aaNote', tf('ana.ask.later', '後で解析する時は、スペクトログラムの左の［{btn}］か、ファイルメニューの「{menu}」から。',
+    dlg.appendChild(el('div', 'aaNote', tf('ana.ask.laterMenu', '後で解析する時は、スペクトログラムの左の［{btn}］か、譜面作りのメニューの「{menu}」から。',
       { btn: t('ana.startBtn', '🎼 曲を解析'), menu: t('menu.analyze', '曲を解析（テンポ・構成）…') })));
     const lab = el('label', 'aaChk'), chk = el('input'); chk.type = 'checkbox'; chk.id = 'anaAskNever';
     lab.append(chk, el('span', '', t('ana.ask.never', '次から聞かない（環境設定で戻せます）')));
@@ -731,6 +731,10 @@ export function installSongAnalysis(D) {
 
   return {
     start, cancel, draw,
+    /** メニュー（譜面作り）から: 解析中か・構成の結果があるか・セクションの頭にマーカーを書き出す（帯の「⋯」と同じ） */
+    running: () => !!S.run,
+    hasStructure: () => !!structure(),
+    exportMarkers,
     /** 利用者の操作で新しく曲（音源）を取り込んだ（editor-app.js から）: 条件が合えば「曲を解析しますか？」を出す */
     songLoaded,
     /** プロジェクトへ保存する中身（結果が無ければ undefined＝キーごと書かない）。made＝この結果からクリップを作った（作っていなければキーごと無し＝以前の版と同じ中身） */

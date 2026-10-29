@@ -31,6 +31,8 @@ import { installRatingPanel } from '../rating/rating-panel.js';
 import { createRatingClient } from '../rating/rating-client.js';
 import { createAutoModderClient } from '../automodder/automodder-client.js';
 import { installUpdater } from '../update/update-dialog.js';
+import { openAbout } from '../help/about-dialog.js';   // ヘルプの「NLM について」の画面（2026-10-28）
+import { APP_VERSION } from '../constants.js';
 import { generateAutoLights, showAutoLightDialog } from '../lighting/auto-light.js';
 import { fitCoverImage, measureCoverFit, coverNeedsFix, coverFitSize, showCoverFitDialog } from '../media/cover-fit.js';
 import { measureLoudness, autoGain, AUTO_TARGET_LUFS, GAIN_MIN_DB, GAIN_MAX_DB } from '../audio/loudness.js';   // 曲の音量補正の「自動調整」（LUFS・トゥルーピークの測定）
@@ -8024,8 +8026,13 @@ function openAutoLight(after){   // after=作成した後に呼ぶ（譜面チ�
   showAutoLightDialog({t,tf,plan,onOk:()=>{ applyAutoLight(plan); if(after) after(); }});
 }
 document.getElementById('tbAutoLight')?.addEventListener('click',()=>openAutoLight(()=>{ if(mapCheckPanel.isOpen()) mapCheckPanel.run(); }));   // LIGHTINGのツールバー
-// 本体の自動更新（js/update/update-dialog.js → serve.py → app_update.py）。起動時の確認はexe版・環境設定ONの時だけ
-const updater=installUpdater({t,tf,lang:()=>langCode,confirmDiscard,showOk});
+// 本体の自動更新（js/update/update-dialog.js → serve.py → app_update.py）。起動時の確認はexe版・環境設定ONの時だけ。
+// 取り込み済みのプラグインの更新も同じ確認で知らせる（取り込みはパネルと共有の部品＝ratingClient・amClient）
+const updater=installUpdater({t,tf,lang:()=>langCode,confirmDiscard,showOk,plugins:[
+  {base:'__rating/',skipKey:'bsnm_rtUpdSkip',errKey:'rt.err.',client:ratingClient,
+   name:()=>t('upd.pl.rating','「難易度を測る」のプラグイン（nlm-rating）'),where:()=>t('upd.pl.ratingWhere','「難易度を測る」のパネル')},
+  {base:'__automodder/',skipKey:'bsnm_amUpdSkip',errKey:'am.err.',client:amClient,
+   name:()=>t('upd.pl.automodder','AutoModder のプラグイン（nlm-automodder）'),where:()=>t('upd.pl.amWhere','譜面チェックの AutoModder のタブ')}]});
 { const el=document.getElementById('updateCheckOn');
   if(el){ el.checked=updater.isOn(); el.addEventListener('change',()=>updater.setOn(el.checked)); } }
 setTimeout(()=>updater.autoCheck(),3000);   // 起動直後の読み込み（曲・プロジェクト）と重ならないよう少し待つ
@@ -10778,11 +10785,12 @@ setInterval(()=>{ if(nodeColMode==='info') drawInfoEdges(); },400);   // カー�
 layoutInfoNodes(); applyInfoGraph();
 document.getElementById('iMapCheck').addEventListener('click',()=>mapCheckPanel.open());
 document.getElementById('iRating').addEventListener('click',()=>ratingPanel.open());
-document.getElementById('iExport').onclick=()=>{   // 必須項目（音源/ノーツ/フォルダー名/出力先）が揃うまで書き出しは止める
+function exportFromInfo(){   // INFO の［カスタム曲書き出し］・ファイルメニューの「カスタム曲を書き出す…」。必須項目（音源/ノーツ/フォルダー名/出力先）が揃うまで書き出しは止める
   const miss=exportReadiness().filter(x=>x.req&&!x.ok);
   if(miss.length){ showErr(tf('msg.exportMissing','書き出せません: {list} が足りません',{list:miss.map(m=>m.label.replace(/（.*/,'').replace(/ \(.*/,'')).join(t('word.listSep','・'))})); return; }
   const fEl=infoWorldEl.querySelector(`.iGrp[data-out="${infoGraph.activeOut}"] .oForceEgg`);
-  exportMap(!!(fEl&&fEl.checked)); };
+  exportMap(!!(fEl&&fEl.checked)); }
+document.getElementById('iExport').onclick=exportFromInfo;
 // ---- ノーツ色スウォッチ（設定グループ。クリック→カラーピッカー→3D/2Dへ即反映） ----
 function laserSwSvg(col){ return `<svg viewBox="0 0 64 64"><rect x="8" y="8" width="48" height="48" rx="11" fill="${safeHex(col)}"/><rect x="28" y="16" width="8" height="32" rx="3" fill="#fff"/></svg>`; }   // 縦ビーム=レーザー
 setInterval(refreshInspector,400);
@@ -11169,29 +11177,76 @@ async function saveProjectCopy(){
     showOk(tf('msg.copySaved','コピーを保存: {name}',{name:fh.name}));
   }catch(err){ showErr(tf('msg.saveFail','保存失敗: {err}',{err})); }
 }
-function closeFileMenu(){ document.getElementById('mFileMenu').style.display='none'; }
-document.getElementById('mFileBtn').onclick=()=>{
-  const m=document.getElementById('mFileMenu');
-  m.style.display=m.style.display==='block'?'none':'block';
-};
-document.getElementById('mFileMenu').addEventListener('click',async e=>{
-  const act=e.target.closest('button')?.dataset.act; if(!act) return;
-  if(act==='new') newProject();
-  else if(act==='open'){ closeFileMenu(); openProjectFile(); }
-  else if(act==='save'){ closeFileMenu(); saveProject(false); }
-  else if(act==='saveas'){ closeFileMenu(); saveProject(true); }
-  else if(act==='savecopy') saveProjectCopy();
-  else if(act==='loadsong'){ closeFileMenu(); openSongFile(); }   // Musicレーンの「音楽ファイルを読み込む」と同じ
-  else if(act==='addfolder'){ closeFileMenu(); document.getElementById('libAddBtn').click(); }   // MEDIAの「フォルダを追加」と同じ（showDirectoryPicker→scanLibrary）
-  else if(act==='mapcheck'){ closeFileMenu(); mapCheckPanel.open(); }
-  else if(act==='rating'){ closeFileMenu(); ratingPanel.open(); }
-  else if(act==='autolight'){ closeFileMenu(); openAutoLight(); }
-  else if(act==='analyze'){ closeFileMenu(); if(songAna) songAna.start(); }   // 曲の解析（テンポ・構成）
-  else if(act==='reviewload'){ closeFileMenu(); reviewPanel.openFile(); }   // 審査の指摘を読み込む（.txt・複数可）
-  else if(act==='reviewpaste'){ closeFileMenu(); reviewPanel.openPaste(); }   // 審査の指摘を貼り付けて読む（Discord の本文）
-  else if(act==='reviewlist'){ closeFileMenu(); reviewPanel.open(); }   // 審査の指摘の一覧
-  else if(act==='update'){ closeFileMenu(); updater.manualCheck(); }
+// ---- メニューバー（ファイル／譜面作り／確かめる／審査／環境設定／ヘルプ・作業の流れで分ける・2026-10-28） ----
+// 押すと開き、開いている間は見出しへマウスを動かすだけで隣のメニューへ切り替わる・Esc か外側のクリックで閉じる（ふつうのメニューバーと同じ）。
+// 「環境設定」も他と同じく開く（中は「環境設定…」の1行・2026-10-29。押してすぐ設定の画面だと、下に何も出ず不具合に見えた）。項目は data-act（runMenuAct）
+const MENU_WRAPS=[...document.querySelectorAll('#menubar .mbWrap')];
+const menuOpen=()=>MENU_WRAPS.some(w=>w.classList.contains('open'));
+function closeFileMenu(){   // 全部のメニューを閉じる（名前はメニューが1つだったころのまま＝editor-runtime.js の methodNames）
+  for(const w of MENU_WRAPS){ w.classList.remove('open'); w.querySelector('.mbMenu').style.display='none'; } }
+function openMenu(w){ closeFileMenu(); syncMenu(w); w.classList.add('open'); w.querySelector('.mbMenu').style.display='block'; }
+/** 開く時に今の状態へ合わせる: ショートカットの今の割り当て（環境設定で変えられる）・ブラウザで開く印・使えない項目と理由・解析中の「やめる」 */
+function syncMenu(w){
+  for(const k of w.querySelectorAll('.mkey[data-key]')) k.textContent=comboStr(effBind(k.dataset.key)).replace(/ \+ /g,'+');
+  for(const k of w.querySelectorAll('.mkey[data-ext]')){ k.textContent='↗'; k.parentElement.title=t('menu.extTip','ブラウザで開きます'); }
+  const ana=w.querySelector('[data-act=analyze] span[data-i18n]');
+  if(ana){ const run=!!(songAna&&songAna.running()); ana.dataset.i18n=run?'menu.anaStop':'menu.analyze';
+    ana.textContent=run?t('menu.anaStop','曲の解析をやめる'):t('menu.analyze','曲を解析（テンポ・構成）…'); }
+  const hasAna=!!(songAna&&songAna.hasStructure());
+  for(const b of w.querySelectorAll('[data-act=anaclips],[data-act=anamarkers]')){
+    b.disabled=!hasAna; b.title=hasAna?'':t('menu.noAna','曲の構成を解析した結果がありません（先に「曲を解析」）'); }
+}
+document.getElementById('menubar').addEventListener('click',e=>{
+  const head=e.target.closest('.mbWrap > .mbtn');
+  if(head){ const w=head.parentElement; if(w.classList.contains('open')) closeFileMenu(); else openMenu(w); return; }
+  const it=e.target.closest('.mbMenu button'); if(!it||it.disabled||!it.dataset.act) return;
+  closeFileMenu(); runMenuAct(it.dataset.act);
 });
+for(const w of MENU_WRAPS) w.querySelector('.mbtn').addEventListener('pointerenter',()=>{ if(menuOpen()&&!w.classList.contains('open')) openMenu(w); });
+addEventListener('keydown',e=>{ if(e.key==='Escape'&&menuOpen()){ e.preventDefault(); e.stopPropagation(); closeFileMenu(); } },true);   // 裏の Esc（選択の解除など）より先に閉じる
+/** ヘルプの「ページを開く」: 決まった名前だけを送る（URL は serve.py の HELP_DOCS／変更履歴は app_update.py の NOTES_URL） */
+async function helpPost(path,body){
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-NLM-Request':'1'},body:JSON.stringify(body||{})});
+  return r.json(); }
+function helpOpen(path,body){
+  helpPost(path,{...body,lang:langCode}).then(j=>{ if(!j||!j.ok) throw 0; }).catch(()=>showErr(t('about.openFail','開けませんでした'))); }
+function openSettings(tab){   // 環境設定の画面（環境設定のメニューの「環境設定…」・ヘルプの「ショートカットの一覧・変更…」）。tab＝そのタブで開く
+  { const el=document.getElementById('laneRatio'), lv=document.getElementById('laneRatioVal');   // 開くたび現在のレーン数へ同期
+    if(el){ el.value=notesLanes; if(lv) lv.textContent=String(notesLanes); } }
+  document.getElementById('settingsBg').style.display='flex';
+  if(document.querySelector('#settingsBox .setPanel.on[data-panel=media]')) libOnline.refreshPrefs();   // MEDIA タブを開いたまま閉じていた時も状態を聞き直す
+  if(tab) document.querySelector(`#settingsBox .setTab[data-tab="${tab}"]`)?.click(); }
+function runMenuAct(act){
+  if(act==='new') newProject();
+  else if(act==='open') openProjectFile();
+  else if(act==='save') saveProject(false);
+  else if(act==='saveas') saveProject(true);
+  else if(act==='savecopy') saveProjectCopy();
+  else if(act==='addfolder') document.getElementById('libAddBtn').click();   // MEDIAの「フォルダを追加」と同じ（showDirectoryPicker→scanLibrary）
+  else if(act==='export') exportFromInfo();   // INFO の［カスタム曲書き出し］と同じ
+  else if(act==='loadsong') openSongFile();   // Musicレーンの「音楽ファイルを読み込む」と同じ
+  else if(act==='analyze'){ if(songAna){ if(songAna.running()) songAna.cancel(); else songAna.start(); } }   // 曲の解析（テンポ・構成）・解析中は「やめる」
+  else if(act==='anaclips') anaOpenClips();   // 帯の溝の［🧩 クリップを作る］・「⋯」と同じ
+  else if(act==='anamarkers'){ if(songAna) songAna.exportMarkers(); }   // 帯の「⋯」と同じ
+  else if(act==='autolight') openAutoLight();
+  else if(act==='mapcheck') mapCheckPanel.open('mc');   // 譜面チェックを、そのタブで開く
+  else if(act==='mapcheckbl') mapCheckPanel.open('bl');
+  else if(act==='mapcheckam') mapCheckPanel.open('am');
+  else if(act==='rating') ratingPanel.open();
+  else if(act==='reviewload') reviewPanel.openFile();   // 審査の指摘を読み込む（.txt・複数可）
+  else if(act==='reviewpaste') reviewPanel.openPaste();   // 審査の指摘を貼り付けて読む（Discord の本文）
+  else if(act==='reviewlist') reviewPanel.open();   // 審査の指摘の一覧
+  else if(act==='reviewexport') reviewPanel.exportDialog();   // 一覧の［書き出す…］と同じ
+  else if(act==='settings') openSettings();
+  else if(act==='tutorial') helpOpen('__help/open',{doc:'tutorial'});
+  else if(act==='advanced') helpOpen('__help/open',{doc:'advanced'});
+  else if(act==='keys') openSettings('keys');
+  else if(act==='changelog') helpOpen('__update/openNotes',{});   // 本体の更新のお知らせの「詳しく見る」と同じ（版を付けない＝変更履歴の頭）
+  else if(act==='update') updater.manualCheck();
+  else if(act==='about') openAbout({t,version:APP_VERSION,lang:()=>langCode,post:helpPost,showErr,plugins:[
+    {id:'rating',client:ratingClient,name:()=>t('about.plRating','難易度を測る（nlm-rating）')},
+    {id:'automodder',client:amClient,name:()=>t('about.plAm','AutoModder の判定（nlm-automodder）')}]});
+}
 
 // ---- フローティングツールバー ----
 const TB_ICONS={};
@@ -11526,7 +11581,7 @@ addEventListener('pointerdown', e=>{                       // ツールバー外
   if(!e.target.closest||(!e.target.closest('#maintb')&&!e.target.closest('#setQuick'))){
     document.querySelectorAll('.tbpanel').forEach(x=>x.style.display='none');
     document.querySelectorAll('#maintb .tbi.on').forEach(x=>x.classList.remove('on')); }
-  if(!e.target.closest||!e.target.closest('#mFileWrap')) closeFileMenu();
+  if(!e.target.closest||!e.target.closest('#menubar .mbWrap')) closeFileMenu();   // メニューの外を押した＝閉じる
 }, true);
 // ---- ペインホバー追跡（Tabの対象） ----
 // enterだけだと起動処理中（three.js初期化等）にイベントを取りこぼし、初回TabがNOTES/LIGHTに化ける
@@ -11536,12 +11591,7 @@ function paneOf(t){ if(!t||!t.closest) return null;
 addEventListener('pointermove',e=>{ const m=paneOf(e.target); if(m) hoverPane=m; },{passive:true});
 [['pvpane','pv'],['nodecol','node'],['main','main']].forEach(([id,m])=>{
   const el=document.getElementById(id); if(el) el.addEventListener('pointerenter',()=>hoverPane=m); });
-// ---- 設定モーダル ----
-document.getElementById('mbSettings').onclick=()=>{
-  { const el=document.getElementById('laneRatio'), lv=document.getElementById('laneRatioVal');   // 開くたび現在のレーン数へ同期
-    if(el){ el.value=notesLanes; if(lv) lv.textContent=String(notesLanes); } }
-  document.getElementById('settingsBg').style.display='flex';
-  if(document.querySelector('#settingsBox .setPanel.on[data-panel=media]')) libOnline.refreshPrefs(); };   // MEDIA タブを開いたまま閉じていた時も状態を聞き直す
+// ---- 設定モーダル（開くのは openSettings） ----
 document.getElementById('settingsClose').onclick=()=>{ document.getElementById('settingsBg').style.display='none'; };
 document.querySelectorAll('#settingsBox .setTab').forEach(btn=>btn.addEventListener('click',()=>{   // タブで項目画面を切替（アプリ/音量/Preview/カメラ）
   const tab=btn.dataset.tab;

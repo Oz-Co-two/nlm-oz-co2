@@ -1,0 +1,133 @@
+{
+ "v": 1,
+ "note": "公開した版の訳のうち、今の同梱の文と違う物。exe の隣の訳がこの文なら serve.py は使わない（tools/lang_history.py が作る）",
+ "files": {
+  "ja.json": {
+   "bl.m.bombDark": [
+    "250ms前から暗い時間があるボム（フェードは1秒点灯とみなした近似）"
+   ],
+   "bl.m.dodgeFast": [
+    "0.5秒未満で頭を左右に動かす回避壁"
+   ],
+   "bl.m.needStars": [
+    "下の欄にこの難易度の★とTechを入れると判定します"
+   ],
+   "bl.m.noNjsEvents": [
+    "NJSイベントなし（NLMのv3書き出しには無い）"
+   ],
+   "bl.m.noSliders": [
+    "スライダーが無いので、チェーンの長さを比べられません"
+   ],
+   "bl.n.R3.B": [
+    "図だけで示された項目。「振る直前」を同じ手の前のノーツとの間の後半（最大0.5秒）とみなした候補"
+   ],
+   "bl.n.R4.A.6": [
+    "「実効長」は最初から最後のノーツまでの時間で近似"
+   ],
+   "bl.n.R5.A": [
+    "式はBeatLeader公式（750-325)·e^(-★/7.6-Tech·0.06)+325ms。★とTechはBeatLeaderの値（申請前は見込み）を入れる。下段の例外は流れに沿うかを目視"
+   ],
+   "bl.n.R7.B": [
+    "明るさ50を0.5とみなし、基本ライトイベントを再現して判定"
+   ],
+   "bl.n.R8.A.2": [
+    "BS Map Check の「中央の2マス幅の壁（回復250ms未満）」を候補として表示"
+   ],
+   "bl.n.R8.A.3": [
+    "真ん中の片側だけを塞ぐ壁で、塞ぐ側が0.5秒未満で入れ替わる所を候補にした"
+   ],
+   "bl.r.R8.A.3": [
+    "頭を1秒に2回を超えて動かす回避壁は正当化が必要"
+   ],
+   "msg.camModeEdit": [
+    "編集モード：カメラ自由・再生と独立（Qで配置へ）"
+   ],
+   "msg.camModePlace": [
+    "配置モード：カメラ追従・再生しながら配置（Qで編集へ）"
+   ],
+   "rt.foot": [
+    "BeatLeader の公開ソースコードで計算した近似値です。本家の値と異なる場合があります（特に Acc は本家より低めに出ることがあります）。BeatLeader の公式ツールではありません。"
+   ],
+   "set.updateCheckOn": [
+    "起動時に新しいバージョンがあるか確認する（GitHub に接続します）"
+   ],
+   "tb.end": [
+    "曲末へ（Shift+Ctrl+→）"
+   ],
+   "tb.start": [
+    "スタートに戻る（Shift+Ctrl+←）"
+   ],
+   "ui.modeEdit": [
+    "編集モード"
+   ],
+   "ui.njsL": [
+    "飛来速度"
+   ],
+   "word.listSep": [
+    "、"
+   ]
+  },
+  "en.json": {
+   "bl.m.bombDark": [
+    "Bombs with dark time within 250 ms before them (fades approximated as 1 s on)"
+   ],
+   "bl.m.dodgeFast": [
+    "Dodge walls moving the head side to side within 0.5 s"
+   ],
+   "bl.m.needStars": [
+    "Enter the stars and tech rating for this difficulty below to check"
+   ],
+   "bl.m.noNjsEvents": [
+    "No NJS events (NLM writes v3 without them)"
+   ],
+   "bl.m.noSliders": [
+    "No sliders to compare chain durations with"
+   ],
+   "bl.n.R3.B": [
+    "Defined only by images. \"Before the swing\" is taken as the second half of the gap since the same hand's previous note (max 0.5 s)"
+   ],
+   "bl.n.R4.A.6": [
+    "\"Effective duration\" is approximated by the time from the first to the last note"
+   ],
+   "bl.n.R5.A": [
+    "BeatLeader's equation: (750-325)·e^(-★/7.6-Tech·0.06)+325 ms. Enter BeatLeader's star and tech ratings (estimates before ranking). Check the bottom-row exception (follows parity) visually"
+   ],
+   "bl.n.R7.B": [
+    "Brightness 50 is taken as 0.5; basic light events are simulated"
+   ],
+   "bl.n.R8.A.2": [
+    "Shows BS Map Check \"2-wide center obstacle (under 250ms)\" as candidates"
+   ],
+   "bl.n.R8.A.3": [
+    "Candidates where dodge walls blocking one middle lane switch sides within 0.5 s"
+   ],
+   "bl.r.R8.A.3": [
+    "Dodge walls forcing more than 2 head moves per second need justification"
+   ],
+   "msg.camModeEdit": [
+    "Edit mode: free camera, independent of playback (Q to place)"
+   ],
+   "msg.camModePlace": [
+    "Place mode: camera follows, place while playing (Q to edit)"
+   ],
+   "msg.infoUnplugN": [
+    "Unplugged {cnt}the \"{node}\" wiring"
+   ],
+   "rt.foot": [
+    "Approximate values computed with BeatLeader's public source code. They may differ from beatleader.xyz (Acc in particular can come out lower). This is not an official BeatLeader tool."
+   ],
+   "set.updateCheckOn": [
+    "Check for a new version at startup (connects to GitHub)"
+   ],
+   "tb.end": [
+    "Jump to end (Shift+Ctrl+→)"
+   ],
+   "tb.start": [
+    "Jump to start (Shift+Ctrl+←)"
+   ],
+   "ui.modeEdit": [
+    "Edit mode"
+   ]
+  }
+ }
+}

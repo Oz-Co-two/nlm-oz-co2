@@ -21,7 +21,7 @@ def _report(t, items, label):
 
 def test_english_ui_no_japanese(t):
     '''英語で起動→主な画面（MEDIA/PREVIEW/NLE/INFO/NOTES/LIGHTING・パイ・パレット・ファイルメニュー・環境設定の全タブ・右クリックメニュー・
-    難易度のメニュー・譜面チェックの2タブ・自動ライティング・難易度を測る・書き出しの不足の知らせ）に日本語が出ない'''
+    難易度のメニュー・譜面チェックの2タブ・自動ライティング・難易度を測る・書き出しの不足の知らせ・プラグインの更新の知らせ）に日本語が出ない'''
     ed = start_english(t)
     tour(ed)
     _report(t, found(ed), "英語表示で見えた日本語")

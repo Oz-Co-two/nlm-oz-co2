@@ -299,3 +299,52 @@ def test_measure_parallel_limit(t):
         t.eq(len(started), 1, "取り込みの後に測定が動く")
     finally:
         rp.subprocess.run = orig
+
+
+def _notes_manifest(ver, notes):
+    return json.dumps(_manifest(ver=ver, notes=notes)).encode()
+
+
+def test_check_newer_and_notes(t):
+    '''check は取り込み済みのどの版より新しいかと、その間の版の更新内容（新しい順・形と長さを整えた物）を返す（起動時の更新の知らせ用）'''
+    p, d = _plugin()
+    p.install_zip(_zip(ver="0.1.0"), "0.1.0")
+    notes = [{"version": "0.3.0", "ja": ["三", "x" * 400], "en": ["three", 5]},
+             {"version": "0.1.0", "ja": ["一"], "en": ["one"]},
+             {"version": "0.2.0", "ja": ["二"], "en": "two"},
+             {"version": "1.2", "ja": ["版が不正"]}, {"version": 3, "ja": ["版が数"]}, "文字", None]
+    orig = rp.RatingPlugin._get
+    try:
+        rp.RatingPlugin._get = staticmethod(lambda url, limit: _notes_manifest("0.3.0", notes))
+        L = p.check()["latest"]
+        t.eq((L["version"], L["newer"], L["installed"]), ("0.3.0", True, False), "新しい版がある")
+        t.eq([n["version"] for n in L["notes"]], ["0.3.0", "0.2.0"], "取り込み済みより新しい版だけ・新しい順")
+        t.eq(L["notes"][0]["ja"], ["三", "x" * 300], "長い文は切る")
+        t.eq(L["notes"][0]["en"], ["three"], "文字でない物は捨てる")
+        t.eq(L["notes"][1]["en"], [], "配列でなければ空")
+        rp.RatingPlugin._get = staticmethod(lambda url, limit: json.dumps(_manifest(ver="0.3.0")).encode())
+        t.eq(p.check()["latest"]["notes"], [], "notes の無い manifest（古い版）は空")
+        rp.RatingPlugin._get = staticmethod(lambda url, limit: _notes_manifest("0.1.0", notes))
+        L = p.check()["latest"]
+        t.eq((L["newer"], L["installed"], L["notes"]), (False, True, []), "最新を取り込み済み")
+        p2, _ = _plugin()
+        rp.RatingPlugin._get = staticmethod(lambda url, limit: _notes_manifest("0.2.0", notes))
+        L = p2.check()["latest"]
+        t.eq((L["newer"], [n["version"] for n in L["notes"]]), (True, ["0.2.0", "0.1.0"]), "未導入なら最新までの全部")
+    finally:
+        rp.RatingPlugin._get = orig
+
+
+def test_open_notes_url_fixed(t):
+    '''「詳しく見る」はその版のリリースのページだけを開く（版の形でなければリリースの一覧）'''
+    import webbrowser
+    p, _ = _plugin()
+    opened, orig = [], webbrowser.open
+    try:
+        webbrowser.open = lambda url: opened.append(url)
+        for v in ("0.2.0", "../x", None, 3, "0.2.0/../../a"):
+            t.eq(p.open_notes(v), {"ok": True}, f"応答 {v!r}")
+    finally:
+        webbrowser.open = orig
+    base = "https://github.com/Oz-Co-two/nlm-rating/releases"
+    t.eq(opened, [base + "/tag/v0.2.0"] + [base] * 4, "開く先は固定")

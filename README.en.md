@@ -70,8 +70,8 @@ are created next to the exe.
 
 ### Switching the UI to English
 
-**The UI starts in Japanese.** Click **環境設定** (Preferences — the second menu at the top left, next to ファイル),
-and on the first tab change **言語 / Language** to **English**. The setting is kept for the next launch.
+**The UI starts in Japanese.** Click **環境設定** (Preferences — in the menu bar at the top left, between 審査 and ヘルプ),
+choose **環境設定…** in the menu that opens, and on the first tab change **言語 / Language** to **English**. The setting is kept for the next launch.
 
 ### ffmpeg (needed to write song.egg and to analyze some audio formats)
 
@@ -89,7 +89,9 @@ If you install it while NLM is running, close NLM and start it again (NLM looks 
 ### Updating
 
 **From v1.3.0-oz on, you can update inside the app.** When a new version is available, its headlines are shown at startup;
-choose "Update" and the app downloads it and restarts. You can also use "Check for updates…" in the File menu.
+choose "Update" and the app downloads it and restarts. You can also use "Check for updates…" in the Help menu.
+From v2.1.1-oz on, new versions of installed plugins ("Estimate difficulty" and the map check's "AutoModder") are announced the same way
+(plugin updates are installed without restarting the app).
 
 - `config/`, `asset/`, `lang/` and `plugins/` (preferences, clips, translations, plugins) are kept; only `NonLinearMapper.exe` and `_internal/` are replaced.
 - The previous version is kept (one generation only) in `_previous_<version>` next to the exe. If something goes wrong with the new version,

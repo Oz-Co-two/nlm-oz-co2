@@ -158,8 +158,9 @@ def restore_settings(ed, *keys):
 
 
 def set_setting_checkbox(ed, cid, on):
-    """環境設定（メニューバーの歯車）を開き、チェックボックス cid を on/off にして閉じる"""
+    """環境設定（メニューバーの「環境設定」→「環境設定…」）を開き、チェックボックス cid を on/off にして閉じる"""
     click_el(ed, '#mbSettings')
+    click_el(ed, '.mbMenu button[data-act=settings]')
     wait_until(ed, "document.getElementById('settingsBg').style.display==='flex'", label='環境設定が開く')
     ed.js(f"document.getElementById({cid!r}).scrollIntoView({{block:'center'}})")   # 利用者がスクロールして見える所へ出すのと同じ
     if ed.js(f"document.getElementById({cid!r}).checked") != on:

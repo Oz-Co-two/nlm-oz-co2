@@ -1,0 +1,16 @@
+/* 「NLM について」の画面（js/help/about-dialog.js・#dirtyDlg の様式・2026-10-28） */
+#dirtyDlg.about{min-width:420px;max-width:540px;}
+#dirtyDlg.about .abHead{display:flex;align-items:baseline;gap:10px;margin-bottom:6px;}
+#dirtyDlg.about .abName{font-size:19px;font-weight:800;letter-spacing:.3px;}
+#dirtyDlg.about .abVer{font-size:12.5px;font-weight:700;color:#cbbcff;background:#3a2a7c;border:1px solid #6c56c8;border-radius:5px;padding:1px 7px;user-select:text;}
+#dirtyDlg.about .abLead{color:#d6d6de;line-height:1.6;margin-bottom:10px;white-space:pre-line;}
+#dirtyDlg.about .abRow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+#dirtyDlg.about .abSec{border-top:1px solid #3a3a42;padding-top:12px;margin-bottom:4px;}
+#dirtyDlg.about .abCopy{font-size:12px;color:#c4c4cc;white-space:pre-line;line-height:1.55;margin-bottom:8px;user-select:text;}
+#dirtyDlg.about .abText{font-size:12px;color:#a9adb8;line-height:1.6;margin-bottom:6px;}
+#dirtyDlg.about .abText + .abRow{margin-top:8px;}
+#dirtyDlg.about .abSub{font-size:11px;font-weight:700;color:#8a8a92;letter-spacing:.08em;margin-bottom:6px;}
+#dirtyDlg.about .abPl{display:flex;justify-content:space-between;gap:16px;font-size:12.5px;padding:3px 0;}
+#dirtyDlg.about .abPlVer{font-variant-numeric:tabular-nums;color:#e6e6ee;}
+#dirtyDlg.about .abPlVer.none{color:#8a8a92;}
+#dirtyDlg.about .ddBtns{margin-top:14px;}

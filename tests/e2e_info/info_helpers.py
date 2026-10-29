@@ -7,6 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "_lib"))
 from e2e_helpers import hover_3d, open_fixture   # noqa: E402,F401
 from e2e_helpers import wait_until as _wait_until   # noqa: E402
+from cdp import MENU_ITEM   # noqa: E402
 
 
 def wait_until(ed, expr, timeout=15.0, label=""):
@@ -56,10 +57,11 @@ def toast(ed):
 
 
 def file_menu(ed, act):
-    """ファイルメニューを開いて項目（data-act）をクリック。PCが混んでいてメニューを開くクリックが効かなかった時は押し直す"""
-    item = f"#mFileMenu [data-act={act}]"
+    """メニューバーの項目（data-act）を、それが入っているメニューを開いてクリック（名前はメニューが1つだったころのまま）。
+    PCが混んでいてメニューを開くクリックが効かなかった時は押し直す"""
+    item, head = MENU_ITEM.format(act=act), ed.menu_head(act)
     for i in range(3):
-        click_sel(ed, "#mFileBtn", "ファイルメニュー")
+        click_sel(ed, head, "メニュー")
         try:
             wait_until(ed, _CENTER_JS.format(sel=json.dumps(item)), timeout=4.0, label=f"メニュー {act}")
             break

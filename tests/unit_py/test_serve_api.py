@@ -86,6 +86,41 @@ def test_lang_merge_overrides_by_key(t):
     t.eq(len(got), len(seed) + 1, "キー数")
 
 
+def test_lang_stale_seed_text_replaced(t):
+    '''exe の隣の訳が「公開した版の同梱の文そのまま」（lang/history/released.json の表）なら使わず、今の同梱の文を返す（2026-10-28）。
+    以前は、同じキーのまま直した文が、初回の起動で写した古い訳に上書きされて今の利用者に届かなかった。利用者が書き換えた文・他のキーの古い文・
+    同梱に無いキーは今までどおり exe の隣の文'''
+    s = H.server()
+    seed, old = _lang_seed(), s.serve._lang_old()["ja.json"]
+    k_old = "rt.foot"   # v2.1.1-oz で直した注記（リウェイト）。v2.1.0-oz までの文は表にある
+    stale = next(iter(old[k_old]))
+    k2, k3 = [k for k in seed if k not in old][:2]
+    d = Path(s.data_dir) / "lang"
+    d.mkdir(exist_ok=True)
+    (d / "ja.json").write_text(json.dumps({k_old: stale, k2: "利用者が書き換えた訳", k3: stale, "user.only": "独自のキー"}, ensure_ascii=False), encoding="utf-8")
+    try:
+        st, _, body = H.req("GET", "/lang/ja.json")
+        got = json.loads(body)
+        t.eq(st, 200, "status")
+        t.eq(got[k_old], seed[k_old], "昔の同梱の文そのまま＝今の同梱の文")
+        t.eq((got[k2], got[k3], got["user.only"]), ("利用者が書き換えた訳", stale, "独自のキー"), "書き換えた文・他のキーの古い文・独自のキーは exe の隣の文")
+    finally:
+        (d / "ja.json").unlink(missing_ok=True)
+
+
+def test_lang_history_covers_released(t):
+    '''lang/history/released.json は、公開した全部の版（git のタグ v*-oz と原作 0.8 beta）の訳のうち今の同梱と違う文を全部含む
+    （足りなければ python tools/lang_history.py で作り直す。make_release もビルド結果で同じことを確かめる）'''
+    import shutil
+    if not shutil.which("git") or not (H.ROOT / ".git").exists():
+        t.skip("git の履歴が無い")
+        return
+    sys.path.insert(0, str(H.ROOT / "tools"))
+    import lang_history
+    t.eq(lang_history.missing(), [], "表に無い、公開した版の文")
+    t.ok(len(lang_history.released_refs()) >= 13, "原作と公開した版のタグ（v1.0.0-oz〜）を見ている")
+
+
 def test_lang_only_seed_and_only_user(t):
     '''データフォルダ側に無い言語は同梱版のみ、同梱に無い言語はデータフォルダ側のみ、どちらも無ければ404'''
     s = H.server()
@@ -194,6 +229,9 @@ def test_rating_and_update_endpoints_guarded(t):
     t.eq(st, 403, "rating ヘッダー無し")
     st, _, _ = H.req("POST", "/__update/status", body=b"{}")
     t.eq(st, 403, "update ヘッダー無し")
+    for path in ("/__rating/openNotes", "/__automodder/openNotes"):   # ブラウザを開く窓口（2026-10-28）も守られている
+        st, _, _ = H.req("POST", path, body=b'{"version":"0.1.0"}')
+        t.eq(st, 403, f"{path} ヘッダー無し")
     st, obj = H.post_json("/__rating/status", {})
     t.eq(st, 200, "rating status")
     t.eq(obj["current"], None, "未導入")
@@ -287,3 +325,54 @@ def test_post_broken_content_length(t):
         st, _, _ = H.req("POST", "/__update/status", headers=hdr, body=None)
         t.eq(st, want, label)
         t.ok(time.time() - t0 < 5, label + ": すぐ返る")
+
+
+def test_help_open_fixed_names_only(t):
+    '''/__help/*（ヘルプのメニュー・「NLM について」・2026-10-28）: 決まった名前だけを受け、URL・ファイルの場所はサーバーに固定
+    （JS から URL・パスを渡せない）。言語は en 以外は日本語。文書は データフォルダ（exe の隣）→本体のフォルダの順に探す。ヘッダー無しは 403'''
+    s = H.server()
+    sv = s.serve
+    opened = []
+    saved = (sv._help_open_url, sv._help_open_file, sv._NO_OPEN)
+    sv._help_open_url, sv._help_open_file, sv._NO_OPEN = (lambda u: opened.append(("url", u))), (lambda p: opened.append(("file", p))), False
+    try:
+        st, obj = H.post_json("/__help/open", {"doc": "tutorial", "lang": "en"})
+        t.eq((st, obj, opened[-1]), (200, {"ok": True, "opened": sv.HELP_DOCS["tutorial"]["en"]}, ("url", sv.HELP_DOCS["tutorial"]["en"])), "英語のチュートリアル")
+        st, obj = H.post_json("/__help/open", {"doc": "advanced", "lang": "xx"})
+        t.eq(obj["opened"], "https://github.com/Oz-Co-two/nlm-oz-co2/blob/master/docs/tutorial-advanced.md", "知らない言語は日本語")
+        n = len(opened)
+        for body in ({"doc": "https://example.com/"}, {"doc": ["tutorial"]}, {"doc": "__proto__"}, {}, {"url": "https://example.com/"}):
+            st, obj = H.post_json("/__help/open", body)
+            t.eq((st, obj), (200, {"ok": False, "error": "bad-request"}), f"受けない: {body}")
+        t.eq(len(opened), n, "受けない名前では何も開かない")
+        # 文書: データフォルダに無ければ本体のフォルダ（LICENSE は本体にある）
+        st, obj = H.post_json("/__help/openFile", {"name": "license"})
+        t.eq((st, obj), (200, {"ok": True, "opened": "LICENSE"}), "ライセンス")
+        t.eq(os.path.normcase(opened[-1][1]), os.path.normcase(os.path.join(sv.BASE_DIR, "LICENSE")), "本体のフォルダの LICENSE")
+        p = Path(s.data_dir) / "THIRD_PARTY_NOTICES.txt"
+        p.write_text("x", encoding="utf-8")
+        try:
+            H.post_json("/__help/openFile", {"name": "notices"})
+            t.eq(os.path.normcase(opened[-1][1]), os.path.normcase(str(p)), "データフォルダ（exe の隣）を先に探す")
+        finally:
+            p.unlink()
+        n = len(opened)
+        for body in ({"name": "../LICENSE"}, {"name": "LICENSE"}, {"name": r"C:\Windows\win.ini"}, {"name": 1}):
+            st, obj = H.post_json("/__help/openFile", body)
+            t.eq(obj, {"ok": False, "error": "bad-request"}, f"受けない: {body}")
+        files = dict(sv.HELP_FILES)
+        sv.HELP_FILES["license"] = "NO_SUCH_FILE_FOR_TEST"
+        try:
+            st, obj = H.post_json("/__help/openFile", {"name": "license"})
+            t.eq(obj, {"ok": False, "error": "missing"}, "見つからない")
+        finally:
+            sv.HELP_FILES.clear(); sv.HELP_FILES.update(files)
+        t.eq(len(opened), n, "受けない・見つからない時は何も開かない")
+        st, obj = H.post_json("/__help/bogus", {})
+        t.eq(st, 404, "知らない動作")
+        for path in ("/__help/open", "/__help/openFile"):
+            st, _, _ = H.req("POST", path, body=b'{"doc":"tutorial","name":"license"}')
+            t.eq(st, 403, f"{path} ヘッダー無し")
+        t.eq(len(opened), n, "ヘッダー無しでは開かない")
+    finally:
+        sv._help_open_url, sv._help_open_file, sv._NO_OPEN = saved
