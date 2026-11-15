@@ -37,7 +37,14 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 
 - **普段の修正・機能追加では、全テストは回さない**（2026-10-04の取り決め。当時は全部で約6〜7分かかった。2026-10-11にテストのEdgeを
   GPU描画・描画は毎秒30回まで・大きいグループを分けて同時に流す形にして約1分半になった。仕組みは`tests/README.md`）。直した所のテストと、影響しそうな周辺の
-  グループ・テストだけを回す（例: `run_tests.py e2e_nle`、`run_tests.py e2e_edit -k paste`）。どれを回したかは報告に書く。
+  グループ・テストだけを回す。どれを回したかは報告に書く。
+- **回すテストは `run_tests.py --changed` で選ぶ**（2026-10-30。ブランチ・worktree は `--changed master`）。変えたファイル→テストの表 `tests/select_map.json` で選び、
+  本体の editor-app.js は変えた関数の名前で選ぶ。「表に無い関数」と出た物は中身を読んで、回すテストを足す（`run_tests.py e2e_nle/test_x.py`・`-k` 等を直接渡す）。
+  選ぶのは目安（中身を読んで決めた対応）なので、共通の部品を大きく変えた時は全部を回す。
+- **決まりの確かめ `rules`**（2026-10-30・ブラウザを使わず数秒・`--changed` ではいつも回る）: 新しいファイル・ダイアログ・パネル・serve.py の API・ショートカット・
+  メニューの項目・訳のキー・exe に同梱する .py を足すと、テストと表（`tests/select_map.json`・`tests/coverage_map.json`）に載せるまで落ちる。直し方は落ちた時のメッセージ。
+  理由があって確かめない物は `coverage_map.json` に `todo`（後回し）・`manual`（手で確かめる）・`noNeed`（要らない）で理由を書く（`todo` は結果の補足に毎回名前が出る）。
+  見るのは「載っているか」だけ（そのテストが本当に確かめているかは表を書く時に中身で決める）。詳しくは `tests/README.md`「対応表」。
 - **全テスト（`.venv-build/Scripts/python.exe tools/run_tests.py`）はリリースの直前に1回だけ**: 版を上げた後、GitHubへ
   プッシュする前。そこで見つかった不具合は、その公開予定の版で直して一緒に出す。
 - 画面には要約だけが出る。失敗の詳細は`test-out/last.txt`を読む（画像を何枚も見て確かめる代わり）。使い方は`tests/README.md`。
@@ -54,7 +61,9 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - 開発用venv: `.venv-build/`（`.gitignore`済み）。`pip install pywebview pythonnet pyinstaller librosa scipy scikit-learn`
   （後ろの3つは曲の解析＝下の「曲の解析」節。exe に同梱する）。
   **Python 3.14**で作る（`py -3.14 -m venv .venv-build`。2026-09-28に3.9から移行・3.14はセキュリティ修正が2030-10まで）。
-  上限はpythonnet（3.1.0は`<3.15`）で決まるので、3.15以降へ上げる時はpythonnetの対応を先に確認すること。
+  上限はpythonnet（3.2.1は`<3.16`・2026-11 に 3.1.0 から更新）で決まるので、3.16以降へ上げる時はpythonnetの対応を先に確認すること。
+  3.15 へ上げる時も numba・llvmlite 等の解析の部品の対応と、解析の結果の見比べ（tools/README.md「librosa の版を上げる時」）が要る。
+  pythonnet 3.2.1 からは `pythonnet/runtime/` に .NET の互換用 DLL（netstandard.dll・System.*.dll）が入らない（THIRD_PARTY_NOTICES.txt からも外した）。
   `.venv/` は `tools/` のテンポ解析用（Python 3.9・librosa 0.11）で、ビルドには使わない（tools は `.venv-build` でも動く）。
 - ビルド: `.venv-build/Scripts/python.exe -m PyInstaller --noconfirm --clean nlm.spec` →
   `dist/NonLinearMapper/` にonedir出力（`NonLinearMapper.exe` + `_internal/`）。
@@ -286,6 +295,12 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - 原作の更新に追従する時・移植を直した時は `tools/mapcheck_difftest.py`（原作サイトと自動で突き合わせ。tools/README.md）。
 - `js/mapcheck/env-tables.js` は bsmap の `src/beatmap/misc/environment.ts` から自動抽出した表（環境の追加時は作り直す）。
 - 結果パネルは `mapcheck-panel.js`。項目名は `mc.k.<key>`（日本語の既定値はパネル内の`JA`表）。
+- **結果は全難易度の分を出すが、開いておくのは今の難易度（と全体・曲の情報）だけ**（2026-11-03・利用者の要望: 別の難易度の拍を今の難易度の物と取り違えた）。
+  別の難易度は閉じた見出し（数は見える）・今の難易度の見出しに「編集中」の札。BL評価リストは節が項目ごとなので、別の難易度の拍のある所見は行（難易度・文・数）だけ出して拍を隠し、
+  行を押すと出す（`blOther`・`otherOpen`）。別の難易度の拍を押すと `askYesNo` で「{diff} に切り替えて表示しますか？」と確かめてから切り替え（今の難易度の拍はそのまま移動）、
+  切り替えた後は押したチップを見える所へ出す。開閉を既定に戻すのは今の難易度が変わった時だけ（`loadDiff` の終わりの `mapCheckPanel.diffChanged()`・数字キー等どの切り替えでも）。
+  再チェック・タブの行き来では利用者の開け閉めを保つ（タブごとの控え `openMem`。描き直す前の中身から読むと、別のタブから戻った時に既定へ戻る＝2026-11-15 に直した）。
+  AutoModder のタブも同じ（`automodder-view.js` の `st.cur`）。テストは `tests/e2e/test_mapcheck.py` の `test_mapcheck_other_diff`・`test_mapcheck_tabs_keep_open`。
 - パネルの2つ目のタブ「NLM版 BL評価リスト」（`blcriteria.js`＋表示`blcriteria-view.js`・2026-09-29）は、BeatLeader公式の**文章の基準**
   （beatleader.wiki の Ranking Criteria）を項目番号（R1.A.1…）どおりに並べたNLM独自の判定表。BS Map Check とは別物なので、
   **公式の結果と見間違えないよう枠と背景を青緑にしている**（ユーザーの要望。`#mcPanel.blMode`）。判定の種類は
@@ -515,10 +530,12 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 
 ## 難易度を測る（BeatLeaderの星の近似・2026-10-02）
 
-- 計算は**本体に同梱しない別配布のプラグイン** nlm-rating（https://github.com/Oz-Co-two/nlm-rating ・MIT・.NETの自己完結exe・zip約19MB）。
+- 計算は**本体に同梱しない別配布のプラグイン** nlm-rating（https://github.com/Oz-Co-two/nlm-rating ・MIT・.NETの自己完結exe・zip約34MB）。
   BeatLeaderの公開コード（RatingAPI＋RatingAPI が submodule で指す beatleader-analyzer）を使う。本家と同じ星は保証できない
   （本家の Acc は RatingAPI の値にプレイヤーのスコアから譜面ごとに決める倍率を掛けた物＝portaBLe の AccReweighter。譜面だけでは計算できない。
   v0.2.0＝2026-10 のリウェイトから。Pass・Tech・予測精度は本家と一致）ので、画面には「近似値・公式ツールではない」と必ず出す。比較テスト・上流の追従手順はプラグイン側のREADME。
+  プラグインの版は v4.1.0 から本家の PP の版に合わせる（PPv4.1 → 4.1.x・2026-11-06・利用者の決定。NLM は版を大小でしか見ないので 0.2.0 の次が 4.1.0 でよい）。
+  PPv4.1 で★の目盛り・Tech の値が変わったが、R5.A の式（Desmos i19bvj8bhn）と R11.H.5 の 0.5★ は同じ＝NLM の判定はそのまま（値がプラグインから新しくなるだけ）。本家の BFS・BSF の値は保存されていない（0）ので測っていない。
 - NLM側: `rating_plugin.py`（取り込み・更新・実行）＋`serve.py`の`/__rating/*`（POST）＋`js/rating/rating-client.js`（状態・通信・測定結果）
   ＋`js/rating/rating-panel.js`（表示）。入力は譜面チェックと同じ`collectExportDiffs()`/`buildExportInfo()`（`collectRatingInput`）。
 - `rating-client.js`は「難易度を測る」パネルと譜面チェックのBL評価リスト（R5.A・R11.H.5の★/Tech）で**1つを共有**する（どちらで測っても両方に出る）。
@@ -609,6 +626,13 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
 - 解析は別スレッドで1件ずつ（2件目からは待ち行列）。取り消しは進み具合の区切りごと（重い計算の途中では止まらない）。計算のスレッドは CPU の半分まで
   （threadpoolctl・解析中も編集できるように）。同じ音源・同じ条件の結果は覚えて返す。librosa 等は解析を始めた時に読み込む（service.py は標準ライブラリだけ
   ＝serve.py の起動を遅くしない。exe では最初の解析だけ読み込みに約5秒）。
+- **同じ計算を1回にする**（2026-11-11・答えは1ビットも変えない＝山の63曲で直す前と途中の値・結果を全部比べた）: 構成の多数決は k に関係ない所
+  （固有値分解・中央値フィルタ）を1回だけ作る（`laplacian_basis`→k ごとに `laplacian_labels`。`laplacian()` もそのまま呼べる）。HPSS は
+  `song_analysis.hpss(y)`（`librosa.effects.hpss`＝harmonic・percussive と同じ値）を `onset_env(yp=)`・`measure_at(yh=)` へ渡して1回にし、service は
+  最後の音源の音と HPSS を覚えて（`AUDIO_KEEP_SEC`・書き換えできない配列）テンポ→構成・構成のやり直しで使い回す。3分49秒の曲でテンポ＋構成が 45 秒→17 秒。
+  **Auto Note Plotter（別のリポジトリ nlm-automap）が song_analysis の4つのファイルを手を加えずに写して使っている**（`service.SR`・`SF_EXTS`・`MIN_SEC`・
+  `MIN_CELLS`・`_plain`、`tempo.onset_env`・`estimate`、`structure.measure_at`・`analyze`・`result_json`、`RESULT_VERSION`）。名前・引数を変える・
+  ファイルを足す時は、向こうの写し方（nlm-automap の `tools/sync_nlm_analysis.py`）も考える。
 - 構成の目盛り `at` は NLM の拍 0, 0.25, … ごとの元の音源の秒（null＝音が無い）。**コマの境目がフレームの境目にちょうど乗る曲が多く、秒の最後の桁の違い
   1つで区切りが変わる**ので、テンポが一定で Music を切っていない目盛りは `nlm_grid` が TempoMap と同じ式で秒を作り直す（画面の秒を 10ms に丸めても
   tools と同じ結果）。テンポパート・切り貼りがある時は渡された秒のまま。`grid.bpm` は曲頭の BPM（1単位の拍数を決める）。
@@ -637,6 +661,13 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   前回と同一なら再変換をスキップする（ffmpeg起動・大きい音声ファイルの再書き込みを避ける）。
 - 書き出しパネルの「song.eggを強制再変換」チェックボックスでキャッシュを無視して強制再生成できる
   （初期化・やり直し用）。
+
+## 難易度の .dat の書き出し（土台と必須の項目・2026-11-15）
+
+- `buildDiffJsonFor` は難易度の土台（`base`）を複製し、物の配列を上書きして書く。**土台は .nlmf に保存される**（`_slimBase`）ので、雛形 `EMPTY_V3` を直しても
+  以前に作った難易度・保存済みの .nlmf には届かない。**必須の項目を足す時は書き出しの時に足すこと**（雛形も合わせて直す）。
+- v3.2.0 の `lightTranslationEventBoxGroups` は必須で、無いと BeatSaver が「Must be present」で受け付けない。以前の雛形に無かったため、書き出しで
+  `withLightTranslation` が `lightRotationEventBoxGroups` の直後に入れる（あれば中身はそのまま・3.2.0 の時だけ）。テストは `tests/e2e/test_export.py` の `test_export_light_translation`。
 
 ## 未保存検知（ランプ・終了時の確認）
 

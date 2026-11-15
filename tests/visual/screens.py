@@ -588,5 +588,44 @@ SCENES.append(Scene('審査の指摘', FIXTURE, [
     Screen('review_export', '審査の指摘: 書き出しの画面（NLM の確かめの結果・英語・前書きに数を入れない・見本の欄・コピー／出力フォルダへ保存）',
            steps=[review_export_check], leave=[click('#dirtyDlg .ddBtns button[data-v=cancel]')]),
     Screen('review_paste', '審査の指摘: 貼り付けて読む画面（Discord の本文を貼る欄）',
-           steps=[click('#rvPanel .rvPaste', 0.4)]),
+           steps=[click('#rvPanel .rvPaste', 0.4)], leave=[click('#dirtyDlg .ddBtns button[data-v=cancel]')]),
+    Screen('review_clear', '審査の指摘: 「指摘を消す」の確認（件数・Ctrl+Z で戻せる）',
+           steps=[click('#rvPanel .rvClear', 0.4), until("!!document.querySelector('#dirtyDlg[data-rv=rvClearDlg]')", what='消すの確認')],
+           leave=[click('#dirtyDlg .ddBtns button[data-v=cancel]')]),
+]))
+
+
+# ---- 未保存の時の3択・カバー画像の補正（2026-10-30。どちらも状態を変えるので、他の画面に写らないよう場面を分ける） ----
+def _info_helpers():
+    """tests/e2e_info の部品（画像を選ぶ偽物のファイル選択）。visual のプロセスでは読み込み先に無いので足す"""
+    import sys
+    from pathlib import Path
+    for d in ("_lib", "e2e_info"):
+        p = str(Path(__file__).resolve().parents[1] / d)
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    import info_helpers
+    return info_helpers
+
+
+def cover_pick_wide(ed):
+    """INFO のカバー画像ノード（c1）で、横長の 400×300 の PNG を選ぶ（ファイル選択は偽物・tests/e2e_info/test_cover_fit.py と同じ）"""
+    h = _info_helpers()
+    h.install_pickers(ed)
+    h.set_pick_image(ed, 400, 300, "image/png", "art.png")
+    h.click_sel(ed, '#infoWorld .iGrp[data-node=c1] .nPick', 'カバーの「画像を選択」')
+    h.wait_until(ed, "window._dbgApp.infoGraph().nodes.c1.data.name==='art.png'", label='カバーの名前')
+
+
+SCENES.append(Scene('未保存の確認', FIXTURE, [
+    Screen('dirty_dialog', '未保存の時の3択（NLE でマーカーを足して未保存 → ファイル→新規。保存して続行／保存せずに続行／キャンセル）',
+           steps=[key('e', at='#ndcv', ctrl=True), until("window._dbgApp.dirty().lamp===true", what='未保存のランプ'),
+                  click('#mFileBtn'), click('.mbMenu button[data-act=new]'), until("!!document.getElementById('dirtyDlg')", what='3択')],
+           leave=[key('Escape')]),
+]))
+SCENES.append(Scene('カバー画像の補正', FIXTURE, [
+    Screen('cover_fit_dialog', 'カバー画像の補正の確認（400×300 の横長の画像 → 譜面チェックの「🖼 カバー画像を補正…」。中央を切り抜く・見本）',
+           steps=[tab('nle', 1.5), cover_pick_wide, click('#iMapCheck'), until("!!document.querySelector('#mcPanel .mcSum')", what='譜面チェックの結果'),
+                  click('#mcPanel .mcFix[data-fix=cover]'), until("!!document.getElementById('dirtyDlg')", what='補正の確認')],
+           leave=[key('Escape')]),
 ]))

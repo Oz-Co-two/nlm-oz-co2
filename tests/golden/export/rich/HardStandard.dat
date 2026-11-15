@@ -123,6 +123,7 @@
  "colorBoostBeatmapEvents": [],
  "lightColorEventBoxGroups": [],
  "lightRotationEventBoxGroups": [],
+ "lightTranslationEventBoxGroups": [],
  "basicEventTypesWithKeywords": {
   "d": []
  },

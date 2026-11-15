@@ -465,10 +465,15 @@ def _open_mapcheck(ed):
                    "&&!p.querySelector('.mcRerun').disabled&&p.querySelectorAll('.mcBeat').length>0})()", timeout=10, label='チェック結果の表示')
 
 
-def _chip_click(ed, ref):
+def _chip_click(ed, ref, confirm=False):
+    """拍のチップを押す（別の難易度の結果は閉じてあるので開いてから）。confirm＝別の難易度の拍＝「切り替えて表示しますか？」の［はい］も押す"""
     sel = f'#mcPanel .mcBeat[data-ref="{ref}"]'
-    ed.js(f"document.querySelector({sel!r}).scrollIntoView({{block:'center'}})")
+    ed.js(f"(()=>{{const c=document.querySelector({sel!r});const d=c.closest('details');if(d&&!d.open)d.open=true;"
+          f"c.scrollIntoView({{block:'center'}});}})()")
     click_el(ed, sel)
+    if confirm:
+        wait_until(ed, "!!document.querySelector('#dirtyDlg .ddBtns button.pri')", label='切り替えの確認')
+        click_el(ed, '#dirtyDlg .ddBtns button.pri')
 
 
 def _selected(ed):
@@ -476,7 +481,8 @@ def _selected(ed):
 
 
 def test_mapcheck_jump(t):
-    '''譜面チェックの拍をクリックすると、その難易度へ切り替わり、その拍へ移動して対象のオブジェクトが選ばれる（ノーツ＝移動のつまみ付き・チェーン＝つまみ無し）'''
+    '''譜面チェックの拍をクリックすると（別の難易度の拍は確かめてから）、その難易度へ切り替わり、その拍へ移動して対象のオブジェクトが選ばれる
+    （ノーツ＝移動のつまみ付き・チェーン＝つまみ無し）。確認の画面・開閉は e2e/test_mapcheck.py の test_mapcheck_other_diff'''
     ed = open_ed(t, 'rich')
     t.eq(state(ed)['diff'], 'HardStandard.dat', '前提: Hard を開いている')
     # パネルと同じ判定を直接呼び、拍のチップ（data-ref＝難易度:項目:対象）が指すオブジェクトを調べる
@@ -493,7 +499,7 @@ def test_mapcheck_jump(t):
         return hs[0]
 
     for o, gizmo in ((pick('Expert', 'note'), 'move'), (pick('Hard', 'note'), 'move'), (pick('Expert', 'chain'), None)):
-        _chip_click(ed, o['ref'])
+        _chip_click(ed, o['ref'], confirm=state(ed)['diff'] != f"{o['dn']}Standard.dat")
         wait_until(ed, f"window._dbgApp.state().diff==='{o['dn']}Standard.dat'", label=f"{o['dn']} へ切替")
         _cur_is(ed, o['beat'], f"拍{o['beat']}へ移動")
         wait_until(ed, "window._dbgApp.state().sel===1", label='対象を選択')

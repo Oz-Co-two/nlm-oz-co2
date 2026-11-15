@@ -33,7 +33,7 @@ export function blStars({ t, escHtml, dispDiff, rating }) {
       const ierr = msg && msg.err && msg.act === 'install' ? err(msg.text) : '';
       if (busy === 'install') return `<div class="blRtCtl">${info(t('rt.installing', 'ダウンロード中…'))}</div>`;
       if (asking) {
-        return `<div class="blRtBox">${escHtml(t('rt.intro', 'この機能には追加プラグイン nlm-rating（約20MB）が必要です。「GitHub から取り込む」を押すと、配布元（下記）からダウンロードして、このアプリのフォルダの plugins に保存します。'))}`
+        return `<div class="blRtBox">${escHtml(t('rt.intro', 'この機能には追加プラグイン nlm-rating（約34MB）が必要です。「GitHub から取り込む」を押すと、配布元（下記）からダウンロードして、このアプリのフォルダの plugins に保存します。'))}`
           + ` ${escHtml(t('bl.rt.after', '取り込んだ後、★とTechを自動で計算して下の欄に入れます。'))}`
           + `<div class="blRtRepo">${escHtml(st.repo || '')}</div>`
           + `<div class="blRtBtns"><button class="blRtInstall">${escHtml(t('rt.install', 'GitHub から取り込む'))}</button>`

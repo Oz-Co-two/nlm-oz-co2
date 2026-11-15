@@ -337,6 +337,129 @@ def test_measure_at_matches_tools(t):
         t.ok(bool(np.all(e2[ok] > a2[ok])), "コマの終わりは頭より後")
 
 
+def test_hpss_shared_same_answer(t):
+    '''HPSS の使い回し（2026-11-11）: song_analysis.hpss(y) は librosa.effects.harmonic(y)・percussive(y) と1ビットも同じ。
+    onset_env に yp・measure_at に yh を渡しても渡さない時と同じ答え。形・型の違う物を渡すとエラー（取り違えに気づく）'''
+    np = _libs()
+    sys.path.insert(0, str(H.ROOT))
+    import librosa
+    import song_analysis as SA
+    from song_analysis import structure as S
+    from song_analysis import tempo as T
+    with tempfile.TemporaryDirectory() as td:
+        p = os.path.join(td, "a.wav")
+        Path(p).write_bytes(synth_wav(20.0, seed=7))
+        y, _ = S.load_audio(p)
+        yh, yp = SA.hpss(y)
+        t.ok(np.array_equal(yh, librosa.effects.harmonic(y)) and yh.dtype == y.dtype, "調波成分が harmonic と同じ")
+        t.ok(np.array_equal(yp, librosa.effects.percussive(y)) and yp.dtype == y.dtype, "打楽器成分が percussive と同じ")
+        e1, e2 = T.onset_env(p, y=y), T.onset_env(p, y=y, yp=yp)
+        t.ok(np.array_equal(e1[0], e2[0]) and e1[1:3] == e2[1:3] and all(np.array_equal(a, b) for a, b in zip(e1[3], e2[3])),
+             "onset_env が同じ")
+        g = grid_for(120.0, 0.0, len(y) / S.SR)
+        F1 = S.measure_at(p, g["at"], 120.0, 0.0, y=y)
+        F2 = S.measure_at(p, g["at"], 120.0, 0.0, y=y, yh=yh)
+        t.ok(all(np.array_equal(F1[k], F2[k], equal_nan=True) for k in ("CQ", "M", "E", "at")), "measure_at が同じ")
+        for label, fn in (("yh の長さ", lambda: S.measure_at(p, g["at"], 120.0, 0.0, y=y, yh=yh[:-1])),
+                          ("yp の型", lambda: T.onset_env(p, y=y, yp=yp.astype(np.float64)))):
+            try:
+                fn()
+                t.ok(False, f"{label}が違うとエラー")
+            except ValueError:
+                t.ok(True, f"{label}が違うとエラー")
+
+
+def test_laplacian_basis_same_answer(t):
+    '''構成の多数決（2026-11-11）: k に関係ない所（固有値分解・中央値フィルタ）を1回だけ作る Analyzer の票と
+    「同じグループになった割合」が、直す前の数え方（K_RANGE の k ごとに laplacian() を呼ぶ）と1ビットも同じ'''
+    np = _libs()
+    sys.path.insert(0, str(H.ROOT))
+    import scipy.ndimage
+    from song_analysis import structure as S
+    with tempfile.TemporaryDirectory() as td:
+        p = os.path.join(td, "a.wav")
+        Path(p).write_bytes(synth_wav(30.0, seed=3))
+        y, _ = S.load_audio(p)
+        g = grid_for(120.0, 0.0, len(y) / S.SR)
+        F = S.measure_at(p, g["at"], 120.0, 0.0, y=y)
+    ana = S.Analyzer(F, S.unit_scale(120.0), 120.0)
+    sl = slice(ana.lo, ana.hi)
+    Fm = S.unit(S.z(ana.M[1:, sl]))
+    X = np.vstack([Fm, S.unit(S.z(ana.CQ[S.VOCAL[0]:S.VOCAL[1], sl]))])
+    Frec = S.unit(S.stack(X, ana.f(4)))
+    votes, CO = np.zeros(ana.n), np.zeros((ana.n, ana.n))
+    for k in S.K_RANGE:
+        lab = S.laplacian(Frec, Fm, k, med=ana.f(4) | 1)
+        v = np.zeros(ana.n)
+        v[1:][lab[1:] != lab[:-1]] = 1
+        votes += scipy.ndimage.gaussian_filter1d(v, ana.U / 2) * np.sqrt(2 * np.pi) * (ana.U / 2)
+        CO += lab[:, None] == lab[None, :]
+    t.ok(np.array_equal(votes / len(S.K_RANGE), ana.votes), "区切りの票")
+    t.ok(np.array_equal(CO / len(S.K_RANGE), ana.CO), "同じグループになった割合")
+
+
+def _svc_wait(svc, job, timeout=180):
+    end = time.time() + timeout
+    while time.time() < end:
+        r = svc.status(job)
+        if r["state"] in ("done", "error"):
+            return r
+        time.sleep(0.05)
+    raise AssertionError(f"解析が {timeout} 秒で終わりません")
+
+
+def test_service_reuses_audio_and_hpss(t):
+    '''同じ音源の続きの仕事（テンポ→構成・BPM を直して構成をやり直す）は、読み込んだ音と HPSS を使い回す（読み込み・HPSS は1回）。
+    答えは使い回さない時と同じ（テンポも構成も、先にした側・後にした側の両方で比べる）。覚えた配列は書き換えできない。
+    しばらく使わなければ手放す'''
+    _libs()
+    sys.path.insert(0, str(H.ROOT))
+    import song_analysis as SA
+    from song_analysis import service as SV
+    data = synth_wav(24.0, seed=11)
+    calls = {"hpss": 0, "load": 0}
+    orig_hpss, keep = SA.hpss, SV.AUDIO_KEEP_SEC
+
+    def hpss(y):
+        calls["hpss"] += 1
+        return orig_hpss(y)
+
+    def counted(svc):
+        orig = svc._load
+
+        def load(path):
+            calls["load"] += 1
+            return orig(path)
+        svc._load = load
+        return svc
+
+    with tempfile.TemporaryDirectory() as td:
+        SA.hpss = hpss
+        try:
+            a = counted(SV.AnalysisService(td))
+            aid = a.store(io.BytesIO(data).read, len(data), "wav")
+            g1, g2 = grid_for(120.0, 0.0, 24.0), grid_for(121.0, 15.0, 24.0)
+            ra = [_svc_wait(a, a.start_tempo(aid)), _svc_wait(a, a.start_structure(aid, g1)), _svc_wait(a, a.start_structure(aid, g2))]
+            t.eq([r["state"] for r in ra], ["done"] * 3, "テンポ→構成→目盛りを変えた構成")
+            t.eq(calls, {"hpss": 1, "load": 1}, "読み込み・HPSS は1回（使い回す）")
+            t.ok(a.audio and a.audio["id"] == aid and not a.audio["y"].flags.writeable
+                 and not any(x.flags.writeable for x in a.audio["hp"]), "覚えた音・HPSS は書き換えできない")
+            b = counted(SV.AnalysisService(td))   # 覚えた結果の無い別の窓口: 構成が先・テンポが後
+            rb = [_svc_wait(b, b.start_structure(aid, g1)), _svc_wait(b, b.start_tempo(aid))]
+            t.eq(calls, {"hpss": 2, "load": 2}, "別の窓口でも読み込み・HPSS は1回")
+            t.eq(rb[0]["result"], ra[1]["result"], "構成: 使い回した答え＝計算した答え")
+            t.eq(rb[1]["result"], ra[0]["result"], "テンポ: 使い回した答え＝計算した答え")
+            SV.AUDIO_KEEP_SEC = 0.0
+            with b.cv:
+                b.cv.notify()   # 待っている解析のスレッドを起こす（次の待ちで時間を見直す）
+            end = time.time() + 5
+            while b.audio is not None and time.time() < end:
+                time.sleep(0.05)
+            t.ok(b.audio is None, "しばらく使わなければ手放す")
+        finally:
+            SA.hpss, SV.AUDIO_KEEP_SEC = orig_hpss, keep
+
+
 def test_tools_modules_share_constants(t):
     '''tools/analyze_structure.py・tempo_leadin.py は song_analysis の計算をそのまま使い、定数の書き換えも song_analysis に効く
     （調整用のスクリプトが A.SECTION_SAME = … で試すため）'''

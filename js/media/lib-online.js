@@ -241,7 +241,7 @@ export function installLibOnline(api) {
 
   /** プラグインが取り込まれていない: 取り込み方の案内（難易度を測るのパネルを開ける） */
   async function needPlugin() {
-    const ok = await api.askYesNo(t('lib.rate.needPluginMenu', '★の計算（NLM推定）には追加プラグイン nlm-rating（約20MB）が必要です。\n「難易度を測る」のパネル（確かめるのメニュー）の［GitHub から取り込む］で取り込めます。\n\nパネルを開きますか？'),
+    const ok = await api.askYesNo(t('lib.rate.needPluginMenu', '★の計算（NLM推定）には追加プラグイン nlm-rating（約34MB）が必要です。\n「難易度を測る」のパネル（確かめるのメニュー）の［GitHub から取り込む］で取り込めます。\n\nパネルを開きますか？'),
       t('lib.rate.openPanel', 'パネルを開く'), t('lib.rate.close', '閉じる'));
     if (ok) api.openRatingPanel();
   }

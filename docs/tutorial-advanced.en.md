@@ -934,7 +934,8 @@ NLM can analyze the audio of the song and give you its **tempo** (a suggested BP
 Using it right after loading a song makes it faster to set the BPM and to plan what kind of patterns go where.
 You can also create NLE clips that follow the sections ([Creating clips from the analysis](#creating-clips-from-the-analysis)).
 
-- Analysis takes about 30 seconds to a minute per song. You can keep editing meanwhile
+- Analysis takes about 15 to 30 seconds per song (depending on the length of the song and your PC; the first analysis after starting the app
+  takes about 5 seconds longer to get ready). You can keep editing meanwhile
 - The analysis runs on your PC. The song is not sent to the internet
 - mp3, ogg, wav, flac and similar formats can be analyzed as they are. Formats such as m4a need ffmpeg ([chapter 12](#analyze-song-shows-an-error))
 - The results are **estimates** from the sound of the song. Check the BPM with the metronome and the structure by ear in the end
@@ -1373,14 +1374,16 @@ with the BeatLeader preset.
 
 ![The map check panel](images/tutorial-advanced-en/09-1-mapcheck.png)
 
-The image shows the check of a short map made for the explanation (16 seconds, few lights).
+The image shows the check of a short map made for the explanation (16 seconds, few lights), with Hard open (Expert has the same notes).
 
 | No. | Name | Description |
 |---|---|---|
 | ① | Tabs | Switch between "Same as BS Map Check", "NLM BL criteria list" and "AutoModder" |
-| ② | Summary | The number of items for each mark |
+| ② | Summary | The number of items for each mark (all difficulties together) |
 | ③ | ↻ Check again | Refresh the results after fixing the map |
 | ④ | 💡 Auto lighting… | Shown only on items about too few lights. Starts [auto lighting](#auto-lighting-making-lights-from-the-notes) (chapter 7) and checks again afterwards. On cover image items, [🖼 Fix cover image…](#fixing-the-cover-image) appears in the same place |
+| ⑤ | Current difficulty | The results of the difficulty you are editing. Its heading has an **Editing** tag, and it is shown expanded |
+| ⑥ | Other difficulties | Shown collapsed (the heading still shows the number of items for each mark). Click the heading to expand it |
 
 The results are split into "General (audio, cover, preview)" and a section for each difficulty. The mark at the start of each item shows how serious it is.
 
@@ -1393,11 +1396,20 @@ The results are split into "General (audio, cover, preview)" and a section for e
 
 If there is no unrankable item or error, "✓ No unrankable issues or errors" is shown at the top.
 
+The results cover all the difficulties that will be exported, but **only "General" and the difficulty you are editing (⑤) are expanded**,
+so that you don't mistake the beats of another difficulty for those of the one you are editing.
+
+- The other difficulties (⑥) are collapsed. Their headings show whether they have problems. Click a heading to expand it
+- When you switch difficulties, the difficulty you switched to is expanded and the others are collapsed
+- **↻ Check again** and switching tabs keep the sections as you expanded or collapsed them
+
 The numbers under each item are the **beats** where the problem is.
 
 - Point at a number to see the time from the start of the song (min:sec)
-- **Click a number to switch to that difficulty, move to that beat, and select the notes etc. in question.**
-  You can fix them right away
+- **Click a number of the difficulty you are editing to move to that beat and select the notes etc. in question.** You can fix them right away
+- **Click a number of another difficulty, and NLM asks "This result is for Expert (you are editing Hard). Switch to Expert and show it?"**
+  Press **Switch to Expert** to switch to that difficulty, move to that beat and select the objects there (the number you clicked is scrolled into view in the panel).
+  **Cancel** (or Esc) does nothing
 - For items with many beats, click "{n} more" to show them all
 
 After fixing, press **↻ Check again** at the top right of the panel to refresh the results.
@@ -1495,6 +1507,21 @@ When R10.A (at least one light per beat) or R7.B (bomb lighting) is a violation 
 It starts [auto lighting](#auto-lighting-making-lights-from-the-notes) (chapter 7) and checks again afterwards.
 When R1.A.4 (size, shape and format of the cover image) is a violation, **🖼 Fix cover image…** appears ([Fixing the cover image](#fixing-the-cover-image)).
 
+#### Findings for the current and other difficulties
+
+The BL criteria list is ordered by item (R1.A.1, etc.), so one item can list findings for several difficulties.
+Here too, only the findings of the difficulty you are editing show their beats.
+
+![Findings in the BL criteria list. ① Finding for the current difficulty ② Finding for another difficulty](images/tutorial-advanced-en/09-2b-bl-other-diff.png)
+
+| No. | Name | Description |
+|---|---|---|
+| ① | Finding for the current difficulty | The difficulty tag is purple. The beat numbers are shown; click one to jump to that beat |
+| ② | Finding for another difficulty | The difficulty tag is teal. Only the difficulty, the text and the number of beats are shown; the beats are hidden. Click the row to show the beats (click again to hide them) |
+
+- Clicking a beat of another difficulty asks before switching, just like the map check tab
+- When you switch difficulties, the beats you had shown are hidden, and the findings of the difficulty you switched to show their beats
+
 #### Tested on ranked maps, and what to keep in mind
 
 The NLM BL criteria list has been run on 189 BeatLeader ranked maps (the versions that passed the review) to check that it doesn't report violations there.
@@ -1534,7 +1561,7 @@ Open it from **Estimate difficulty (approx. BeatLeader stars)…** in the Check 
 
 #### The first time: install the plugin
 
-The calculation needs the add-on plugin [nlm-rating](https://github.com/Oz-Co-two/nlm-rating) (about 19 MB, Windows only).
+The calculation needs the add-on plugin [nlm-rating](https://github.com/Oz-Co-two/nlm-rating) (about 34 MB, Windows only).
 It is not included in NLM, so press **Install from GitHub** in the panel to install it.
 
 - The downloaded file is checked against the publisher's information (SHA-256) before use
@@ -1591,14 +1618,15 @@ The third tab of the map check panel. **Its frame turns amber.**
 AutoModder is a ChroMapper (map editor) extension that reviewers often use. This tab runs AutoModder's automatic checks unchanged inside NLM and shows the results
 (the same calculation as AutoModder, not an approximation remade by NLM). You can see how the map looks in the reviewers' tool before you submit it.
 
-![The AutoModder tab. ① Notice ② Results per difficulty ③ Beats ④ Plugin version, Check again, Check for updates](images/tutorial-advanced-en/09-7-automodder.png)
+![The AutoModder tab. ① Notice ② Results for the current difficulty ③ Beats ④ Plugin version, Check again, Check for updates ⑤ Results for another difficulty](images/tutorial-advanced-en/09-7-automodder.png)
 
 | No. | Name | Description |
 |---|---|---|
 | ① | Notice band | Shows that these are AutoModder's checks (version, default settings) and that they differ from the current BeatLeader criteria in places |
-| ② | Results | Listed for the song info (Info.dat) and each difficulty, most severe first. Results with the same item and text are combined into one row with their beats |
-| ③ | Beats | Click one to switch to that difficulty and jump to that beat (same as the map check) |
+| ② | Results for the current difficulty | Its heading has an **Editing** tag, and it is shown expanded. The results are listed most severe first, and results with the same item and text are combined into one row with their beats |
+| ③ | Beats | Click one to jump to that beat. For a beat of another difficulty, NLM asks before switching to that difficulty (same as the map check) |
 | ④ | Plugin | The version of the plugin in use, **↻ Check again** (check again after fixing the map) and **Check for updates** |
+| ⑤ | Results for another difficulty | Shown collapsed (the heading still shows the counts and AutoModder's pass/fail). Click the heading to expand it |
 
 | Mark | Meaning |
 |---|---|
@@ -1608,6 +1636,8 @@ AutoModder is a ChroMapper (map editor) extension that reviewers often use. This
 | 💡 Suggestion, ℹ️ Info, 📊 Reference | For reference. Not a judgement against the criteria |
 
 - The check runs automatically when you open the tab. If the map has not changed since the last check, that result is shown as is
+- The results are split into the song info (Info.dat) and each difficulty, and only the song info and the difficulty you are editing are expanded
+  (same as the map check tab; when you switch difficulties, the one you switched to is expanded). A difficulty where AutoModder stopped in the middle of the checks is expanded so you notice it
 - Passed items are combined into one row, "✓ N passed"
 - Each difficulty is checked with AutoModder's default settings
 - AutoModder uses the song length, so load the audio before checking

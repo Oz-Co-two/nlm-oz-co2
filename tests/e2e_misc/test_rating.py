@@ -36,7 +36,7 @@ def test_rating_panel_not_installed(t):
     t.eq(ed.js("document.querySelector('#rtPanel .rtCheck').style.display"), "none", "「更新を確認」は導入後だけ")
     t.eq(ed.js("document.querySelector('#rtPanel .rtVer').style.display"), "none", "版の選択は2つ以上ある時だけ")
     intro = rating_text(ed, ".rtIntro")
-    t.ok("nlm-rating" in intro and "約20MB" in intro, f"取り込みの案内: {intro}")
+    t.ok("nlm-rating" in intro and "約34MB" in intro, f"取り込みの案内: {intro}")
     t.eq(rating_text(ed, ".rtRepo"), "https://github.com/Oz-Co-two/nlm-rating", "配布元（取得先は本体に固定）")
     foot = rating_text(ed, ".rtFoot")
     t.ok("BeatLeader の公式ツールではありません" in foot and "近似値" in foot, f"近似値・公式ではない旨の注記: {foot}")

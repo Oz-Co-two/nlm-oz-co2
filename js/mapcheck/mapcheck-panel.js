@@ -1,5 +1,9 @@
 // 譜面チェック（BeatLeader基準）の結果パネル。判定そのものは mapcheck.js。
 // 非モーダルの浮きパネル＝開いたまま譜面を直して「再チェック」できる。拍をクリックするとその位置へ移動・選択する
+// 結果は全難易度の分を出すが、開いておくのは今の難易度（と全体）だけ（2026-11-03・利用者の要望: 別の難易度の拍を今の難易度の物と取り違える）。
+//  - 別の難易度は閉じた見出し（数は見える）。BL評価リストは所見の行を残し拍だけ隠す（行を押すと出す）。難易度を切り替えたら開き直す（diffChanged）
+//  - 別の難易度の拍を押したら「切り替えますか？」と確かめてから切り替える（ask）。同じ難易度の拍はそのまま移動
+//  - 開閉の既定に戻すのは今の難易度が変わった時だけ（再チェック・タブの行き来では利用者が開け閉めした状態を保つ）
 import { runMapCheck, STATUS, CHECK_NAMES } from './mapcheck.js';
 import { runBlCriteria, BL } from './blcriteria.js';
 import { blView } from './blcriteria-view.js';
@@ -68,7 +72,8 @@ export function installMapCheckPanel(api) {
   // autoLight / coverFix (終わったら呼ぶ関数)＝自動ライティング / カバー画像の補正の確認を開く（無ければボタンを出さない）
   // rating＝難易度を測るプラグインの窓口（rating-client.js）。BL評価リストの★/Techを自動で入れる（無ければ手入力だけ）
   // automodder＝AutoModder の判定のプラグインの窓口（automodder-client.js）。3つ目のタブ（無ければタブを出さない）
-  const { t, escHtml, collect, jump, dispDiff, autoLight, coverFix, rating, automodder } = api;
+  // curDiff()＝今開いている難易度の名前（Easy〜ExpertPlus・無ければ null） / ask(文, はい, いいえ)＝確認の画面（はい＝true の Promise）
+  const { t, escHtml, collect, jump, dispDiff, autoLight, coverFix, rating, automodder, curDiff, ask } = api;
   const FIX = { autolight: [autoLight, 'mc.fixAutoLight', '💡 自動ライティング…'], cover: [coverFix, 'mc.fixCover', '🖼 カバー画像を補正…'] };
   const fixBtn = (kind = 'autolight') => FIX[kind][0] ? `<button class="mcFix" data-fix="${kind}">${escHtml(t(FIX[kind][1], FIX[kind][2]))}</button>` : '';
   const fixKindMc = key => LIGHT_FIX_MC.has(key) ? 'autolight' : COVER_FIX_MC.has(key) ? 'cover' : null;
@@ -87,7 +92,15 @@ export function installMapCheckPanel(api) {
   const expanded = new Set();   // 「他N件」を開いた項目（再描画しても開いたまま）
   // タブ: 'mc'＝BS Map Check と同じ判定 / 'bl'＝NLM版 BeatLeader評価リスト / 'am'＝AutoModder の判定（開いているタブだけは覚えておく）
   let tab = 'mc'; try { const v = localStorage.getItem('bsnm_mcTab'); if (v === 'bl' || (v === 'am' && automodder)) tab = v; } catch (_) {}
-  const blSt = { onlyIssues: false, expanded };
+  const otherOpen = new Set();   // BL評価リストで拍を出した、別の難易度の所見（bl:項目:所見）。今の難易度が変わったら閉じる
+  const blSt = { onlyIssues: false, expanded, cur: null, otherOpen };
+  const cdNow = () => (curDiff ? curDiff() : null);
+  let shownDiff;   // 開閉の既定を決めた時の今の難易度（違えば次の描画で既定に戻す）
+  // タブごとの開閉（data-sec → open）。描き直す前に、今パネルに描いてあるタブ（bodyTab）の開閉をここへ控える。以前は描き直す前の中身から読んでいて、
+  // 別のタブから戻ると、そのタブの中身しか無く既定に戻っていた（タブの行き来で開け閉めが消えた・2026-11-15）
+  const openMem = { mc: new Map(), bl: new Map(), am: new Map() };
+  let bodyTab = null;
+  let curChip = null, reveal = false, asking = false;   // 押した拍のチップ [タブ, data-ref]（描き直しても印を残す）・切り替えた後に見える所へ出す・確認の画面を出している
   const stars = blStars({ t, escHtml, dispDiff, rating });   // ★/Tech の欄（自動計算・手入力。アプリを開いている間だけ保持）
   const blv = blView({ t, escHtml, dispDiff, mcLabel: key => t('mc.k.' + key, JA[key] || key),
     fixHTML: f => fixKindBl(f.key) && (f.status === BL.FAIL || f.status === BL.CHECK) ? fixBtn(fixKindBl(f.key)) : '',
@@ -142,21 +155,10 @@ export function installMapCheckPanel(api) {
       if (fx) { const fn = FIX[fx.dataset.fix] && FIX[fx.dataset.fix][0]; if (fn) fn(() => run()); return; }   // 直したらチェックし直す
       const more = ev.target.closest('.mcMore');
       if (more) { expanded.add(more.dataset.id); render(); return; }
-      const chip = ev.target.closest('.mcBeat'); if (!chip || !last) return;
-      const ref = chip.dataset.ref.split(':');
-      let dn = null, o = null;
-      if (ref[0] === 'am') {   // am:結果:物（AutoModder のタブ）
-        const r = amv && amv.ref(ref); if (r) { dn = r.dn; o = r.o; }
-      } else if (ref[0] === 'bl') {   // bl:項目:所見:対象
-        const r = blRes && blRes.rules && blRes.rules[+ref[1]], f = r && r.findings[+ref[2]];
-        if (f && f.objs) { dn = f.d; o = f.objs[+ref[3]]; }
-      } else {
-        const [di, ri, oi] = ref.map(Number), d = last.diffs[di], r = d && d.results[ri];
-        if (d && r && r.objs) { dn = d.difficulty; o = r.objs[oi]; }
-      }
-      if (!o || !dn) return;
-      el.querySelectorAll('.mcBeat.cur').forEach(x => x.classList.remove('cur')); chip.classList.add('cur');
-      jump(dn, o);
+      const chip = ev.target.closest('.mcBeat');
+      if (chip) { if (last) onChip(chip); return; }
+      const oth = ev.target.closest('.blOther');   // BL評価リストの別の難易度の所見の行＝拍を出す・隠す
+      if (oth) { const k = oth.dataset.oref; if (otherOpen.has(k)) otherOpen.delete(k); else otherOpen.add(k); render(); }
     });
     body.addEventListener('change', ev => {   // BL評価リストの「違反・要確認だけ」と★/Tech（入力を確定した時だけ描き直す）
       const x = ev.target;
@@ -182,6 +184,60 @@ export function installMapCheckPanel(api) {
       head.addEventListener('pointermove', mv); head.addEventListener('pointerup', up);
     });
   }
+
+  // 拍のチップ → 飛ぶ先 {dn, o}（無ければ null）
+  function chipTarget(ref) {
+    let dn = null, o = null;
+    if (ref[0] === 'am') {   // am:結果:物（AutoModder のタブ）
+      const r = amv && amv.ref(ref); if (r) { dn = r.dn; o = r.o; }
+    } else if (ref[0] === 'bl') {   // bl:項目:所見:対象
+      const r = blRes && blRes.rules && blRes.rules[+ref[1]], f = r && r.findings[+ref[2]];
+      if (f && f.objs) { dn = f.d; o = f.objs[+ref[3]]; }
+    } else {
+      const [di, ri, oi] = ref.map(Number), d = last.diffs[di], r = d && d.results[ri];
+      if (d && r && r.objs) { dn = d.difficulty; o = r.objs[oi]; }
+    }
+    return o && dn ? { dn, o } : null;
+  }
+  // 拍のチップを押した: 今の難易度ならそのまま移動。別の難易度なら切り替えてよいかを確かめてから（切り替えた後の描画でチップを見える所へ出す）
+  async function onChip(chip) {
+    const ref = chip.dataset.ref, g = chipTarget(ref.split(':'));
+    if (!g || asking) return;
+    const cd = cdNow();
+    if (g.dn !== cd && ask) {
+      asking = true;
+      let ok = false;
+      try {
+        ok = await ask(fill(t('mc.switchAsk', 'この結果は {diff} の物です（今開いているのは {cur}）。\n{diff} に切り替えて表示しますか？'),
+          { diff: dispDiff(g.dn), cur: cd ? dispDiff(cd) : '—' }),
+        fill(t('mc.switchYes', '{diff} に切り替える'), { diff: dispDiff(g.dn) }), t('word.cancel', 'キャンセル'));
+      } finally { asking = false; }
+      if (!ok) return;
+      reveal = true;
+    }
+    curChip = [tab, ref];
+    markCur();
+    jump(g.dn, g.o);
+  }
+  // 押したチップに印（描き直した後も）。切り替えた直後なら見える所へ出す（閉じた見出しの中にある間は出さずに待つ）
+  function markCur() {
+    if (!el) return;
+    el.querySelectorAll('.mcBeat.cur').forEach(x => x.classList.remove('cur'));
+    if (!curChip || curChip[0] !== tab) return;
+    const c = el.querySelector(`.mcBody .mcBeat[data-ref="${CSS.escape(curChip[1])}"]`);
+    if (!c) return;
+    c.classList.add('cur');
+    if (reveal && c.getClientRects().length) { reveal = false; c.scrollIntoView({ block: 'nearest' }); }
+  }
+  // 見出しの「編集中」の札（今開いている難易度）
+  const curTag = () => `<span class="mcCurTag" title="${escHtml(t('mc.curTip', '今開いている難易度です。他の難易度の結果は閉じてあります（見出しを押すと開きます）'))}">${escHtml(t('mc.curDiff', '編集中'))}</span>`;
+  // 今パネルに描いてあるタブの開閉（data-sec ごと）を控える（render の頭で呼ぶ）
+  function saveOpen() {
+    const m = bodyTab && openMem[bodyTab];
+    if (m) el.querySelectorAll('.mcBody details[data-sec]').forEach(x => m.set(x.dataset.sec, x.open));
+  }
+  // 描いた後に、控えた開閉を戻す（控えの無い節は既定のまま）
+  const applyOpen = (body, k) => { bodyTab = k; const m = openMem[k]; body.querySelectorAll('details[data-sec]').forEach(x => { if (m.has(x.dataset.sec)) x.open = m.get(x.dataset.sec); }); };
 
   function statusCounts(results) {
     const c = {}; for (const s of ORDER) c[s] = 0;
@@ -213,6 +269,10 @@ export function installMapCheckPanel(api) {
 
   function render() {
     if (!el) return;
+    const cd = cdNow(), fresh = cd !== shownDiff;   // 今の難易度が変わった＝開閉を既定（今の難易度だけ開く）に戻す
+    saveOpen();
+    // BL評価リストの節（R1〜）は難易度の区切りではない＝難易度を切り替えても開閉を保つ（別の難易度の所見の拍は otherOpen）
+    if (fresh) { shownDiff = cd; otherOpen.clear(); openMem.mc.clear(); openMem.am.clear(); }
     el.classList.toggle('blMode', tab === 'bl');
     el.classList.toggle('amMode', tab === 'am');
     el.querySelectorAll('.mcTab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
@@ -220,8 +280,11 @@ export function installMapCheckPanel(api) {
     el.querySelector('.mcTab[data-tab="bl"]').textContent = t('mc.tabBl', 'NLM版 BL評価リスト');
     const amTab = el.querySelector('.mcTab[data-tab="am"]');
     if (amTab) { amTab.textContent = t('mc.tabAm', 'AutoModder'); amTab.title = t('mc.tabAmTip', 'AutoModder（既定の設定）の判定を、別配布のプラグインで動かした結果'); }
-    if (tab === 'bl') return renderBl();
-    if (tab === 'am') return renderAm();
+    if (tab === 'bl') renderBl(cd, fresh); else if (tab === 'am') renderAm(cd, fresh); else renderMc(cd, fresh);
+    markCur();
+  }
+
+  function renderMc(cd, fresh) {
     el.querySelector('.mcTitle').textContent = t('mc.title', '譜面チェック（BeatLeader基準）');
     el.querySelector('.mcRerun').textContent = busy ? t('mc.running', 'チェック中…') : t('mc.rerun', '↻ 再チェック');
     el.querySelector('.mcRerun').disabled = busy;
@@ -236,19 +299,20 @@ export function installMapCheckPanel(api) {
       : `<span class="mcOk">✓ ${escHtml(t('mc.noBlocking', 'ランク不可・エラーはありません'))}</span>${countsHTML(tot)}`;
     const parts = [];
     const gen = sortByStatus(last.general).map(([r]) => itemHTML(r, -1, 0)).join('');
-    parts.push(`<details class="mcSec" open><summary>${escHtml(t('mc.general', '全体（音源・カバー・試聴）'))}${countsHTML(statusCounts(last.general))}</summary>${gen || `<div class="mcNone">${escHtml(t('mc.none', '問題は見つかりませんでした'))}</div>`}</details>`);
+    parts.push(`<details class="mcSec" data-sec="mc:gen" open><summary>${escHtml(t('mc.general', '全体（音源・カバー・試聴）'))}${countsHTML(statusCounts(last.general))}</summary>${gen || `<div class="mcNone">${escHtml(t('mc.none', '問題は見つかりませんでした'))}</div>`}</details>`);
     last.diffs.forEach((d, di) => {
       const items = d.error ? `<div class="mcErr">${escHtml(d.error)}</div>`
         : (sortByStatus(d.results).map(([r, ri]) => itemHTML(r, di, ri)).join('') || `<div class="mcNone">${escHtml(t('mc.none', '問題は見つかりませんでした'))}</div>`);
-      parts.push(`<details class="mcSec" open><summary>${escHtml(dispDiff(d.difficulty))}${countsHTML(statusCounts(d.results))}</summary>${items}</details>`);
+      const isCur = d.difficulty === cd;   // 開いておくのは今の難易度だけ（判定の途中で止まった難易度も、気付けるよう開く）
+      parts.push(`<details class="mcSec${isCur ? ' mcCurSec' : ''}" data-sec="mc:${escHtml(d.difficulty)}"${isCur || d.error ? ' open' : ''}><summary>${escHtml(dispDiff(d.difficulty))}${isCur ? curTag() : ''}${countsHTML(statusCounts(d.results))}</summary>${items}</details>`);
     });
-    const opened = [...body.querySelectorAll('details.mcSec:not(.blSec):not(.amSec)')].map(x => x.open), sc = body.scrollTop;
+    const sc = body.scrollTop;
     body.innerHTML = parts.join('');
-    body.querySelectorAll('details.mcSec').forEach((x, i) => { if (i < opened.length) x.open = opened[i]; });   // 再チェックしても開閉とスクロール位置は保つ
+    applyOpen(body, 'mc');   // 再チェック・タブの行き来でも開閉とスクロール位置は保つ
     body.scrollTop = sc;
   }
 
-  function renderBl() {
+  function renderBl(cd, fresh) {
     renderLater = false;
     el.querySelector('.mcTitle').textContent = t('mc.title', '譜面チェック（BeatLeader基準）');
     el.querySelector('.mcRerun').textContent = busy ? t('mc.running', 'チェック中…') : t('mc.rerun', '↻ 再チェック');
@@ -260,15 +324,16 @@ export function installMapCheckPanel(api) {
     if (!last) { body.innerHTML = ''; return; }
     const err = last.error || (blRes && blRes.error);
     if (err || !blRes) { body.innerHTML = err ? `<div class="mcErr">${escHtml(err)}</div>` : ''; return; }
-    const opened = new Map([...body.querySelectorAll('details.blSec')].map(x => [x.dataset.sec, x.open])), sc = body.scrollTop;
+    const sc = body.scrollTop;
     const a = typingStars() ? document.activeElement : null, fk = a && (a.dataset.star != null ? ['star', a.dataset.star] : ['tech', a.dataset.tech]);
+    blSt.cur = cd;
     body.innerHTML = blv.render(blRes, blSt, CHIP_MAX);
-    body.querySelectorAll('details.blSec').forEach(x => { if (opened.has(x.dataset.sec)) x.open = opened.get(x.dataset.sec); });
+    applyOpen(body, 'bl');
     body.scrollTop = sc;
     if (fk) { const n = body.querySelector(`.blStars input[data-${fk[0]}="${CSS.escape(fk[1])}"]`); if (n) n.focus(); }   // 入力中の★/Techの欄はフォーカスを戻す
   }
 
-  function renderAm() {
+  function renderAm(cd, fresh) {
     el.querySelector('.mcTitle').textContent = t('mc.title', '譜面チェック（BeatLeader基準）');
     const ab = automodder.state.busy === 'run';
     el.querySelector('.mcRerun').textContent = busy || ab ? t('mc.running', 'チェック中…') : t('mc.rerun', '↻ 再チェック');
@@ -276,9 +341,9 @@ export function installMapCheckPanel(api) {
     el.querySelector('.mcFoot').innerHTML = amv.foot();
     el.querySelector('.mcSum').textContent = '';
     const body = el.querySelector('.mcBody');
-    const opened = new Map([...body.querySelectorAll('details[data-sec]')].map(x => [x.dataset.sec, x.open])), sc = body.scrollTop;
-    body.innerHTML = amv.render({ expanded }, CHIP_MAX);
-    body.querySelectorAll('details[data-sec]').forEach(x => { if (opened.has(x.dataset.sec)) x.open = opened.get(x.dataset.sec); });   // 開閉とスクロール位置は保つ
+    const sc = body.scrollTop;
+    body.innerHTML = amv.render({ expanded, cur: cd, curTag: curTag() }, CHIP_MAX);
+    applyOpen(body, 'am');   // 開閉とスクロール位置は保つ
     body.scrollTop = sc;
   }
 
@@ -287,7 +352,7 @@ export function installMapCheckPanel(api) {
     try {
       const p = await collect();
       if (p.error) { last = { error: p.error }; input = null; }
-      else { input = p; last = runMapCheck(p); expanded.clear(); }
+      else { input = p; last = runMapCheck(p); expanded.clear(); otherOpen.clear(); curChip = null; }   // 結果の番号（data-ref）が変わるので、押した印・出した拍も外す
     } catch (e) { last = { error: String(e && e.message || e) }; input = null; }
     runBl();
     busy = false; render();
@@ -303,5 +368,7 @@ export function installMapCheckPanel(api) {
   }
   function close() { if (el) el.style.display = 'none'; }
   function isOpen() { return !!el && el.style.display !== 'none'; }
-  return { open, close, run, isOpen };
+  /** 本体が難易度を切り替えた後に呼ぶ（loadDiff の終わり）: 開いていれば、今の難易度の結果を開き他を閉じて描き直す */
+  function diffChanged() { if (isOpen() && cdNow() !== shownDiff) render(); }
+  return { open, close, run, isOpen, diffChanged };
 }

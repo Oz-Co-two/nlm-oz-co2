@@ -5,6 +5,8 @@
   exe の隣の config/ には置かない（大きい・使い捨てのため）。
 - 解析は同時に1件（2件目からは待ち行列）。進み具合の区切りごとに取り消しを確かめる（重い計算の途中では止まらない）。
 - 同じ音源・同じ条件の結果は覚えておき、次は計算せずに返す（画面で解析し直しを押しても待たない。計算は毎回同じ結果になる）。
+- 最後に解析した音源の、読み込んだ音と HPSS（調波・打楽器成分）も覚えておき、同じ音源の次の仕事（テンポの後の構成・BPM を直して
+  構成をやり直す）で使い回す（AUDIO_KEEP_SEC 使わなければ手放す）。読み直し・計算し直しと1ビットも同じ値（2026-11-11）。
 - エラーは文言ではなく種類（AnalysisError.code）で返す。画面（JS）が訳す（CLAUDE.md「表示言語」）。
 - numpy・librosa 等は解析を始めた時に読み込む（このファイルは標準ライブラリだけで読み込める＝serve.py の起動を遅くしない）。
 """
@@ -35,6 +37,7 @@ JOB_KEEP_SEC = 3600                 # 終わった仕事の状態を覚えてお
 MAX_DONE_JOBS = 200                 # 終わった仕事を覚えておく数
 MAX_QUEUE = 20                      # 待ち行列の上限
 RESULT_CACHE = 16                   # 覚えておく解析結果の数
+AUDIO_KEEP_SEC = 600                # 最後の音源の音・HPSS を覚えておく時間（最後に使ってから。4分の曲で約60MB）
 MIN_SEC = 5.0                       # これより短い音源は解析しない
 MIN_CELLS = 24                      # 構成解析: 音のあるコマ（1/4拍）がこれより少ない目盛りは解析しない（6拍。グループ数12の分割ができない）
 SR = 22050                          # 解析の音の形（song_analysis.tempo / structure の SR と同じ）
@@ -111,6 +114,7 @@ class AnalysisService:
         self.results = collections.OrderedDict()
         self.thread = None
         self.last_clean = 0.0
+        self.audio = None   # 最後の音源 {'id', 'y', 'hp'＝(調波, 打楽器) か None, 'at'＝最後に使った時刻}。解析のスレッドだけが触る
 
     # ---- 音源 ----
 
@@ -320,7 +324,11 @@ class AnalysisService:
         while True:
             with self.cv:
                 while not self.queue:
-                    self.cv.wait()
+                    left = None if self.audio is None else self.audio['at'] + AUDIO_KEEP_SEC - time.time()
+                    if left is not None and left <= 0:
+                        self.audio = None   # しばらく使わなければ手放す（曲の長さしだいで数十〜数百MB）
+                        continue
+                    self.cv.wait(left)
                 job = self.queue.popleft()
                 job.state = 'running'
             try:
@@ -374,10 +382,13 @@ class AnalysisService:
             limit = None
         try:
             tick(1)
-            y = self._load(path)
+            a = self._audio_of(job.audio_id, path)
+            y = a['y']
             if job.kind == 'tempo':
                 self._tick(job, 0.1, 0.1)(1)
-                env, fps, dur, low = tempo.onset_env(path, y=y, progress=self._tick(job, 0.1, 0.85))
+                on = self._tick(job, 0.1, 0.85)
+                on(0.15)   # HPSS の前の区切り（onset_env の中と同じ位置）
+                env, fps, dur, low = tempo.onset_env(path, y=y, progress=on, yp=self._hpss(a)[1])
                 r = tempo.estimate(env, fps, low=low)
                 if r.get('error'):
                     r['error'] = 'few-onsets'   # 強い打点が少なすぎる（BPM・無音追加は目安）
@@ -386,8 +397,8 @@ class AnalysisService:
                 return r
             g = job.params
             self._tick(job, 0.08, 0.08)(1)
-            F = structure.measure_at(path, g['at'], g['bpm'], g['leadMs'], y=y,
-                                     progress=self._tick(job, 0.08, 0.4))
+            ms = self._tick(job, 0.08, 0.4)
+            F = structure.measure_at(path, g['at'], g['bpm'], g['leadMs'], y=y, progress=ms, yh=self._hpss(a)[0])
             if int((F['at'] == F['at']).sum()) < MIN_CELLS:   # 音のあるコマ（NaN でない）が少なすぎると区切れない
                 raise AnalysisError('too-short')
             res = structure.analyze(F, g['bpm'], progress=self._tick(job, 0.4, 1.0))
@@ -395,11 +406,36 @@ class AnalysisService:
             out['bpm'], out['leadMs'] = g['bpm'], g['leadMs']
             return out
         finally:
+            if self.audio is not None:
+                self.audio['at'] = time.time()
             if limit is not None:
                 try:
                     limit.restore_original_limits()
                 except Exception:
                     pass
+
+    def _audio_of(self, aid, path):
+        """音源の音（同じ音源を最後に読んでいれば読み直さない）。戻り値は self.audio（'hp' は _hpss が埋める）。
+        中身の SHA-256 が id なので、同じ id なら読み直しても同じ値。次の仕事でも使うので書き換えできない配列にする
+        （どこかが書き換えたら、黙って次の答えが変わる代わりにエラーで気づく）"""
+        a = self.audio
+        if a is None or a['id'] != aid:
+            self.audio = None   # 前の音源を先に手放す（読み込みの間に2曲分を持たない）
+            y = self._load(path)
+            y.flags.writeable = False
+            a = self.audio = {'id': aid, 'y': y, 'hp': None, 'at': time.time()}
+        return a
+
+    @staticmethod
+    def _hpss(a):
+        """_audio_of の音の (調波, 打楽器) 成分。1回目だけ計算して覚える（song_analysis.hpss＝harmonic・percussive と同じ値）"""
+        if a['hp'] is None:
+            from . import hpss
+            hp = hpss(a['y'])
+            for x in hp:
+                x.flags.writeable = False
+            a['hp'] = hp
+        return a['hp']
 
     def _load(self, path):
         """音源を解析の形（SR・モノラル）で読む。libsndfile で読めない形式（m4a 等）は ffmpeg で WAV にしてから読む"""

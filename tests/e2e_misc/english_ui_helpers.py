@@ -219,6 +219,11 @@ def tour(ed):
         ed.call("Input.dispatchKeyEvent", type="keyUp", key=k, code=code, windowsVirtualKeyCode=vk, nativeVirtualKeyCode=vk); ed.wait(0.3)
     # 配置色のパレット
     click_sel(ed, "#tbColSw", "配置色"); ed.wait(0.5); scan(ed, "カラーパレット"); ed.key("Escape"); ed.click(1700, 1000); ed.wait(0.3)
+    # ツールバーのスナップ・ノーツの向きの一覧と、環境（ステージ）の一覧（もう一度押すと閉じる）。
+    # 点検の名前は文字で書く（tests/coverage_map.json から名前で指す＝rules が scan(ed, "…") を文字で探す）
+    click_sel(ed, "#tbSnapBtn", "スナップ"); ed.wait(0.4); scan(ed, "スナップの一覧"); click_sel(ed, "#tbSnapBtn", "スナップ"); ed.wait(0.3)
+    click_sel(ed, "#tbModeNote", "ノーツの向き"); ed.wait(0.4); scan(ed, "ノーツの向きの一覧"); click_sel(ed, "#tbModeNote", "ノーツの向き"); ed.wait(0.3)
+    click_sel(ed, "#sqEnvBtn", "環境"); ed.wait(0.4); scan(ed, "環境（ステージ）の一覧"); click_sel(ed, "#sqEnvBtn", "環境"); ed.wait(0.3)
     # メニューバーの全部のメニュー（2026-10-29 から6つ）・「NLM について」
     for head, name in (("#mFileBtn", "ファイル"), ("#mMapBtn", "譜面作り"), ("#mCheckBtn", "確かめる"), ("#mReviewBtn", "審査"), ("#mbSettings", "環境設定"),
                        ("#mHelpBtn", "ヘルプ")):
@@ -248,6 +253,11 @@ def tour(ed):
     if mus:
         right_click(ed, mus["x"], mus["top"] + mus["h"] / 2, "Musicの右クリック")
     edit_only_tour(ed)
+    # 未保存の時の3択（上で Ctrl+E で置いたマーカーで未保存）: ファイル→新規 → Esc（キャンセル）
+    wait_until(ed, "window._dbgApp.dirty().lamp===true", label="未保存")
+    click_sel(ed, "#mFileBtn", "ファイル"); ed.wait(0.3); click_sel(ed, ".mbMenu button[data-act=new]", "新規")
+    wait_until(ed, "!!document.getElementById('dirtyDlg')", label="未保存の3択"); scan(ed, "未保存の3択")
+    ed.key("Escape"); wait_until(ed, "!document.getElementById('dirtyDlg')", label="3択を閉じる")
     # 難易度のメニュー（選択中のボタンをもう一度）
     click_sel(ed, "#diffBar .dfSeg.on", "選択中の難易度"); ed.wait(0.4); scan(ed, "難易度のメニュー"); hide_menu(ed)
     link_tour(ed)   # 難易度のメニューを使うので、上の点検の後に
@@ -255,6 +265,18 @@ def tour(ed):
     click_sel(ed, "#mCheckBtn", "確かめる"); ed.wait(0.3); click_sel(ed, ".mbMenu button[data-act=mapcheck]", "譜面チェック")
     wait_until(ed, "!!document.querySelector('#mcPanel .mcSum, #mcPanel .mcOk')", label="譜面チェックの結果")
     scan(ed, "譜面チェック")
+    # 別の難易度の結果の拍 → 切り替えの確認（Esc でやめる）。ここまでの巡回で中身のある難易度は Hard だけ＝空の Expert を開いて Hard の拍を押す
+    from e2e_helpers import switch_diff
+    hard = ed.js("window._dbgApp.state().diff")
+    switch_diff(ed, "Expert")
+    oc = wait_until(ed, "(()=>{const d=[...document.querySelectorAll('#mcPanel details.mcSec')].find(x=>!x.open&&x.querySelector('.mcBeat'));"
+                        "if(!d)return null;d.open=true;const c=d.querySelector('.mcBeat');c.scrollIntoView({block:'center'});return c.dataset.ref})()",
+                    label="閉じた別の難易度の結果の拍")
+    scan(ed, "譜面チェック（別の難易度の結果）")
+    click_sel(ed, f"#mcPanel .mcBeat[data-ref='{oc}']", "別の難易度の拍")
+    wait_until(ed, "!!document.getElementById('dirtyDlg')", label="難易度の切り替えの確認"); scan(ed, "譜面チェック: 難易度の切り替えの確認")
+    ed.key("Escape"); wait_until(ed, "!document.getElementById('dirtyDlg')", label="切り替えの確認を閉じる")
+    switch_diff(ed, hard.replace("Standard.dat", ""))
     click_sel(ed, "#mcPanel .mcTab[data-tab=bl]", "BL評価リスト"); ed.wait(0.6); scan(ed, "BL評価リスト")
     click_sel(ed, "#mcPanel .mcTab[data-tab=mc]", "BS Map Check"); click_sel(ed, "#mcPanel .mcClose", "閉じる"); ed.wait(0.3)
     from automodder_helpers import am_tour   # 譜面チェックの AutoModder のタブ（未導入・取り込みの説明・結果。応答は偽物）
@@ -267,9 +289,10 @@ def tour(ed):
     wait_until(ed, "!!document.querySelector('#rtPanel .rtTable, #rtPanel .rtIntro, #rtPanel .rtErr')", label="難易度を測る")
     scan(ed, "難易度を測る")
     ed.js("(()=>{const b=document.querySelector('#rtPanel .rtClose, #rtPanel .mcClose'); if(b) b.click(); return 1})()"); ed.wait(0.3)
-    # INFO: 書き出し（出力フォルダ未設定＝足りない物の一覧が出る）
+    # INFO: カバー画像の補正の確認・書き出し（出力フォルダ未設定＝足りない物の一覧が出る）
     g = nle(ed)
     tab_over(ed, g["left"] + g["w"] * 0.6, g["lanes"] + 40)
+    cover_fit_tour(ed)
     ed.js("(()=>{const b=document.getElementById('iExport'); if(b) b.click(); return 1})()"); ed.wait(0.8)
     scan(ed, "INFO 書き出し")
     take_errors(ed, "Cannot export: missing")   # 想定どおりのエラー表示（showErr は console.error も出す）
@@ -282,6 +305,21 @@ def tour(ed):
     import_tour(ed)
     from plugin_update_helpers import plugin_update_tour   # 本体とプラグインの更新の知らせ（2026-10-28）: 知らせ・更新した通知・まとめ（応答は偽物）
     plugin_update_tour(ed, scan)
+
+
+def cover_fit_tour(ed):
+    """カバー画像の補正の確認（INFO の表示中に呼ぶ）: カバー画像ノード（c1）で横長の 400×300 の画像を選び（ファイル選択は偽物＝
+    tests/e2e_info/info_helpers.py）、譜面チェックの「🖼 カバー画像を補正…」で出す"""
+    from info_helpers import install_pickers, set_pick_image
+    install_pickers(ed); set_pick_image(ed, 400, 300)
+    click_sel(ed, "#infoWorld .iGrp[data-node=c1] .nPick", "カバーの「画像を選択」")
+    wait_until(ed, "window._dbgApp.infoGraph().nodes.c1.data.name==='art.png'", label="カバーの名前")
+    click_sel(ed, "#iMapCheck", "譜面チェック")
+    wait_until(ed, "!!document.querySelector('#mcPanel .mcFix[data-fix=cover]')", timeout=20, label="「カバー画像を補正…」のボタン")
+    click_sel(ed, "#mcPanel .mcFix[data-fix=cover]", "カバー画像を補正")
+    wait_until(ed, "!!document.getElementById('dirtyDlg')", label="カバー画像の補正の確認"); scan(ed, "カバー画像の補正の確認")
+    ed.key("Escape"); wait_until(ed, "!document.getElementById('dirtyDlg')", label="補正の確認を閉じる")
+    click_sel(ed, "#mcPanel .mcClose", "譜面チェックを閉じる"); ed.wait(0.3)
 
 
 def import_tour(ed):

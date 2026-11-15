@@ -16,6 +16,8 @@
 import numpy as np
 from scipy.stats import theilslopes
 
+from . import _hpss_part
+
 SR = 22050
 HOP = 128
 WIN_SEC = 16.0        # 周期の強さを測る区間の長さ
@@ -33,18 +35,19 @@ LEAD_BIAS_MS = 30.0   # 無音追加に足す量。耳で合わせた値（利�
                       # 比べると、打点の強さの山は 17〜60ms（中央値 31ms）遅かった（7件とも同じ向き。2026-10-19）
 
 
-def onset_env(path, y=None, progress=None):
+def onset_env(path, y=None, progress=None, yp=None):
     """打楽器成分（HPSS）の打点の強さ。戻り値: (強さ, 1秒あたりの数, 曲の秒, 低い音の打点の強さ3本)
     低い音の3本は 打楽器成分のメル0〜8帯・8〜16帯、元の音のメル0〜8帯（拍の頭か裏拍かの手がかり）
     y: 読み込み済みの音（librosa.load(path, sr=SR, mono=True) の結果。渡せば path は読まない）
-    progress: 進み具合（0〜1）を受け取る関数（serve.py の解析の仕事が、取り消しの確認にも使う）"""
+    progress: 進み具合（0〜1）を受け取る関数（serve.py の解析の仕事が、取り消しの確認にも使う）
+    yp: y の打楽器成分（song_analysis.hpss(y) の2つ目）。渡せばここで計算し直さない（無ければ librosa.effects.percussive(y)＝同じ値）"""
     import librosa
     tick = progress or (lambda f: None)
     if y is None:
         y, _ = librosa.load(path, sr=SR, mono=True)
     sr = SR
     tick(0.15)
-    yp = librosa.effects.percussive(y)
+    yp = _hpss_part(y, yp, librosa.effects.percussive)
     tick(0.6)
     env = librosa.onset.onset_strength(y=yp, sr=sr, hop_length=HOP)
     lp = librosa.onset.onset_strength_multi(y=yp, sr=sr, hop_length=HOP, channels=[0, 8, 16])

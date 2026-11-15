@@ -8,6 +8,10 @@
 .venv-build/Scripts/python.exe tools/run_tests.py              全部（グループごとに並列）
 .venv-build/Scripts/python.exe tools/run_tests.py e2e unit_js  グループを指定
 .venv-build/Scripts/python.exe tools/run_tests.py -k export    名前の一部で絞り込み
+.venv-build/Scripts/python.exe tools/run_tests.py e2e_nle/test_clip_link*.py e2e/test_export.py::test_export_rich
+                                                               ファイル・1つのテストを指定（グループと混ぜてよい）
+.venv-build/Scripts/python.exe tools/run_tests.py --changed    変えたファイルから回すテストを選んで回す（下の「回すテストの選び方」）
+.venv-build/Scripts/python.exe tools/run_tests.py --changed --dry-run   選んだテストと理由を見せるだけ
 ```
 
 画面には要約だけを出す。失敗の詳細は `test-out/last.txt`、全部の結果は `test-out/summary.json`。
@@ -33,6 +37,7 @@
 | `e2e_info/` | 自動ライティング・カバー補正の適用、INFOのノード操作（追加・削除・複製・配線・書き出しノード・試聴） | 使う |
 | `e2e_misc/` | BPMの自動判定、exe版だけの処理（pywebview を偽物にして通す）、環境設定、難易度を測る・譜面チェックの AutoModder のタブ（応答は偽物） | 使う |
 | `visual/` | 画面の崩れ検出（画像なし）と、基準画像とのピクセル比較 | 使う |
+| `rules/` | 決まりの確かめ（CLAUDE.md の「〜を足したら〜も足す」のうち機械で数えられる物と、2つの表が今のソースと合っているか。下の「対応表」） | 使わない |
 
 `t.fresh()` は localStorage を消し、一時のデータフォルダの `config/settings.json`（環境設定のミラー）を初期値に書き直してから開き直す＝
 テストごとに環境設定は初期値から始まる。設定が残ることを確かめる時は `ed.reload(clear_storage=False)` を直接使う。
@@ -71,6 +76,46 @@
 - **OK / 失敗 / エラー**: 失敗＝確認が外れた、エラー＝テスト自体が例外で止まった。
 - **要確認**: 失敗ではないが人の目が要るもの（画面に変化があった等）。下の「画面の比較」参照。
 - **飛ばし**: `t.skip()`。既知の不具合で、直すまで止めているものは理由に「既知の不具合: …」と書いてある。
+
+## 回すテストの選び方（--changed・tests/select_map.json）
+
+普段は直した所と周辺のテストだけを回す（全部はリリースの直前に1回）。どれを回すかは `--changed` で選ぶ:
+まだコミットしていない変更（ブランチ・worktree の作業は `--changed master`＝master から分かれた所から）を、`tests/select_map.json` の表で回すテストに直す。
+画面に「変えたファイル」「回すテストと選んだ理由」「表に無いファイル・関数」が出る。`--dry-run` は回さずに見せるだけ。
+
+- `tests/<グループ>/test_*.py` を変えた → そのファイル。tests/ の部品（`*_helpers.py`・`_lib/*.py` 等）→ それを import しているテスト（部品の部品もたどる）。どちらも表に書かなくてよい。
+- それ以外のファイル → 表の `files` の `paths`（`**` と `*` が使える）に当たる決まりの `run` を全部。
+- 本体の `js/runtime/editor-app.js` は1万行を超えるので、変えた行を含む関数の名前を表の `functions` の `match`（正規表現）と比べて選ぶ。
+  どれにも当たらない関数は「表に無い関数」として名前が出る＝担当が中身を読んで回すテストを足す（ファイルや `-k` を run_tests.py に直接渡す）。
+  よく変える関数の塊は表に足す。関数の見分けは字下げで見る近似（`tools/test_select.py` の `enclosing_names`）で、どの関数の中でもない所は `(top)`。
+- `rules` はいつも回る（ブラウザを使わない・数秒）。
+- `run` の書き方: `"e2e_nle"`（グループ全部）・`"e2e_nle/test_clip_link*.py"`（ファイル）・`"e2e/test_export.py::test_export_rich"`（1つ）・
+  `"visual -k analysis_ link_"`（名前・題名に語のどれかを含むテスト。画面テストは画面の名前で選べる）・`"*"`（全部）。
+- 表は**全部のファイルを覆う**（新しいファイルを足すと `rules` が落ちる＝足した時に「変えたら何を回すか」を決める）。テストの無い文書・道具は `run` を空にして `note` に理由。
+- 選ぶのは目安: 表は中身を読んで決めた対応で、コードの依存を解析した物ではない。共通の部品（`js/core/state.js`・`tools/cdp.py` 等。表の note に書いてある）を大きく変えた時は全部を回す。
+
+## 対応表（tests/coverage_map.json・rules）
+
+CLAUDE.md の「〜を足したら〜も足す」のうち機械で数えられる物を、`rules`（`tests/rules/test_rules.py`）が毎回確かめる。対象はソースから拾う（`tests/rules/rules_scan.py`）:
+
+| 確かめ | 拾う物 | 合っていること |
+|---|---|---|
+| ショートカット | `ACTIONS` の id | キーの処理（`hit(e,'id')`）・早見表の `{id}` かメニューの `data-key`・`lang/*.json` の `act.<id>` |
+| ダイアログ・パネル | id が `…Dlg`・`…Panel`・`…Dialog` の要素を作る所（キーは「ファイル::関数::id[data-dlg 等]」）・editor.html の `…Panel`・`…Bg` | 表に、画面テストの一覧（`screens.py` の名前）と英語の点検（`scan(ed, "…")` の名前。文字で書く＝変数で渡すと拾えない）がある |
+| serve.py の API | `act == '…'`（窓口の頭＋act）と `self.path == '…'` | テストに名前が書いてあるか、表の `tests` に確かめるテストがある |
+| exe の同梱 | app.py から import でたどれるリポジトリの .py | `nlm.spec` の datas と hiddenimports の両方にある |
+| メニューバー | editor.html の `data-act` | `runMenuAct` と1対1 |
+| 訳のキー | JS の `t('…')`・`tf('…')`・HTML の `data-i18n*`（文字で書いたキー） | `ja.json` と `en.json` の両方にあり、2つのキーがそろう |
+| 委譲の一覧 | `editor-runtime.js`・`save-system.js` の `methodNames` | 本体の `rt` にある |
+| 選び方の表 | git の全部のファイル | `select_map.json` のどれかの決まりに当たる・決まりが今のファイル・テスト・関数を指している |
+
+- 表に書いた物が無くなった（関数の名前・id を変えた、API を消した）時も落ちる＝表が古くならない。
+- 理由があって確かめない物は、表の行に `todo`（後回し＝テストを足すとよい）・`manual`（自動では確かめられない＝手で確かめる）・`noNeed`（要らない）で理由を書く。
+  `todo`・`manual` は結果の補足（`test-out/last.txt` の ※）に名前付きで出る＝残りの不足がいつも見える。作った時（2026-10-30）に足りなかった10件は同じ日に埋めた
+  （残りは `manual` の `/__update/apply`＝新しい版の exe を起動して自分は終わる所。exe の更新はリリースのたびに手で確かめる）。
+- **限界**: 見るのは「載っているか」だけで、載っているテストが本当にその事を確かめているかは見ない（表を書く時に中身を読んで決める）。
+  拾い方は今の書き方の決まり（正規表現）なので、決まりと違う書き方のダイアログ等は拾えない（拾えた数が少なすぎると落ちる＝書き方を変えて黙って通ることは無い）。
+  書き方の決まりを変えたら `rules_scan.py` を直す。
 
 ## 書き出しの正解ファイル（tests/golden/）
 
@@ -147,8 +192,11 @@ def test_place_undo(t):
 - 状態は開発用窓口 `window._dbgApp`（読み取り専用）と `window._dbg.rt`（ランタイム全体）から読む。
   足りなければ `_dbgApp` に**値の複製を返すだけ**の窓口を足す（書き換え機能は持たせない）。
 - 期待値は仕様・コードの意図から決める。今の出力をそのまま写して期待値にしない。
+- 新しいファイル・ダイアログ・API 等を足して `rules` が落ちたら、メッセージの「直し方」のとおりにテストと表（`select_map.json`・`coverage_map.json`）を足す。
 - テスト素材は `tools/fixtures/`（作り直しは `tools/fixtures/make_fixtures.py`）。
 - 固定の秒数で待つより、状態が変わるのを待つ方が速くて安定する。
+- `<input>` の中の幅を測る時は `clientWidth` を使わず、`offsetWidth` から枠と余白を引く。Edge 157（2026-11-13 に更新）から `<input>` の `clientWidth` は
+  余白を除いた幅を返す（div は今までどおり余白を含む）。以前の「`clientWidth` − 余白」は二重に引いて、MEDIA の検索欄の案内が「見えない」と誤って落ちた（2026-11-15 に直した）。
 
 ## さらに短くしたい時の候補（2026-10-11時点・未着手）
 
@@ -210,6 +258,8 @@ def test_place_undo(t):
   テスト（読み込みの前に偽物を差す `pu_on_load`）は名前の順でこのファイルより後に流れ、テストの環境は exe 版でない＝起動時の更新の画面（キーを止める）は出ない。
 - **残っている候補**: 音源の自動読み込みの直後で Tab の切り替えが受け付けられない時がある（負荷の高い全テストの中だけ）。同じものがまた出たら、失敗した時の画面
   （どの画面が出ていたか・`#nodeColBar` の表示）を記録に足して絞り込む。
+- **2026-11-15 にもう1回**（v2.1.2-oz の準備の全テスト・同じ PC でチュートリアルと X の告知の撮影の Edge も動いていた・`test-out/history/20261115_200251/`）: 同じ「INFOへの切替」の時間切れ（所要 33.6 秒）。
+  ファイル単独（4件）で回し直すと通った。今回も失敗した時の画面は記録していない。
 
 ### 全テストの開始直後に「エディタの起動が 30.0 秒以内に終わりませんでした」（2026-10-11・未解決）
 
@@ -278,6 +328,10 @@ def test_place_undo(t):
   `test-out/history/20261027_194535/`）: e2e_nle で `test_clip_link_diffs.py::test_copy_from_kid_links_to_its_parent` の素材の読み込みで `TypeError: Failed to fetch`
   （Kaspersky の `fetchCallImpl`）、`test_media_library.py::test_rescan_and_remove` の「外す」と `test_media_library_net.py::test_rate_selected_and_filtered` の
   「全曲データの状態」の待ち合わせの時間切れ＝上と同じ形。同じ回の `test_clip_link_cancel.py` の2件は下の「未保存のランプ」。5件とも1件ずつ回し直すと通った。
+- **2026-11-15**（v3.2.0 の .dat に lightTranslationEventBoxGroups を足す作業・master で2回。他の作業は動いていない）: `run_tests.py e2e/test_export.py --update-golden`
+  （同時3・`test-out/history/20261115_193951/`）で `e2e/test_export.py::test_export_after_bulk_import` の起動待ちの時間切れ（Log 領域に `net::ERR_NO_BUFFER_SPACE`・
+  `js/audio/spectro-levels.js`）、`run_tests.py e2e_project …`（e2e_project を同時15・`20261115_194221/`）で `e2e_project/test_diff_ops.py::test_clear_all_current_and_undo` の
+  起動待ちの時間切れ（`net::ERR_CONNECTION_REFUSED`・`js/mapcheck/*.js` など）＝どちらも上と同じ形。前者は `--changed` で、後者は `e2e_project/test_diff_ops.py` だけで回し直すと通った。
 
 ### e2e_nle「帯のセクションの右クリック『クリップを作る…』…」で解析のメニューが出ない（2026-10-20・未解決）
 
@@ -305,6 +359,8 @@ def test_place_undo(t):
   （[74.5, 69.1, 63.9, 59.2, 69.9]）」で失敗（`test-out/history/20261020_084925/`）。このテストだけを回し直すと通った。変更は MEDIA に関係しない（難易度間コピー）。
 - **分かっていること**: 時間で判定するテストなので、CPU が混んでいると5回とも遅くなる。同時に回す数が多い時だけ出ている。
 - **次に出たら見る所**: 単独で回して 50ms 以内なら混雑のせい。単独でも超えるなら `lib-table.js` の `measureWidths` が遅くなった（CLAUDE.md「MEDIA ライブラリ」の目安）。
+- **2026-11-15**（v2.1.2-oz の準備の全テスト・同じ PC で撮影の Edge も動いていた・`test-out/history/20261115_200251/`）: 「並べ替えた時の測り直し: 一番短い 52.3ms」で失敗。
+  ファイル単独で回し直すと通った（混雑のせい）。
 
 ### 画面テスト「曲の解析: 解析の帯」で未保存のランプが点いている（2026-10-27・未解決）
 

@@ -1,7 +1,7 @@
 """本体の自動更新（app_update.py）の自己テスト。ネットには繋がず、ローカルの偽の配布元で通しで確かめる。
 
 使い方:  python tools/update_test.py
-確かめること: 更新内容の絞り込み（今の版より新しい分だけ）/ ダウンロードと SHA-256 照合 / 改ざん・zip slip の拒否 /
+確かめること: 更新内容の絞り込み（今の版より新しい分だけ）/ ダウンロードと SHA-256 照合 / 改ざん・zip slip の拒否 / 途中での取り消し /
   差し替え（利用者のデータに触らない・1 世代の退避）/ 失敗時に元へ戻す / 想定外の場所からの差し替えの拒否 /
   更新後の片付け / CHANGELOG の日英の見出しの読み取り（tools/make_release.py）
 """
@@ -60,9 +60,13 @@ def make_zip(ver, extra=None):
 
 
 class Site:
-    """偽の配布元（update.json と zip を返す）"""
+    """偽の配布元（update.json と zip を返す）。hold に入れたパスは、頭の HOLD_BYTES だけ送って gate が立つまで待つ（取り消しの確かめ用）"""
+    HOLD_BYTES = 512 * 1024
+
     def __init__(self):
         self.files = {}
+        self.hold = None
+        self.gate = threading.Event()
         site = self
 
         class H(http.server.BaseHTTPRequestHandler):
@@ -71,7 +75,14 @@ class Site:
                 if body is None:
                     self.send_response(404); self.end_headers(); return
                 self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers()
-                self.wfile.write(body)
+                try:
+                    if self.path == site.hold:
+                        self.wfile.write(body[:site.HOLD_BYTES]); self.wfile.flush()
+                        site.gate.wait(10)
+                        body = body[site.HOLD_BYTES:]
+                    self.wfile.write(body)
+                except OSError:
+                    pass   # 取り消した側が接続を閉じた
 
             def log_message(self, *a):
                 pass
@@ -136,6 +147,24 @@ def main():
         site.publish("v1.4.0-oz", make_zip("v1.5.0-oz"), NOTES)
         up.start_download(); job = wait_job(up)
         check(job["state"] == "error" and job["error"] == "badZip", "zip の中身の版が update.json と違えば拒否")
+
+        print("ダウンロードの取り消し（cancel）")
+        big = b"\0" * (2 * 1024 * 1024)   # 1回に読む 256KB より十分大きい（途中で止めた所で取り消す）
+        site.publish("v1.4.0-oz", big, NOTES)
+        site.hold, site.gate = "/download/v1.4.0-oz/NonLinearMapper-v1.4.0-oz.zip", threading.Event()
+        up.start_download()
+        t0 = time.time()
+        while up.job.get("done", 0) < site.HOLD_BYTES and up.job["state"] == "download" and time.time() - t0 < 10:
+            time.sleep(0.02)
+        check(up.job["state"] == "download" and up.job["done"] == site.HOLD_BYTES, "取り消す前はダウンロードの途中")
+        j = up.cancel()
+        check(j["ok"] and j["state"] == "download", "取り消しの応答は今の状態（止まるのは次に読む所）")
+        site.gate.set()
+        job = wait_job(up)
+        check(job["state"] == "cancel" and job["error"] == "cancelled", "取り消すとダウンロードをやめる")
+        check(not list((target / "_update").glob("*.part")) and not (target / "_update" / "new").exists(),
+              "取り消したら途中のファイル・展開物を残さない")
+        site.hold = None
 
         print("ダウンロード（正常）")
         site.publish("v1.4.0-oz", zdata, NOTES)

@@ -7,7 +7,7 @@ NLM は、以下の第三者の部品・移植元プロジェクトを同梱・�
 各項に説明と、その部品のライセンス全文（元のライセンスのファイルの写し）を載せています。
 Apache License 2.0 と GNU LGPL 2.1 の全文は、何度も出てくるので最後の付録にまとめました。
 
-第3部の部品の版は、v2.0.0-oz の配布用に 2026-10-19 にビルドした exe 版の中身で確かめたものです。
+第3部の部品の版は、v2.1.2-oz の配布用に 2026-11-15 にビルドした exe 版の中身で確かめたものです。
 exe 版では、多くの部品の元のライセンスのファイルが _internal フォルダの
 <部品名>-<版>.dist-info/ にも入っています。
 
@@ -37,18 +37,17 @@ The source code of the LGPL components is attached to each GitHub release from v
       - proxy_tools 0.1.0                                            MIT（中身は Werkzeug 由来・BSD-3-Clause）
       - Microsoft WebView2 SDK 1.0.3856.49（Microsoft.Web.WebView2.*.dll・WebView2Loader.dll）
                                                                      BSD-3-Clause 型（Microsoft）
-  4.  pythonnet 3.1.0（Python.Runtime.dll）                          MIT
-      - .NET の互換用 DLL（pythonnet/runtime/ の netstandard.dll・System.*.dll）  MIT（.NET Foundation）
+  4.  pythonnet 3.2.1（Python.Runtime.dll）                          MIT
   5.  clr_loader 0.3.1（ClrLoader.dll）                              MIT
-  6.  Python 3.14.7 の実行環境（python314.dll・標準ライブラリ）         PSF-2.0
-      - Python に組み込まれた部品: OpenSSL 3.5.7（Apache-2.0）・libffi（MIT）・bzip2・zlib・expat・
+  6.  Python 3.14.10 の実行環境（python314.dll・標準ライブラリ）        PSF-2.0
+      - Python に組み込まれた部品: OpenSSL 3.5.9（Apache-2.0）・libffi（MIT）・bzip2・zlib・expat・
         libmpdec・Zstandard・mimalloc・Unicode Character Database ほか
       - Microsoft Visual C++ ランタイム（VCRUNTIME140.dll・MSVCP140.dll・VCOMP140.DLL ほか）
   7.  PyInstaller 6.22.3（exe の起動部分・実行時フック・一部のモジュール）
                                        GPL-2.0-or-later（起動部分は例外つき）・Apache-2.0・MIT
       - altgraph 0.17.5（MIT）・pefile 2024.8.26（MIT）・pywin32-ctypes 0.2.3（BSD-3-Clause）
-  8.  setuptools 84.0.0 と付属の部品                                   MIT ほか
-      - importlib_metadata 8.7.1（Apache-2.0）・packaging 26.0（Apache-2.0 OR BSD-2-Clause）・
+  8.  setuptools 84.2.1 と付属の部品                                   MIT ほか
+      - importlib_metadata 8.7.1（Apache-2.0）・packaging 26.3（Apache-2.0 OR BSD-2-Clause）・
         more_itertools 10.8.0・jaraco.text 4.0.0・jaraco.context 6.1.0・jaraco.functools 4.4.0・
         zipp 3.23.0・tomli 2.4.0・wheel 0.46.3・backports.tarfile 1.2.0（いずれも MIT）
   9.  曲の解析の部品（librosa・NumPy・SciPy・scikit-learn・Numba・llvmlite・soundfile・soxr ほか）
@@ -559,11 +558,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 ---------------------------------------------------------------------
-4. pythonnet 3.1.0（Python から .NET を使う部品。Python.Runtime.dll を含む）
+4. pythonnet 3.2.1（Python から .NET を使う部品。Python.Runtime.dll を含む）
    https://github.com/pythonnet/pythonnet
 ---------------------------------------------------------------------
 
-  ---- pythonnet 3.1.0  (pythonnet-3.1.0.dist-info/licenses/LICENSE) ----
+  ---- pythonnet 3.2.1  (pythonnet-3.2.1.dist-info/licenses/LICENSE) ----
 
 MIT License
 
@@ -586,37 +585,6 @@ THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
-
-  ---- .NET の互換用 DLL（_internal/pythonnet/runtime/ の netstandard.dll・System.*.dll） ----
-
-pythonnet に入っている、.NET Framework で .NET Standard 用の部品を動かすための互換用の DLL です
-（.NET SDK の Microsoft.NET.Build.Extensions/net461/lib と同じファイル。© Microsoft Corporation）。
-.NET（https://github.com/dotnet/sdk ・ https://github.com/dotnet/standard）は .NET Foundation が
-次の MIT License で公開しています。
-
-  ---- .NET（NETStandard.Library 2.0.3 の LICENSE.TXT） ----
-
-The MIT License (MIT)
-
-Copyright (c) .NET Foundation and Contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
 
 
 ---------------------------------------------------------------------
@@ -650,13 +618,13 @@ SOFTWARE.
 
 
 ---------------------------------------------------------------------
-6. Python 3.14.7 の実行環境（python314.dll・python3.dll・*.pyd・base_library.zip ほか）
+6. Python 3.14.10 の実行環境（python314.dll・python3.dll・*.pyd・base_library.zip ほか）
    https://www.python.org/
    https://docs.python.org/3.14/license.html
 ---------------------------------------------------------------------
-exe 版には Python 3.14.7（Windows 版）の実行環境と標準ライブラリが入っています。
+exe 版には Python 3.14.10（Windows 版）の実行環境と標準ライブラリが入っています。
 Python に組み込まれた部品のうち、exe 版に入っている主な物:
-  OpenSSL 3.5.7（libssl-3.dll・libcrypto-3.dll。Apache-2.0）・libffi（libffi-8.dll。MIT）・
+  OpenSSL 3.5.9（libssl-3.dll・libcrypto-3.dll。Apache-2.0）・libffi（libffi-8.dll。MIT）・
   bzip2（_bz2.pyd）・xz/liblzma（_lzma.pyd。0BSD）・Zstandard（_zstd.pyd）・expat（pyexpat.pyd）・
   libmpdec（_decimal.pyd）・zlib・mimalloc・Unicode Character Database（unicodedata.pyd）ほか
 （tkinter・Tcl/Tk・sqlite3 は入っていません）。
@@ -665,7 +633,7 @@ Python に組み込まれた部品のうち、exe 版に入っている主な物
 同じ Apache License 2.0 の部分は省略）と、Python の説明書の「Licenses and Acknowledgements for
 Incorporated Software」の写しです。
 
-  ---- Python 3.14.7  LICENSE.txt（一部省略） ----
+  ---- Python 3.14.10  LICENSE.txt（一部省略） ----
 
 A. HISTORY OF THE SOFTWARE
 ==========================
@@ -1086,7 +1054,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 [... Apache License 2.0（OpenSSL 用。下の「OpenSSL」の項・付録A と同じ文面）と、
      Tcl/Tk のライセンス（NLM の exe には入っていない）は省略 ...]
 
-  ---- Python 3.14.7  Licenses and Acknowledgements for Incorporated Software（Doc/html/license.html より） ----
+  ---- Python 3.14.10  Licenses and Acknowledgements for Incorporated Software（Doc/html/license.html より） ----
 
 Licenses and Acknowledgements for Incorporated Software
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1792,7 +1760,7 @@ mimalloc
 
 MIT License:
 
-Copyright (c) 2018-2021 Microsoft Corporation, Daan Leijen
+Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -2699,13 +2667,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 ---------------------------------------------------------------------
-8. setuptools 84.0.0 と付属の部品
+8. setuptools 84.2.1 と付属の部品
    https://github.com/pypa/setuptools
 ---------------------------------------------------------------------
 cffi と Numba の「部品を作る機能」（NLM では使わない）が setuptools を参照しているため、setuptools と、
 それに付属する（setuptools/_vendor/ の）部品が exe に入っています。
 
-  ---- setuptools 84.0.0  (setuptools-84.0.0.dist-info/licenses/LICENSE) ----
+  ---- setuptools 84.2.1  (setuptools-84.2.1.dist-info/licenses/LICENSE) ----
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
@@ -2801,13 +2769,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-  ---- packaging 26.0  https://github.com/pypa/packaging  (LICENSE) ----
+  ---- packaging 26.3  https://github.com/pypa/packaging  (LICENSE) ----
 
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to this software is made
 under the terms of *both* these licenses.
 
-  ---- packaging 26.0  (LICENSE.APACHE) ----
+  ---- packaging 26.3  (LICENSE.APACHE) ----
 
                                  Apache License
                            Version 2.0, January 2004
@@ -2986,7 +2954,7 @@ under the terms of *both* these licenses.
 
    END OF TERMS AND CONDITIONS
 
-  ---- packaging 26.0  (LICENSE.BSD) ----
+  ---- packaging 26.3  (LICENSE.BSD) ----
 
 Copyright (c) Donald Stufft and individual contributors.
 All rights reserved.
@@ -3147,7 +3115,7 @@ OTHER DEALINGS IN THE SOFTWARE.
   （NumPy・SciPy には OpenBLAS・LAPACK（BSD-3-Clause）と GCC runtime library
     （GPL-3.0-or-later WITH GCC-exception-3.1）が組み込まれています）
 - scikit-learn 1.9.1       BSD-3-Clause             https://scikit-learn.org
-- Numba 0.68.0             BSD-2-Clause ほか        https://numba.pydata.org
+- Numba 0.68.1             BSD-2-Clause ほか        https://numba.pydata.org
 - llvmlite 0.50.0          BSD-2-Clause AND Apache-2.0 WITH LLVM-exception（LLVM）
                                                     https://github.com/numba/llvmlite
 - python-soundfile 0.14.0  BSD-3-Clause             https://github.com/bastibe/python-soundfile
@@ -3163,18 +3131,18 @@ OTHER DEALINGS IN THE SOFTWARE.
 - lazy_loader 0.6          BSD-3-Clause             https://github.com/scientific-python/lazy-loader
 - pooch 1.9.0              BSD-3-Clause             https://github.com/fatiando/pooch
 - requests 2.34.2          Apache-2.0               https://github.com/psf/requests
-- certifi 2026.10.18       MPL-2.0                  https://github.com/certifi/python-certifi
+- certifi 2026.10.23       MPL-2.0                  https://github.com/certifi/python-certifi
 - urllib3 2.8.0            MIT                      https://github.com/urllib3/urllib3
 - idna 3.20                BSD-3-Clause             https://github.com/kjd/idna
 - charset-normalizer 3.5.2 MIT                      https://github.com/jawah/charset_normalizer
-- platformdirs 4.13.5      MIT                      https://github.com/tox-dev/platformdirs
+- platformdirs 4.14.3      MIT                      https://github.com/tox-dev/platformdirs
 - decorator 5.3.1          BSD-2-Clause             https://github.com/micheles/decorator
-- msgpack 1.2.3            Apache-2.0               https://github.com/msgpack/msgpack-python
-- narwhals 2.27.1          MIT                      https://github.com/narwhals-dev/narwhals
+- msgpack 1.2.4            Apache-2.0               https://github.com/msgpack/msgpack-python
+- narwhals 2.28.0          MIT                      https://github.com/narwhals-dev/narwhals
 - cloudpickle 3.1.2        BSD-3-Clause             https://github.com/cloudpipe/cloudpickle
 - typing_extensions 4.16.0 PSF-2.0                  https://github.com/python/typing_extensions
 - cffi 2.1.1               MIT-0                    https://github.com/python-cffi/cffi
-- pycparser 3.0            BSD-3-Clause             https://github.com/eliben/pycparser
+- pycparser 3.12           BSD-3-Clause             https://github.com/eliben/pycparser
 - packaging 26.3           Apache-2.0 OR BSD-2-Clause  https://github.com/pypa/packaging
 
 LGPL の部品（libsndfile・mpg123・LAME・libsoxr）は、改変せず、別の DLL・pyd のまま同梱しています
@@ -4668,7 +4636,7 @@ into the Global Assembly Cache (GAC):
 VC\atlmfc\lib\mfcmifc80.dll
 VC\atlmfc\lib\amd64\mfcmifc80.dll
 
-  ---- Numba 0.68.0  (numba-0.68.0.dist-info/licenses/LICENSE) ----
+  ---- Numba 0.68.1  (numba-0.68.1.dist-info/licenses/LICENSE) ----
 
 Copyright (c) 2012, Anaconda, Inc.
 All rights reserved.
@@ -4695,7 +4663,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-  ---- Numba 0.68.0  (numba-0.68.0.dist-info/licenses/LICENSES.third-party) ----
+  ---- Numba 0.68.1  (numba-0.68.1.dist-info/licenses/LICENSES.third-party) ----
 
 The Numba source tree includes vendored libraries governed by the following
 licenses.
@@ -6052,7 +6020,7 @@ Copyright 2019 Kenneth Reitz
 
   （付録A と同じ文面です）
 
-  ---- certifi 2026.10.18  (certifi-2026.10.18.dist-info/licenses/LICENSE) ----
+  ---- certifi 2026.10.23  (certifi-2026.10.23.dist-info/licenses/LICENSE) ----
 
 This package contains a modified version of ca-bundle.crt:
 
@@ -6157,7 +6125,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-  ---- platformdirs 4.13.5  (platformdirs-4.13.5.dist-info/licenses/LICENSE) ----
+  ---- platformdirs 4.14.3  (platformdirs-4.14.3.dist-info/licenses/LICENSE) ----
 
 MIT License
 
@@ -6211,7 +6179,7 @@ TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 DAMAGE.
 
-  ---- msgpack 1.2.3  (msgpack-1.2.3.dist-info/licenses/COPYING) ----
+  ---- msgpack 1.2.4  (msgpack-1.2.4.dist-info/licenses/COPYING) ----
 
 Copyright (C) 2008-2011 INADA Naoki <songofacandy@gmail.com>
 
@@ -6227,7 +6195,7 @@ Copyright (C) 2008-2011 INADA Naoki <songofacandy@gmail.com>
    See the License for the specific language governing permissions and
    limitations under the License.
 
-  ---- narwhals 2.27.1  (narwhals-2.27.1.dist-info/licenses/LICENSE.md) ----
+  ---- narwhals 2.28.0  (narwhals-2.28.0.dist-info/licenses/LICENSE.md) ----
 
 MIT License
 
@@ -6592,11 +6560,11 @@ documentation is licensed as follows:
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
     DEALINGS IN THE SOFTWARE.
 
-  ---- pycparser 3.0  (pycparser-3.0.dist-info/licenses/LICENSE) ----
+  ---- pycparser 3.12  (pycparser-3.12.dist-info/licenses/LICENSE) ----
 
 pycparser -- A C parser in Python
 
-Copyright (c) 2008-2022, Eli Bendersky
+Copyright (c) 2008-2027, Eli Bendersky
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -6624,15 +6592,15 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
   ---- packaging 26.3  (packaging-26.3.dist-info/licenses/LICENSE) ----
 
-  （8. packaging 26.0 の LICENSE と同じ文面です）
+  （8. packaging 26.3 の LICENSE と同じ文面です）
 
   ---- packaging 26.3  (packaging-26.3.dist-info/licenses/LICENSE.APACHE) ----
 
-  （8. packaging 26.0 の LICENSE.APACHE と同じ文面です）
+  （8. packaging 26.3 の LICENSE.APACHE と同じ文面です）
 
   ---- packaging 26.3  (packaging-26.3.dist-info/licenses/LICENSE.BSD) ----
 
-  （8. packaging 26.0 の LICENSE.BSD と同じ文面です）
+  （8. packaging 26.3 の LICENSE.BSD と同じ文面です）
 
 
 =====================================================================
@@ -7348,7 +7316,7 @@ C. LGPL・GPL の部品のソースコードの入手先
 - PyInstaller 6.22.3（GPL-2.0-or-later）  https://pypi.org/project/pyinstaller/6.22.3/#files
 - GCC runtime library（NumPy・SciPy の OpenBLAS に組み込み。GPL-3.0-or-later WITH GCC-exception-3.1）
                                           https://gcc.gnu.org/ ・ https://github.com/MacPython/openblas-libs
-- certifi 2026.10.18（MPL-2.0）           https://pypi.org/project/certifi/2026.10.18/#files
+- certifi 2026.10.23（MPL-2.0）           https://pypi.org/project/certifi/2026.10.23/#files
 
 LGPL の部品のソースの添付（v2.0.0-oz 以降）
   v2.0.0-oz 以降、上の LGPL の部品（libsndfile・mpg123・LAME・python-soxr と libsoxr）の、同梱している版の

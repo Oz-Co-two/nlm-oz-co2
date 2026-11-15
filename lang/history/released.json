@@ -3,6 +3,12 @@
  "note": "公開した版の訳のうち、今の同梱の文と違う物。exe の隣の訳がこの文なら serve.py は使わない（tools/lang_history.py が作る）",
  "files": {
   "ja.json": {
+   "ana.ask.p4": [
+    "1曲 30秒〜1分。解析中も編集できます。解析は PC の中で行い、曲をネットへ送りません"
+   ],
+   "ana.startTip": [
+    "曲のテンポ（BPM・無音追加の提案）と構成（セクション・細かい区切り）を解析します。1曲 30秒〜1分ほどかかり、その間も編集できます"
+   ],
    "bl.m.bombDark": [
     "250ms前から暗い時間があるボム（フェードは1秒点灯とみなした近似）"
    ],
@@ -39,6 +45,9 @@
    "bl.r.R8.A.3": [
     "頭を1秒に2回を超えて動かす回避壁は正当化が必要"
    ],
+   "lib.rate.needPluginMenu": [
+    "★の計算（NLM推定）には追加プラグイン nlm-rating（約20MB）が必要です。\n「難易度を測る」のパネル（確かめるのメニュー）の［GitHub から取り込む］で取り込めます。\n\nパネルを開きますか？"
+   ],
    "msg.camModeEdit": [
     "編集モード：カメラ自由・再生と独立（Qで配置へ）"
    ],
@@ -47,6 +56,9 @@
    ],
    "rt.foot": [
     "BeatLeader の公開ソースコードで計算した近似値です。本家の値と異なる場合があります（特に Acc は本家より低めに出ることがあります）。BeatLeader の公式ツールではありません。"
+   ],
+   "rt.intro": [
+    "この機能には追加プラグイン nlm-rating（約20MB）が必要です。「GitHub から取り込む」を押すと、配布元（下記）からダウンロードして、このアプリのフォルダの plugins に保存します。"
    ],
    "set.updateCheckOn": [
     "起動時に新しいバージョンがあるか確認する（GitHub に接続します）"
@@ -68,6 +80,12 @@
    ]
   },
   "en.json": {
+   "ana.ask.p4": [
+    "Takes 30 seconds to a minute per song, and you can keep editing meanwhile. It runs on this PC; the song is never sent over the internet"
+   ],
+   "ana.startTip": [
+    "Analyzes the song's tempo (suggested BPM and lead-in silence) and structure (sections and segments). Takes about 30 seconds to a minute per song; you can keep editing meanwhile"
+   ],
    "bl.m.bombDark": [
     "Bombs with dark time within 250 ms before them (fades approximated as 1 s on)"
    ],
@@ -104,6 +122,9 @@
    "bl.r.R8.A.3": [
     "Dodge walls forcing more than 2 head moves per second need justification"
    ],
+   "lib.rate.needPluginMenu": [
+    "Calculating ★ (NLM estimate) needs the add-on plugin nlm-rating (about 20 MB).\nYou can install it with [Install from GitHub] in the \"Estimate difficulty\" panel (Check menu).\n\nOpen the panel?"
+   ],
    "msg.camModeEdit": [
     "Edit mode: free camera, independent of playback (Q to place)"
    ],
@@ -115,6 +136,9 @@
    ],
    "rt.foot": [
     "Approximate values computed with BeatLeader's public source code. They may differ from beatleader.xyz (Acc in particular can come out lower). This is not an official BeatLeader tool."
+   ],
+   "rt.intro": [
+    "This feature needs the add-on plugin nlm-rating (about 20 MB). \"Install from GitHub\" downloads it from the source below and saves it in the plugins folder next to this app."
    ],
    "set.updateCheckOn": [
     "Check for a new version at startup (connects to GitHub)"

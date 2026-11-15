@@ -152,7 +152,7 @@ def test_bl_stars_install_flow(t):
     click_in_view(ed, "#mcPanel .blRtOpen", "取り込んで自動計算…")
     wait_until(ed, "!!document.querySelector('#mcPanel .blRtBox')", label="取り込みの説明")
     box = ed.js("document.querySelector('#mcPanel .blRtBox').textContent")
-    t.ok("約20MB" in box and "https://github.com/example/nlm-rating" in box and "plugins" in box, f"説明（大きさ・配布元・保存先）: {box}")
+    t.ok("約34MB" in box and "https://github.com/example/nlm-rating" in box and "plugins" in box, f"説明（大きさ・配布元・保存先）: {box}")
     t.eq([c["act"] for c in rating_calls(ed)], ["status"], "説明を開いただけでは通信しない")
     click_in_view(ed, "#mcPanel .blRtCancel", "やめる")
     wait_until(ed, "!document.querySelector('#mcPanel .blRtBox')&&!!document.querySelector('#mcPanel .blRtOpen')", label="説明を閉じる")

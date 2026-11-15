@@ -187,7 +187,7 @@ export function blView({ t, escHtml, dispDiff, mcLabel, fixHTML, starsHTML }) {
       ? `<span class="mcMore" data-id="${ref}">${escHtml(t('mc.more', '他{n}件').replace('{n}', f.objs.length - n))}</span>` : ''}</div>`;
   }
 
-  // res: runBlCriteria の結果 / st: {onlyIssues, expanded}
+  // res: runBlCriteria の結果 / st: {onlyIssues, expanded, cur＝今開いている難易度（null 可）, otherOpen＝拍を出した別の難易度の所見}
   function render(res, st, CHIP_MAX) {
     const tot = counts(res.rules);
     let h = `<div class="blBanner"><b>${escHtml(t('bl.banner', 'NLM版 BeatLeader評価リスト'))}</b>`
@@ -206,9 +206,16 @@ export function blView({ t, escHtml, dispDiff, mcLabel, fixHTML, starsHTML }) {
     const txt = t('bl.r.' + r.id, BL_RULE_JA[r.id] || r.id);
     const note = BL_NOTE_JA[r.id] ? `<div class="blNote">＊${escHtml(t('bl.n.' + r.id, BL_NOTE_JA[r.id]))}</div>` : '';
     const fs = r.findings.map((f, fi) => {
-      const d = f.d ? `<span class="blDiff">${escHtml(dispDiff(f.d))}</span>` : '';
-      const cls = f.status === BL.FAIL || f.status === BL.CHECK ? ' st-' + f.status : '';
-      return `<div class="blF${cls}">${d}<span>${escHtml(msg(f))}</span>${f.objs ? `<span class="mcN">${new Set(f.objs.map(o => o.beat)).size}</span>` : ''}${fixHTML ? fixHTML(f) : ''}${chips(f, 'bl:' + ri + ':' + fi, st.expanded, CHIP_MAX)}</div>`;
+      const ref = 'bl:' + ri + ':' + fi, isCur = !!f.d && f.d === st.cur;
+      const d = f.d ? `<span class="blDiff${isCur ? ' cur' : ''}">${escHtml(dispDiff(f.d))}</span>` : '';
+      let cls = f.status === BL.FAIL || f.status === BL.CHECK ? ' st-' + f.status : '', attr = '';
+      // 別の難易度の拍のある所見: 行（難易度・文・数）は出し、拍は行を押した時だけ出す（今の難易度の物と取り違えないように・2026-11-03）
+      const other = !!(f.d && f.objs && !isCur), shut = other && !(st.otherOpen && st.otherOpen.has(ref));
+      if (other) {
+        cls += ' blOther' + (shut ? '' : ' open');
+        attr = ` data-oref="${ref}" title="${escHtml(t('bl.otherTip', '{diff} の結果です（今開いている難易度とは別）。押すと拍を出す・隠す').split('{diff}').join(dispDiff(f.d)))}"`;
+      }
+      return `<div class="blF${cls}"${attr}>${d}<span>${escHtml(msg(f))}</span>${f.objs ? `<span class="mcN">${new Set(f.objs.map(o => o.beat)).size}</span>` : ''}${fixHTML ? fixHTML(f) : ''}${shut ? '' : chips(f, ref, st.expanded, CHIP_MAX)}</div>`;
     }).join('');
     const inp = r.input === 'stars' && starsHTML ? starsHTML(res.diffs) : '';
     return `<div class="blRule st-${r.status}"><div class="blLine"><span class="blId">${escHtml(r.id)}</span>`

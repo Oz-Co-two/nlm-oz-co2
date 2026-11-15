@@ -120,9 +120,13 @@ def _body_top(h):
 
 
 def _placeholder_fits(ed):
-    """検索欄の案内の文字が全部見えているか（文字の幅を canvas で測り、欄の中の幅と比べる）"""
+    """検索欄の案内の文字が全部見えているか（文字の幅を canvas で測り、欄の中の幅と比べる）。
+    欄の中の幅は offsetWidth から枠と余白を引く（Edge 157 から <input> の clientWidth は余白を除いた幅を返すようになり、
+    clientWidth から余白を引くと二重に引いていた・2026-11-15）"""
     return ed.js("""(()=>{ const si=document.getElementById('libSearch'), cs=getComputedStyle(si), g=document.createElement('canvas').getContext('2d');
-      g.font=cs.fontSize+' '+cs.fontFamily; return g.measureText(si.placeholder).width <= si.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight)+0.5; })()""")
+      g.font=cs.fontSize+' '+cs.fontFamily; const px=k=>parseFloat(cs[k])||0;
+      const inner=si.offsetWidth-px('borderLeftWidth')-px('borderRightWidth')-px('paddingLeft')-px('paddingRight');
+      return g.measureText(si.placeholder).width <= inner+0.5; })()""")
 
 
 def _slider_end(ed, right):

@@ -245,6 +245,18 @@ def test_rating_and_update_endpoints_guarded(t):
     t.ok(isinstance(obj, dict), "辞書")
 
 
+def test_update_cancel_and_open_releases(t):
+    '''__update/cancel はダウンロードしていない時も壊れずに今の状態を返す（途中で取り消す働きは tools/update_test.py）。
+    __update/openReleases は決まったリリースのページを開く（テストでは NLM_NO_OPEN で開かずに opened で返る）'''
+    import app_update
+    st, obj = H.post_json("/__update/cancel", {})
+    t.eq((st, obj.get("ok"), obj.get("state")), (200, True, "idle"), "ダウンロードしていない時の取り消し")
+    st, obj = H.post_json("/__update/openReleases", {"url": "https://example.com/evil"})   # JS から URL を受け取らない
+    t.eq((st, obj), (200, {"ok": True, "opened": app_update.RELEASES_URL}), "リリースのページ（URL は app_update.py に固定）")
+    st, obj = H.post_json("/__update/openNotes", {"lang": "en", "version": "v2.1.1-oz"})
+    t.eq(obj.get("opened"), app_update.NOTES_URL["en"] + "#v211-oz", "変更履歴（英語・その版の見出し）")
+
+
 def test_rating_use_unknown_version(t):
     '''__rating/use は取り込み済みでない版を拒否する（パスのような値も）'''
     for v in ("9.9.9", "../../x", "", None):

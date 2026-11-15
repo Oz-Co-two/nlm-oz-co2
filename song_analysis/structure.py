@@ -28,6 +28,8 @@ import scipy.ndimage
 import scipy.sparse.csgraph
 from sklearn.cluster import KMeans
 
+from . import _hpss_part
+
 
 SR = 22050
 HOP = 256
@@ -134,13 +136,14 @@ def load_audio(path):
     return librosa.load(path, sr=SR, mono=True)
 
 
-def features(y, sr, at, ends, progress=None):
+def features(y, sr, at, ends, progress=None, yh=None):
     """1/4拍のコマごとの特徴。at[i]＝コマ i の頭の元の音源の秒（NaN＝音が無い）、ends[i]＝終わりの秒。
-    progress: 進み具合（0〜1）を受け取る関数（serve.py の解析の仕事が、取り消しの確認にも使う）"""
+    progress: 進み具合（0〜1）を受け取る関数（serve.py の解析の仕事が、取り消しの確認にも使う）
+    yh: y の調波成分（song_analysis.hpss(y) の1つ目）。渡せばここで計算し直さない（無ければ librosa.effects.harmonic(y)＝同じ値）"""
     import librosa
     tick = progress or (lambda f: None)
     n = len(at)
-    yh = librosa.effects.harmonic(y)
+    yh = _hpss_part(y, yh, librosa.effects.harmonic)
     tick(0.45)
     cq = librosa.amplitude_to_db(np.abs(librosa.cqt(yh, sr=sr, hop_length=HOP, fmin=librosa.note_to_hz("C2"),
                                                     n_bins=72, bins_per_octave=12)), ref=np.max)
@@ -160,8 +163,9 @@ def features(y, sr, at, ends, progress=None):
     return {"CQ": CQ, "M": M, "E": E, "at": np.asarray(at, float), "dur": len(y) / sr, "n": n}
 
 
-def measure(path, tm, y=None, progress=None):
-    """TempoMap の目盛りで特徴を測る（tools/analyze_structure.py・調整用のスクリプト）。y は読み込み済みの音（無ければ path を読む）"""
+def measure(path, tm, y=None, progress=None, yh=None):
+    """TempoMap の目盛りで特徴を測る（tools/analyze_structure.py・調整用のスクリプト）。y は読み込み済みの音（無ければ path を読む）。
+    yh は y の調波成分（features の説明）"""
     if y is None:
         y, _ = load_audio(path)
     sr = SR
@@ -175,7 +179,7 @@ def measure(path, tm, y=None, progress=None):
             continue
         at[i] = a
         ends[i] = a + tm.t(grid[i + 1]) - tm.t(grid[i])
-    return features(y, sr, at, ends, progress)
+    return features(y, sr, at, ends, progress, yh)
 
 
 SNAP_TOL = 0.006   # NLM の目盛りを TempoMap の式で作り直す時に、同じ目盛りとみなすずれ（画面の秒は 10ms に丸めることがある）
@@ -230,19 +234,28 @@ def nlm_grid(at, bpm, lead_ms=None, dur=None):
     return a, grid_ends(a, bpm)
 
 
-def measure_at(path, at, bpm, lead_ms=None, y=None, progress=None):
+def measure_at(path, at, bpm, lead_ms=None, y=None, progress=None, yh=None):
     """NLM が渡す目盛りで特徴を測る（serve.py の /__analysis/structure）。at は NLM の拍 0, 1/SUB, 2/SUB, … ごとの
-    元の音源の秒（None・NaN＝その拍に音が無い）。テンポパート・Music の配置・無音追加は NLM 側で反映済み（nlm_grid）"""
+    元の音源の秒（None・NaN＝その拍に音が無い）。テンポパート・Music の配置・無音追加は NLM 側で反映済み（nlm_grid）。
+    yh は y の調波成分（features の説明。テンポの推定と HPSS を使い回す時）"""
     if y is None:
         y, _ = load_audio(path)
     a, ends = nlm_grid(at, bpm, lead_ms, len(y) / SR)
-    return features(y, SR, a, ends, progress)
+    return features(y, SR, a, ends, progress, yh)
 
 
 # ---- 区切りとグループ ----
 
 def laplacian(Frec, Fpath, k, kappa=0.03, med=4 * SUB + 1):
-    """McFee & Ellis (2014) のラプラシアン分割。各コマのグループ番号を返す。"""
+    """McFee & Ellis (2014) のラプラシアン分割。各コマのグループ番号を返す。
+    k を変えて何回も分ける時は laplacian_basis を1回だけ作り、k ごとに laplacian_labels を呼ぶ（答えはこれと同じ）"""
+    return laplacian_labels(laplacian_basis(Frec, Fpath, kappa, med), k)
+
+
+def laplacian_basis(Frec, Fpath, kappa=0.03, med=4 * SUB + 1):
+    """laplacian のうちグループ数 k に関係ない所: 固有ベクトルを ならした V と、その2乗の行ごとの累積和。
+    重いのはここ（固有値分解と中央値フィルタ）なので、Analyzer は K_RANGE の9回で1回だけ作る（2026-11-11。
+    同じ入力の計算を1回にしただけで、答えは k ごとに laplacian を呼ぶのと1ビットも変わらない）"""
     n = Frec.shape[1]
     S = Frec.T @ Frec
     kk = max(2, int(kappa * n))
@@ -257,7 +270,13 @@ def laplacian(Frec, Fpath, k, kappa=0.03, med=4 * SUB + 1):
     L = scipy.sparse.csgraph.laplacian(mu * R + (1 - mu) * Rp, normed=True)
     _, V = scipy.linalg.eigh(L)
     V = scipy.ndimage.median_filter(V, size=(med, 1))
-    Y = V[:, :k] / (np.cumsum(V ** 2, axis=1)[:, k - 1:k] ** 0.5 + 1e-9)
+    return V, np.cumsum(V ** 2, axis=1)
+
+
+def laplacian_labels(basis, k):
+    """laplacian_basis の戻り値から、グループ数 k に分けた各コマのグループ番号（laplacian の k ごとの所）"""
+    V, C = basis
+    Y = V[:, :k] / (C[:, k - 1:k] ** 0.5 + 1e-9)
     return KMeans(n_clusters=k, n_init=10, random_state=0).fit_predict(Y)
 
 
@@ -281,8 +300,9 @@ class Analyzer:
         self.S = Fs.T @ Fs                                  # 1単位ぶんの流れで比べた、コマどうしの似ている度合い
         Frec = unit(stack(X, self.f(4)))
         votes = np.zeros(self.n); self.CO = np.zeros((self.n, self.n))
+        basis = laplacian_basis(Frec, Fm, med=self.f(4) | 1)   # k に関係ない所は1回だけ（k ごとの laplacian と同じ答え）
         for j, k in enumerate(K_RANGE):
-            lab = laplacian(Frec, Fm, k, med=self.f(4) | 1)
+            lab = laplacian_labels(basis, k)
             v = np.zeros(self.n); v[1:][lab[1:] != lab[:-1]] = 1
             votes += scipy.ndimage.gaussian_filter1d(v, self.U / 2) * np.sqrt(2 * np.pi) * (self.U / 2)
             self.CO += lab[:, None] == lab[None, :]

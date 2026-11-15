@@ -103,7 +103,8 @@ def test_am_install_flow(t):
 def test_am_results_and_jump(t):
     '''結果は曲の情報→Info.dat の難易度の順。同じ項目・同じ文はまとめて拍を並べ、重さの順（Error→Warning→Inconclusive→Suggestion）。
     項目名は訳して元の英語の名前を添え、文は英語のまま。合格は畳んだ1行・統計は1行・ノーツ20個未満の難易度はそう出す。
-    拍をクリックするとその難易度へ切り替えて物を選び、その拍へ移動する（BS Map Check のタブと同じ）'''
+    開いておくのは曲の情報と今の難易度（編集中の札）だけ。拍をクリックすると（別の難易度なら確かめてから）その難易度へ切り替えて物を選び、
+    その拍へ移動する（BS Map Check のタブと同じ。確認の画面の細かい所は e2e/test_mapcheck.py の test_mapcheck_other_diff）'''
     ed = open_fixture_ready(t, 'rich')
     am_spy(ed, {"status": AM_INSTALLED, "run": am_result()})
     open_mapcheck(ed)
@@ -113,7 +114,9 @@ def test_am_results_and_jump(t):
     t.eq(ed.js("[...document.querySelectorAll('#mcPanel details.amSec')].map(s=>s.dataset.sec)"), ["info", "Standard/Hard", "Standard/Expert"], "並び")
     heads = _all(ed, "details.amSec>summary")
     t.ok(heads[0].startswith("曲の情報（Info.dat）") and "判定できず（Questionable） 1" in heads[0] and "提案 1" in heads[0], f"曲の情報の見出し: {heads[0]}")
-    t.eq(heads[1], "Hard", "確かめていない難易度は数も印も出さない")
+    t.eq(heads[1], "Hard編集中", "確かめていない難易度は数も印も出さない（今開いている Hard には編集中の札）")
+    t.eq(ed.js("[...document.querySelectorAll('#mcPanel details.amSec')].map(s=>s.open)"), [True, True, False],
+         "開いておくのは曲の情報と今の難易度（Hard）だけ・Expert は閉じる")
     t.ok(heads[2].startswith("Expert") and "エラー（Unrankable） 4" in heads[2] and "警告（Questionable） 2" in heads[2]
          and heads[2].endswith("✖ AutoModder: 不合格"), f"Expert の見出し（数・信号機の欄の一番重い物）: {heads[2]}")
     t.ok("ノーツが20個未満（7個）のため、AutoModder はこの難易度を確かめません。" in _txt(ed, "details[data-sec='Standard/Hard']"), "Hard はノーツ20個未満")
@@ -136,13 +139,20 @@ def test_am_results_and_jump(t):
     t.eq(_txt(ed, ".amStat"), "📊 統計（AutoModder の計算）Pass: 0.47 · Tech: 1.59 · EBPM: 43.29", "統計は1行")
     t.ok("エラー（Unrankable） 4" in _txt(ed, ".amSum") and "✓" not in _txt(ed, ".amSum"), f"全体の数: {_txt(ed, '.amSum')}")
     t.eq(_txt(ed, ".amMeta"), "nlm-automodder v0.1.0・AutoModder v1.6.6 (0c26215)・0.9秒・曲の長さ 16秒", "版・時間・曲の長さ")
-    # 拍のクリック → Expert へ切り替えてノーツを選び、その拍へ
+    # 拍のクリック → 確かめてから Expert へ切り替えてノーツを選び、その拍へ。Expert を開き Hard を閉じる
     t.ok(ed.js("window._dbgApp.state().diff").startswith("Hard"), "最初は Hard を開いている")
+    click_in_view(ed, "#mcPanel details[data-sec='Standard/Expert']>summary", "Expert の見出し（開く）")
+    wait_until(ed, "document.querySelector(\"#mcPanel details[data-sec='Standard/Expert']\").open", label="Expert を開く")
     click_in_view(ed, f"#mcPanel .amItem .mcBeat[data-ref='am:3:0']", "開始直後の物の拍 1")
+    wait_until(ed, "!!document.querySelector('#dirtyDlg .ddBtns button.pri')", label="切り替えの確認")
+    t.eq(ed.js("document.querySelector('#dirtyDlg .ddMsg').textContent"), "この結果は Expert の物です（今開いているのは Hard）。\nExpert に切り替えて表示しますか？", "確認の文")
+    click_sel(ed, "#dirtyDlg .ddBtns button.pri", "Expert に切り替える")
     wait_until(ed, "(s=>s.diff.startsWith('Expert')&&s.sel===1&&s.cur===1)(window._dbgApp.state())", label="Expert の拍 1 へ移動して選択（移動は少しずつ）")
     st = ed.js("window._dbgApp.state()")
     t.eq((st["cur"], st["sel"]), (1, 1), "拍 1 へ・ノーツを1つ選ぶ")
     t.eq(ed.js("document.querySelector('#mcPanel .mcBeat.cur').dataset.ref"), "am:3:0", "押したチップに印")
+    t.eq(ed.js("[...document.querySelectorAll('#mcPanel details.amSec')].map(s=>[s.dataset.sec,s.open,!!s.querySelector(':scope>summary .mcCurTag')])"),
+         [["info", True, False], ["Standard/Hard", False, False], ["Standard/Expert", True, True]], "切り替えた後: Expert を開き（編集中）、Hard を閉じる")
     # 壁のチップ（重なった物の 23）→ 壁を選ぶ
     click_in_view(ed, "#mcPanel .amItem .mcBeat[data-ref='am:8:1']", "重なった物の拍 23（壁）")
     wait_until(ed, "window._dbgApp.state().cur===23", label="拍 23 へ")

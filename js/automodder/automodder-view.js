@@ -2,6 +2,7 @@
 // 判定は別配布のプラグイン nlm-automodder（AutoModder v1.6.6 の自動の確かめを改変せずに動かす .NET の exe）。状態・通信は automodder-client.js。
 //  - プラグインが無ければ取り込みの案内。説明（配布元・大きさ・保存先）を見てから「取り込む」を押す2段階（bl-stars.js と同じ。署名なし exe の取り込みになるため）
 //  - 結果は難易度ごと（曲の情報が先頭）・重さごと（Error → Warning → Inconclusive → Suggestion → Info → 参考）に、同じ項目・同じ文をまとめて拍を並べる。
+//    開いておくのは曲の情報と今の難易度だけ（render の st.cur。別の難易度の拍の確認・切り替えは mapcheck-panel.js）
 //    合格（Passed）は畳んだ1行、統計（Statistical Data）は1行。英語の文はそのまま出し、項目名だけ訳す（am.k.<項目名>）
 //  - 「AutoModder の判定を NLM の中で動かした結果・公式の基準と違う所がある・難易度ごとに既定の設定」の断り書きを必ず出す（先頭の帯と下の注記）
 //  - プラグインの出力の文字（曲名・難易度名を含む）はファイル由来なので、すべて escHtml を通す
@@ -190,11 +191,14 @@ export function amView({ t, escHtml, dispDiff, am }) {
     const all = L.results.map((_, i) => i);
     const nErr = L.results.filter(r => r.severity === 'Error').length;
     const sum = `<div class="amSum">${nErr ? '' : `<span class="mcOk">✓ ${escHtml(t('am.noError', 'エラー（Unrankable）はありません'))}</span>`}${countsHTML(all)}</div>`;
+    // 開いておくのは曲の情報と今開いている難易度だけ（別の難易度は見出しの数・印だけ見せて閉じる。止まった所がある難易度は気付けるよう開く）
+    const curKey = st.cur ? 'Standard/' + st.cur : null;
     const secs = sections().map(sec => {
       const e = sec.entry, h = e && !e.skipped && e.highest && MARK[e.highest];
       const mark = h ? `<span class="amMark m-${e.highest}" title="${escHtml(t('am.markTip', 'AutoModder の信号機の欄（項目ごとの合否）で一番重い物'))}">`
         + `${escHtml(h[0] + ' ' + tf('am.mark', 'AutoModder: {m}', { m: t('am.m.' + e.highest, h[1]) }))}</span>` : '';
-      return `<details class="mcSec amSec" open data-sec="${escHtml(sec.key)}"><summary>${escHtml(sec.title)}${countsHTML(sec.ris)}${mark}</summary>${section(sec, st, chipMax)}</details>`;
+      const isCur = sec.key === curKey, open = sec.key === 'info' || isCur || sec.errors.length > 0;
+      return `<details class="mcSec amSec${isCur ? ' mcCurSec' : ''}"${open ? ' open' : ''} data-sec="${escHtml(sec.key)}"><summary>${escHtml(sec.title)}${isCur && st.curTag ? st.curTag : ''}${countsHTML(sec.ris)}${mark}</summary>${section(sec, st, chipMax)}</details>`;
     }).join('');
     const a = L.automodder || {};
     const meta = [tf('am.metaPlug', 'nlm-automodder v{v}', { v: L.version }),

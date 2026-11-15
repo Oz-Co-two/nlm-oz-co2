@@ -127,7 +127,7 @@ If they are off by the same amount from the very start, shift the start of the s
 Press **🎼 Analyze song** (⑧), or choose **Mapping → Analyze song (tempo & structure)…** from the menu, to examine the tempo and the structure of the song.
 Pressing **Analyze** in the question shown when you load a song starts it in the same way.
 It takes longer than Detect BPM, but it suggests **the lead-in as well as the BPM**.
-It takes about 30 seconds to a minute per song. **You can keep editing while it runs.**
+It takes about 15 to 30 seconds per song (depending on the length of the song and your PC). **You can keep editing while it runs.**
 
 Once the tempo is found, the following confirmation appears, but only if the analyzed BPM and lead-in differ from the current settings.
 

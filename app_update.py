@@ -242,17 +242,22 @@ class Updater:
         return {'ok': True}
 
     def open_notes(self, lang, version=''):
-        import webbrowser
         url = NOTES_URL['en' if lang == 'en' else 'ja']
         if vtuple(version):
             url += '#' + version.replace('.', '').lower()   # GitHub の見出しのアンカー（## v1.3.0-oz → #v130-oz）
-        webbrowser.open(url)
-        return {'ok': True}
+        return _open_url(url)
 
     def open_releases(self):
+        return _open_url(RELEASES_URL)
+
+
+def _open_url(url):
+    """既定のブラウザで開き、開いた物を opened で返す。NLM_NO_OPEN=1（自動テスト）の時は開かない（serve.py の /__help/* と同じ。
+    呼ばれた時に見る＝import の後に設定したテストでも効く）"""
+    if os.environ.get('NLM_NO_OPEN') != '1':
         import webbrowser
-        webbrowser.open(RELEASES_URL)
-        return {'ok': True}
+        webbrowser.open(url)
+    return {'ok': True, 'opened': url}
 
 
 def extract_release(zip_path, dst, ver):

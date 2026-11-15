@@ -85,6 +85,42 @@ def test_export_after_edit(t):
     t.no_errors()
 
 
+def _after_rotation(j):
+    """lightRotationEventBoxGroups の直後の項目の名前"""
+    ks = list(j)
+    i = ks.index('lightRotationEventBoxGroups')
+    return ks[i + 1] if i + 1 < len(ks) else None
+
+
+def test_export_light_translation(t):
+    '''v3.2.0 の .dat に lightTranslationEventBoxGroups が lightRotationEventBoxGroups の直後に入る（BeatSaver の必須の項目・2026-11-15）'''
+    ed = open_fixture(t, 'basic')   # basic.nlmf の土台にはこの項目が無い＝以前の版で作った .nlmf
+    t.ok('lightTranslationEventBoxGroups' not in ed.js("JSON.parse(window._dbg.rt.buildProjectText()).difficulties['hardstandard.dat'].base"),
+         '素材の土台にこの項目が無い（無いと確かめにならない）')
+    switch_diff(ed, 'Expert')   # まだ無い難易度＝雛形（EMPTY_V3）から作る
+    place_at(ed, 1, 0)
+    files = export_files(ed)
+    for name in ('HardStandard.dat', 'ExpertStandard.dat'):
+        j = json.loads(files[name])
+        t.eq(j['version'], '3.2.0', f'{name} の形式')
+        t.eq(_after_rotation(j), 'lightTranslationEventBoxGroups', f'{name}: lightRotationEventBoxGroups の直後')
+        t.eq(j['lightTranslationEventBoxGroups'], [], f'{name}: 中身')
+    # 土台の形が違う時（関数を直接呼ぶ）: 中身があれば残す・配列でなければ空・lightRotationEventBoxGroups が無ければ末尾・3.2.0 以外は足さない
+    r = ed.js("""(()=>{ const f=b=>window._dbg.rt.buildDiffJsonFor({v3:true,base:b});
+      const tr=[{b:1,g:0,e:[]}];
+      return {
+        keep: f({version:'3.2.0',lightRotationEventBoxGroups:[],useNormalEventsAsCompatibleEvents:true,lightTranslationEventBoxGroups:tr}),
+        bad: f({version:'3.2.0',lightRotationEventBoxGroups:[],lightTranslationEventBoxGroups:null}),
+        noRot: f({version:'3.2.0',lightColorEventBoxGroups:[]}),
+        other: f({version:'3.0.0',lightRotationEventBoxGroups:[]}) }; })()""")
+    t.eq(_after_rotation(r['keep']), 'lightTranslationEventBoxGroups', '中身のある項目も lightRotationEventBoxGroups の直後へ')
+    t.eq(r['keep']['lightTranslationEventBoxGroups'], [{'b': 1, 'g': 0, 'e': []}], '中身は残す')
+    t.eq(r['bad']['lightTranslationEventBoxGroups'], [], '配列でなければ空の配列')
+    t.eq(list(r['noRot'])[-1], 'lightTranslationEventBoxGroups', 'lightRotationEventBoxGroups が無ければ末尾')
+    t.ok('lightTranslationEventBoxGroups' not in r['other'], '3.2.0 以外の版には足さない')
+    t.no_errors()
+
+
 def test_export_after_bulk_import(t):
     '''曲データの一括読込の直後に書き出すと、読み込んだ全難易度（Hard/Expert）が書き出される'''
     ed = t.fresh()

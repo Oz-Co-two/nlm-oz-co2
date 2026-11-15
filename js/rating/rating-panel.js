@@ -74,7 +74,7 @@ export function installRatingPanel(api) {
   function renderBody() {
     const body = el.querySelector('.rtBody'), { st, last } = S;
     if (st && !rating.installed()) {
-      body.innerHTML = `<div class="rtIntro">${escHtml(t('rt.intro', 'この機能には追加プラグイン nlm-rating（約20MB）が必要です。「GitHub から取り込む」を押すと、配布元（下記）からダウンロードして、このアプリのフォルダの plugins に保存します。'))}`
+      body.innerHTML = `<div class="rtIntro">${escHtml(t('rt.intro', 'この機能には追加プラグイン nlm-rating（約34MB）が必要です。「GitHub から取り込む」を押すと、配布元（下記）からダウンロードして、このアプリのフォルダの plugins に保存します。'))}`
         + `<div class="rtRepo">${escHtml(st.repo || '')}</div></div>`;
       return;
     }

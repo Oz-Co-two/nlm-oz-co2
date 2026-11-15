@@ -2,10 +2,15 @@
 
   .venv-build/Scripts/python.exe tools/run_tests.py              全グループ
   .venv-build/Scripts/python.exe tools/run_tests.py e2e unit_js  グループを指定
+  .venv-build/Scripts/python.exe tools/run_tests.py e2e_nle/test_clip_link*.py e2e/test_export.py::test_export_rich
+                                                                 ファイル・1つのテストを指定（グループと混ぜてよい）
+  .venv-build/Scripts/python.exe tools/run_tests.py --changed    変えたファイルから回すテストを選んで回す（表は tests/select_map.json）
   オプション: -k 名前の一部（絞り込み・複数可）/ --update-golden（書き出しの正解を今の結果で更新）
               --coverage（JSのうちテストで実際に動いた割合を測る。test-out/coverage/report.txt）
               --accept（画面の基準画像を今の画面で更新）/ -v（1件ずつ表示）/ -j 同時に動かすプロセスの数（既定10）
               --no-split（グループを分けずに流す。テスト同士の影響を疑う時の切り分け用）
+              --changed [基準]（既定 HEAD＝まだコミットしていない変更。ブランチの作業は --changed master＝分かれた所から）
+              --dry-run（--changed で選んだテストと理由を見せるだけで回さない）
 
 グループ（tests/ 直下のフォルダ）は別プロセス・別のEdgeで並列に動く。大きいグループは、前回の各テストの所要時間
 （test-out/test_secs.json）を元に、ファイル単位（長いファイルはテスト単位）で同じくらいの長さに分けて同時に流し、
@@ -37,7 +42,6 @@ ROOT = Path(__file__).resolve().parent.parent
 TESTS = ROOT / "tests"
 OUT = ROOT / "test-out"
 VENV_PY = ROOT / ".venv-build" / "Scripts" / "python.exe"
-NOT_GROUPS = {"golden", "fixtures"}
 MARK = {"pass": "OK", "fail": "失敗", "error": "エラー", "skip": "飛ばし", "review": "要確認"}
 HIST = OUT / "history"
 KEEP_HISTORY = 30
@@ -51,9 +55,10 @@ def _reexec_with_venv_py():
         os.execv(str(VENV_PY), [str(VENV_PY), __file__, *sys.argv[1:]])
 
 
-def groups_all():
-    return sorted(p.name for p in TESTS.iterdir()
-                  if p.is_dir() and not p.name.startswith(("_", ".")) and p.name not in NOT_GROUPS and any(p.glob("test_*.py")))
+sys.path.insert(0, str(ROOT / "tools"))
+import test_select as TS   # noqa: E402  回すテストの名前の読み方・変えたファイルからの選び方
+
+groups_all = TS.groups_all
 
 
 def _load_secs():
@@ -79,34 +84,50 @@ def _test_names(f):
     return [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
 
 
-def _files(group, secs):
-    """グループのファイルごとの [(見込み秒, ファイル名, テスト単位に分けられるなら [(見込み秒, 関数名)…] / 分けられないなら None)]。
-    まとめ役（test_zz_）のあるファイルと、読み込んだ時にテストを作るファイルは、1つのプロセスで全部を回す必要があるので分けない"""
+def _files(group, secs, only=None):
+    """グループのファイルごとの [(見込み秒, ファイル名, テスト単位に分けられるなら [(見込み秒, 関数名)…] / 分けられないなら None, 一部だけか)]。
+    まとめ役（test_zz_）のあるファイルと、読み込んだ時にテストを作るファイルは、1つのプロセスで全部を回す必要があるので分けない。
+    only＝回すテスト（「ファイル名」か「ファイル名::関数名」の集まり。None＝全部）"""
     out = []
     for f in sorted((TESTS / group).glob("test_*.py")):
         names = _test_names(f)
+        pick = None   # このファイルの一部のテストだけを回す時の関数名
+        if only is not None and f.name not in only:
+            pick = [n for n in names if f"{f.name}::{n}" in only]
+            if not pick:
+                continue
         rec = {k.split("::", 1)[1]: v for k, v in secs.items() if k.startswith(f"{group}/{f.name}::")}
-        tests = [(rec.get(n, DEFAULT_SECS), n) for n in names]
+        tests = [(rec.get(n, DEFAULT_SECS), n) for n in (pick or names)]
+        if pick:
+            out.append((sum(s for s, _ in tests), f.name, tests, True))
+            continue
         dynamic = any(n not in names for n in rec)
         est = sum(rec.values()) if dynamic else sum(s for s, _ in tests)
-        out.append((est or DEFAULT_SECS, f.name, None if dynamic or any(n.startswith("test_zz_") for n in names) else tests))
+        out.append((est or DEFAULT_SECS, f.name, None if dynamic or any(n.startswith("test_zz_") for n in names) else tests, False))
     return out
 
 
-def _split(files, target):
-    """1プロセスの長さの目安 target より長いグループを分ける（目安より長いファイルはテスト単位に分ける）"""
+def _units(fs, target):
+    """1プロセスに入れる単位 [(見込み秒, --only に渡す名前)]（目安 target より長いファイルと、一部だけ回すファイルはテスト単位）"""
+    units = []
+    for e, name, tests, part in fs:
+        if tests and (part or e > target):
+            units += [(s, f"{name}::{n}") for s, n in tests]
+        else:
+            units.append((e, name))
+    return units
+
+
+def _split(files, target, restricted=()):
+    """1プロセスの長さの目安 target より長いグループを分ける（目安より長いファイルはテスト単位に分ける）。
+    restricted＝一部のテストだけを回すグループ（分けない時も --only で回す物を渡す）"""
     jobs = []
     for g, fs in files.items():
-        units = []   # (見込み秒, --only に渡す名前)
-        for e, name, tests in fs:
-            if tests and e > target:
-                units += [(s, f"{name}::{n}") for s, n in tests]
-            else:
-                units.append((e, name))
+        units = _units(fs, target)
         est = sum(e for e, _ in units)
         k = max(1, min(len(units), math.ceil(est / target)))
         if k == 1:
-            jobs.append((g, None, None, est))
+            jobs.append((g, None, [u for _, u in units] if g in restricted else None, est))
             continue
         bins = [[0.0, []] for _ in range(k)]
         for e, u in sorted(units, key=lambda x: -x[0]):   # 長いものから、今いちばん短い組へ入れる
@@ -126,19 +147,23 @@ def _makespan(jobs, j):
     return max(ends)
 
 
-def plan(groups, j, split):
+def plan(groups, j, split, only=None):
     """流すプロセスの一覧 [(グループ, 番号 / 分けない時は None, --only に渡す名前 / 全部の時は None, 見込み秒)] を、見込みの長い順に返す。
     1プロセスの長さの目安を、分けられない一番長い所から1秒ずつ変えて分け方を作り、j 個の枠で一番早く終わるもの
-    （同じならプロセスの少ないもの＝起動する Edge が少なくCPUが楽）を選ぶ"""
+    （同じならプロセスの少ないもの＝起動する Edge が少なくCPUが楽）を選ぶ。only＝{グループ: 回すテストの名前の集まり}（無いグループは全部）"""
+    only = only or {}
     secs = _load_secs()
-    files = {g: _files(g, secs) for g in groups}
-    whole = [(g, None, None, sum(e for e, _, _ in fs)) for g, fs in files.items()]
+    files = {g: _files(g, secs, only.get(g)) for g in groups}
+    files = {g: fs for g, fs in files.items() if fs}
+    restricted = set(only)
+    whole = [(g, None, [u for _, u in _units(fs, math.inf)] if g in restricted else None, sum(e for e, *_ in fs))
+             for g, fs in files.items()]
     best = (_makespan(whole, j) // 1, len(whole)), whole
-    if split:
-        floor = max([e for fs in files.values() for e, _, t in fs if t is None]
-                    + [s for fs in files.values() for _, _, t in fs if t for s, _ in t] + [1])
+    if split and whole:
+        floor = max([e for fs in files.values() for e, _, t, _ in fs if t is None]
+                    + [s for fs in files.values() for _, _, t, _ in fs if t for s, _ in t] + [1])
         for target in range(math.ceil(floor), math.ceil(max(e for *_, e in whole)) + 1):
-            jobs = _split(files, target)
+            jobs = _split(files, target, restricted)
             key = (_makespan(jobs, j) // 1, len(jobs))
             if key < best[0]:
                 best = key, jobs
@@ -151,9 +176,11 @@ def run_one(job, a):
     js = OUT / f"_{tag}.json"
     js.unlink(missing_ok=True)
     cmd = [sys.executable, str(TESTS / "_lib" / "nlmtest.py"), "--group", group, "--json", str(js)]
+    if part is not None:
+        cmd += ["--part", str(part)]
     if only:
-        cmd += ["--part", str(part), "--only", *only]
-    for ks in a.k or []:
+        cmd += ["--only", *only]
+    for ks in (a.k or []) + ([sorted(a.k_by_group[group])] if a.k_by_group.get(group) else []):
         cmd += ["-k", *ks]
     if a.update_golden:
         cmd.append("--update-golden")
@@ -190,6 +217,30 @@ def save_history(groups):
     return d
 
 
+def changed_report(base):
+    """--changed: 変えたファイルから回すテストを選び、選んだ理由と、表に無いファイル・関数を見せる。回す名前の並びを返す"""
+    changed = TS.changed_files(base)
+    picks, unknown_files, unknown_funcs = TS.select(changed, base)
+    print(f"変えたファイル（{'まだコミットしていない変更' if base == 'HEAD' else base + ' から分かれた所から'}）: {len(changed)}")
+    for p in changed:
+        print(f"  {p}")
+    why = {}
+    for spec, reason in picks:
+        why.setdefault(spec, []).append(reason)
+    print(f"回すテスト: {len(why)}（表は tests/select_map.json）")
+    for spec, rs in why.items():
+        rs = list(dict.fromkeys(rs))
+        print(f"  {spec}  ← " + "・".join(rs[:3]) + (f" ほか{len(rs) - 3}" if len(rs) > 3 else ""))
+    if unknown_files:
+        print("表に無いファイル（tests/select_map.json の files に足してください。足すまで、このファイルのテストは選ばれません）:")
+        for p in unknown_files:
+            print(f"  {p}")
+    if unknown_funcs:
+        print(f"表に無い {TS.APP_JS} の関数（中身を読んで回すテストを足す。よく使う物は表の functions に足す）:")
+        print("  " + ", ".join(unknown_funcs))
+    return list(why)
+
+
 def main():
     _reexec_with_venv_py()
     ap = argparse.ArgumentParser()
@@ -202,19 +253,48 @@ def main():
     ap.add_argument("-j", type=int, default=10)
     ap.add_argument("--coverage", action="store_true", help="JSのうちテストで実際に動いた割合も測る")
     ap.add_argument("--no-split", action="store_true", help="グループを分けずに流す")
+    ap.add_argument("--changed", nargs="?", const="HEAD", metavar="基準",
+                    help="変えたファイルから回すテストを選ぶ（既定 HEAD。ブランチの作業は master 等＝分かれた所から）")
+    ap.add_argument("--dry-run", action="store_true", help="--changed で選んだテストを見せるだけで回さない")
     a = ap.parse_args()
-    groups = a.groups or groups_all()
-    unknown = [g for g in groups if not (TESTS / g).is_dir()]
-    if unknown:
-        print("知らないグループ:", ", ".join(unknown), "／ある:", ", ".join(groups_all()))
+    if a.changed:
+        if a.groups:
+            print("--changed とグループ・テストの名前は一緒に使えません")
+            return 2
+        specs = changed_report(a.changed)
+        if a.dry_run:
+            return 0
+    else:
+        specs = a.groups or groups_all()
+    try:
+        sel = TS.selection(specs)
+    except ValueError as e:
+        print("知らないテストの名前:", e, "／グループ:", ", ".join(groups_all()))
         return 2
+    groups = [g for g in groups_all() if g in sel] + sorted(g for g in sel if g not in groups_all())
+    only, a.k_by_group = {}, {}
+    for g in groups:   # 一部だけ回すグループ: 回すテストの名前の集まり（-k の語はテストの名前に直す。直せない visual は -k のまま渡す）
+        s = sel[g]
+        if s["all"]:
+            continue
+        names = set(s["only"])
+        if s["k"]:
+            hit = TS.k_to_only(g, s["k"])
+            if hit is None:
+                a.k_by_group[g] = s["k"]
+                if names:   # ファイル指定と -k が両方ある visual は全部（1つのファイルしか無い）
+                    del a.k_by_group[g]
+                continue
+            names |= hit
+        only[g] = names
     OUT.mkdir(exist_ok=True)
     if a.coverage:
         import shutil
         shutil.rmtree(OUT / "coverage", ignore_errors=True)
     for p in OUT.glob("_*.json"):   # 前回の各プロセスの結果（分け方が変わると名前が変わるので残さない）
         p.unlink(missing_ok=True)
-    jobs = plan(groups, a.j, split=not a.k and not a.no_split)
+    jobs = plan(groups, a.j, split=not a.k and not a.no_split, only=only)
+    groups = [g for g in groups if any(job[0] == g for job in jobs)]   # 選んだテストが1件も無いグループ（-k が当たらない等）は出さない
     t0 = time.time()
     done = {g: ([], 0.0, 0) for g in groups}   # グループ → (結果, 一番長かったプロセスの秒, プロセスの数)
     with cf.ThreadPoolExecutor(max_workers=max(1, a.j)) as ex:
@@ -227,7 +307,7 @@ def main():
         if n > 1:
             done[g] = (sorted(res, key=lambda r: (r["file"], order.get((g, r["file"], r["name"]), math.inf))), secs, n)
     if not a.coverage:   # カバレッジの計測をした回の時間は普段より長いので覚えない
-        save_test_secs([r for res, _, _ in done.values() for r in res], full=not a.k and not a.groups)
+        save_test_secs([r for res, _, _ in done.values() for r in res], full=not a.k and not a.groups and not a.changed)
 
     allres, lines, detail = [], [], []
     for g in groups:

@@ -19,6 +19,9 @@ make_tutorial_shots.py のものを使う。NLE の帯の位置は _dbgApp.nleSc
 解析からクリップを作る（06-7・06-8）は帯がある間に撮り、Ctrl+Z 1回で戻す。
 撮った後は Ctrl+Z で帯・マーカーを戻し、後の画像を前と同じ状態で撮る。
 
+9章の譜面チェック（09-1〜09-4・09-7）の前に、Hard のノーツを Expert へコピーする（リンクしない）。結果は今の難易度（Hard）だけを開き、
+別の難易度は閉じて出す（BL評価リストは拍を隠した行）ので、その両方を写すため。Expert は消さない（後に撮る MEDIA ライブラリの画像には関係しない）。
+
 「難易度を測る」(9章)は追加プラグイン nlm-rating が要る。撮影用の一時データフォルダへコピーして使うので、
 取り込み済みのプラグインフォルダ（plugins/rating。中に current.json と版のフォルダがある）を
 環境変数 NLM_RATING_DIR で指定する。省略時は配布フォルダ NLM-app/plugins/rating を探し、
@@ -920,6 +923,32 @@ def review_notes(ed, t):
     t.click_el("#dirtyDlg .ddBtns button[data-v=cancel]"); ed.wait(0.3)
 
 
+def copy_notes_to_expert(ed, t):
+    """9章: 開いている Hard のノーツを Expert へコピーする（難易度のメニュー「ノーツを転送 → Expert」・リンクしない）。
+    譜面チェックの結果は今の難易度（Hard・「編集中」の札）だけを開き、別の難易度（Expert）は閉じて出すので、その両方を写すため。
+    消さずに残す（難易度を測る 09-4 も Hard・Expert の2つで撮る）"""
+    ed.move(960, 800); ed.wait(0.2)
+    for _ in range(2):   # 4章（04-1）で開いたメニューを撮影用に隠しただけなので、1回目は「開いたメニューを閉じる」扱いになることがある
+        t.click_el("#diffBar .dfSeg.on"); ed.wait(0.5)
+        if menu_mark(ed, mts.L("ノーツを転送"), "tutSend"):
+            break
+        hide_menu(ed); ed.wait(0.5)
+    else:
+        raise SystemExit("難易度のメニューが出ません")
+    r = t.rect("#tutSend"); ed.move(r["x"] + 20, r["y"] + r["h"] / 2); ed.wait(0.5)
+    ok = ed.js("""(()=>{ const b=[...document.querySelectorAll('#ctxmenu .ctxsub button')].find(b=>b.textContent.trim()==='→ Expert');
+      if(!b) return false; b.click(); return true; })()""")
+    if not ok:
+        raise SystemExit("ノーツを転送の → Expert がありません")
+    wait_until(ed, "!!document.querySelector('#dirtyDlg[data-lk=\"copy\"] .ddBtns button.pri')", "難易度間コピーの確認が出ません")
+    ed.js("(()=>{ const c=document.querySelector('#dirtyDlg .lkOpt input[type=checkbox]'); if(c) c.checked=false; return 1; })()")   # 親の難易度に繋がない
+    t.click_el("#dirtyDlg .ddBtns button.pri")
+    wait_until(ed, "!document.getElementById('dirtyDlgBg')", "難易度間コピーの確認を閉じられません")
+    wait_until(ed, "window._dbgApp.mapCheckInput().then(p=>(p.diffs||[]).length===2)",
+               "Expert へコピーしたノーツが書き出しに入りません")
+    hide_toast(ed)
+
+
 def am_install_plugin(ed):
     """AutoModder のプラグインを一時のデータフォルダへ置く（取り込み済みのフォルダ AM_DIR か配布の zip AM_ZIP から）。置けたら True"""
     import zipfile
@@ -957,14 +986,26 @@ def automodder_shots(ed, t):
         t.click_el("#mcPanel .amRun")   # 取り込んだ時の知らせ（v… を取り込みました）を消すため、もう一度確かめる
         wait_until(ed, "!!document.querySelector('#mcPanel .amMeta')&&!document.querySelector('#mcPanel .amRun').disabled",
                    "AutoModder の確かめ直しが終わりません", timeout=120)
+        # ②＝今の難易度（Hard・「編集中」の札・開いている）の見出し、③＝その中の拍。
+        # ⑤＝閉じた別の難易度（Expert）の見出し。パネルの中に見えている時だけ付ける（結果が長いと下に隠れる）
         ok = ed.js("""(()=>{ const p=document.getElementById('mcPanel');
-          const sec=[...p.querySelectorAll('.amSec')].find(s=>s.querySelector('.mcBeat')); if(!sec) return false; sec.id='tutAmSec';
-          sec.querySelector('.mcBeat').id='tutAmBeat'; return true; })()""")
-        if not ok:
-            raise SystemExit("AutoModder の結果に拍のある項目がありません")
+          const sec=p.querySelector('details.amSec.mcCurSec[open]'); if(!sec||!sec.querySelector('.mcCurTag')) return 'cur';
+          sec.id='tutAmSec';
+          const chip=[...sec.querySelectorAll('.mcBeat')].find(c=>c.getClientRects().length); if(!chip) return 'beat';
+          chip.id='tutAmBeat';
+          const o=p.querySelector('details.amSec:not([open])'), b=p.querySelector('.mcBody').getBoundingClientRect();
+          if(o){ const s=o.querySelector('summary'), r=s.getBoundingClientRect(); if(r.top>=b.top&&r.bottom<=b.bottom) s.id='tutAmOther'; }
+          return 'ok'; })()""")
+        if ok != "ok":
+            raise SystemExit("AutoModder の結果に、開いた今の難易度（編集中）か、その中の拍がありません: " + str(ok))
         ed.move(1700, 1060); ed.wait(0.3)
-        t.shot("09-7-automodder", marks="""[{t:'#mcPanel .amBanner',n:1,at:'l'},{t:'#tutAmSec summary',n:2,at:'l'},
-          {t:'#tutAmBeat',n:3,at:'r'},{t:'#mcPanel .amCtl',n:4,at:'l'}]""", clip=box(ed, ["#mcPanel"], pad=44))
+        marks = """{t:'#mcPanel .amBanner',n:1,at:'l'},{t:'#tutAmSec>summary',n:2,at:'l'},
+          {t:'#tutAmBeat',n:3,at:'r'},{t:'#mcPanel .amCtl',n:4,at:'l'}"""
+        if ed.js("!!document.getElementById('tutAmOther')"):
+            marks += ",{t:'#tutAmOther',n:5,at:'l'}"
+        else:
+            print("09-7: 閉じた別の難易度の見出しがパネルの中に見えないので、⑤は付けません")
+        t.shot("09-7-automodder", marks="[" + marks + "]", clip=box(ed, ["#mcPanel"], pad=44))
     else:
         print("AutoModder のプラグインが見つからないので、09-7 は撮りません:", AM_DIR, AM_ZIP)
     t.click_el("#mcPanel .mcTab[data-tab=mc]"); ed.wait(0.3)   # 次回開いた時のタブを元へ戻す
@@ -1252,6 +1293,8 @@ def main():
         t.click_el("#settingsClose"); ed.wait(0.4)
 
         # ---- 9章: 譜面チェック・BL評価リスト・難易度を測る ----
+        # 結果は今の難易度（Hard）だけ開き、別の難易度は閉じて出す＝それを写すため、Hard のノーツを Expert へコピーしておく
+        copy_notes_to_expert(ed, t)
         # プラグインは BL評価リストの★/Tech（09-3）でも使うので、譜面チェックを開く前に取り込んでおく
         has_plugin = (PLUGIN_DIR / "current.json").exists()
         if has_plugin:
@@ -1261,17 +1304,42 @@ def main():
         t.click_el("#mCheckBtn"); ed.wait(0.5)
         t.click_el(".mbMenu button[data-act=mapcheck]"); ed.wait(3.0)
         move_panel(ed, "#mcPanel")
-        beat_chip = ed.js("(()=>{const b=document.querySelector('#mcPanel .mcBeat'); if(b) b.id='tutBeat'; return !!b})()")
+        # ⑤＝今の難易度の欄（Hard・「編集中」の札・開いている）、⑥＝別の難易度の欄（Expert・閉じている）
+        ok = ed.js("""(()=>{ const p=document.getElementById('mcPanel');
+          const cur=p.querySelector('details.mcSec.mcCurSec[open]'), oth=p.querySelector('details.mcSec[data-sec="mc:Expert"]:not([open])');
+          if(!cur||!cur.querySelector('.mcCurTag')||!oth) return false;
+          cur.querySelector('summary').id='tutMcCur'; oth.querySelector('summary').id='tutMcOther';
+          const fx=cur.querySelector('.mcFix'); if(fx) fx.id='tutMcFix'; return true; })()""")
+        if not ok:
+            raise SystemExit("譜面チェックに、開いた今の難易度（編集中）と閉じた Expert の欄がありません")
         marks = "{t:'#mcPanel .mcTabs',n:1,at:'l'},{t:'#mcPanel .mcSum',n:2,at:'l'},{t:'#mcPanel .mcRerun',n:3,at:'l'}"
-        if ed.js("!!document.querySelector('#mcPanel .mcFix')"):   # ライトが足りない項目の「💡 自動ライティング…」
-            marks += ",{t:'#mcPanel .mcFix',n:4,at:'l'}"
-        if beat_chip:
-            marks += ",{t:'#tutBeat',n:5,at:'l'}"
+        if ed.js("!!document.getElementById('tutMcFix')"):   # ライトが足りない項目の「💡 自動ライティング…」
+            marks += ",{t:'#tutMcFix',n:4,at:'l'}"
+        marks += ",{t:'#tutMcCur',n:5,at:'l'},{t:'#tutMcOther',n:6,at:'l'}"
         t.shot("09-1-mapcheck", marks="[" + marks + "]", clip=box(ed, ["#mcPanel"], pad=44))
         t.click_el("#mcPanel .mcTab[data-tab=bl]"); ed.wait(1.0)
         t.shot("09-2-bl-criteria", marks="""[
           {t:'#mcPanel .blBanner',n:1,at:'l'},{t:'#mcPanel .blOnly',n:2,at:'l'},
           {t:'#mcPanel .blKind',n:3,at:'r'}]""", clip=box(ed, ["#mcPanel"], pad=44))
+        # 09-2b: 1つの項目の中の、今の難易度（Hard・紫の札・拍が出ている）と別の難易度（Expert・拍を隠した行）の所見。
+        # 両方に拍のある項目（開始直後のノーツ R1.D.1）を真ん中へ出し、パネルの幅で、その項目と前後の項目だけを撮る
+        rule = ed.js("""(()=>{ const p=document.getElementById('mcPanel');
+          for(const o of p.querySelectorAll('.blF.blOther')){ const rule=o.closest('.blRule');
+            const c=[...rule.querySelectorAll('.blF')].find(f=>f.querySelector('.blDiff.cur')&&f.querySelector('.mcBeat'));
+            if(!c) continue; o.id='tutBlOther'; c.id='tutBlCur'; rule.id='tutBlRule'; rule.scrollIntoView({block:'center'});
+            const pv=rule.previousElementSibling, nx=rule.nextElementSibling;
+            if(pv&&pv.classList.contains('blRule')) pv.id='tutBlPrev'; if(nx&&nx.classList.contains('blRule')) nx.id='tutBlNext';
+            return rule.querySelector('.blId').textContent; }
+          return null; })()""")
+        if not rule:
+            raise SystemExit("BL評価リストに、今の難易度と別の難易度の両方に拍のある項目がありません")
+        ed.wait(0.4)
+        pr = t.rect("#mcPanel")
+        top = t.rect("#tutBlPrev" if ed.js("!!document.getElementById('tutBlPrev')") else "#tutBlRule")
+        bot = t.rect("#tutBlNext" if ed.js("!!document.getElementById('tutBlNext')") else "#tutBlRule")
+        t.shot("09-2b-bl-other-diff", marks="[{t:'#tutBlCur',n:1,at:'l'},{t:'#tutBlOther',n:2,at:'l'}]",
+               clip=(round(pr["x"]) - 30, round(top["y"]) - 3, round(pr["w"]) + 60, round(bot["y"] + bot["h"] - top["y"]) + 6))
+        print("09-2b の項目:", rule)
         if has_plugin:   # BL評価リストを開くと自動で測る（別プロセス）。★の欄に入るまで待つ
             wait_until(ed, "(()=>{const i=document.querySelector('#mcPanel .blStars input[data-star]');return !!i&&i.value!==''})()",
                        "BL評価リストの★/Techが自動で入りません", timeout=60)

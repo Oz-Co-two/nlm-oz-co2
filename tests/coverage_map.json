@@ -1,0 +1,54 @@
+{
+  "_説明": "確かめる対象 → それを確かめるテストの対応表（tests/rules/test_rules.py が今のソースと照らす）。対象は rules_scan.py がソースから拾う（ダイアログ・パネルを作る所、serve.py の API、ショートカット、訳のキー）。理由があって確かめない物は todo（後回し＝テストを足すとよい）・manual（自動では確かめられない＝手で確かめる）・noNeed（要らない）に理由を書く。書き方は tests/README.md「対応表」",
+  "shortcuts": {
+    "lightCol1": {"noNeed": {"hit": "hit(e,'lightCol'+i) で番号をつなげて判定する（editor-app.js の keydown・LIGHTINGの3Dの上）"}},
+    "lightCol2": {"noNeed": {"hit": "lightCol1 と同じ"}},
+    "lightCol3": {"noNeed": {"hit": "lightCol1 と同じ"}},
+    "lightMode": {"noNeed": {"sheet": "各ペインの左上のモードの表示に［TAB］として出す（早見表には書かない）"}}
+  },
+  "dialogs": {
+    "js/analysis/ana-clips.js::anaClipsDialog::dirtyDlg[clips]": {"visual": ["analysis_clips_dialog"], "english": ["曲の解析 クリップを作る画面", "曲の解析 クリップを作る画面（両方）"]},
+    "js/analysis/song-analysis.js::showTempo::dirtyDlg": {"visual": ["analysis_tempo"], "english": ["曲の解析 テンポの画面"]},
+    "js/analysis/song-analysis.js::showAsk::dirtyDlg[ask]": {"visual": ["analysis_ask"], "english": ["曲の解析 曲を取り込んだ時の確認"]},
+    "js/analysis/song-analysis.js::showGuide::dirtyDlg[guide]": {"visual": ["analysis_guide"], "english": ["曲の解析 解析が終わった時の案内"]},
+    "js/help/about-dialog.js::openAbout::dirtyDlg[about]": {"visual": ["about"], "english": ["NLM について"]},
+    "js/lighting/auto-light.js::showAutoLightDialog::dirtyDlg": {"visual": ["auto_light_dialog"], "english": ["自動ライティングの確認"]},
+    "js/mapcheck/mapcheck-panel.js::build::mcPanel": {"visual": ["mapcheck", "mapcheck_bl", "mapcheck_bl_stars", "mapcheck_am", "mapcheck_am_result"],
+      "english": ["譜面チェック", "BL評価リスト", "AutoModder（未導入）", "AutoModder（取り込みの説明）", "AutoModder（結果）"]},
+    "js/media/cover-fit.js::showCoverFitDialog::dirtyDlg": {"visual": ["cover_fit_dialog"], "english": ["カバー画像の補正の確認"]},
+    "js/media/lib-filter.js::build::libFiltPanel": {"visual": ["media_lib_filter"], "english": ["MEDIA フィルター", "MEDIA フィルター（条件の数の丸）"]},
+    "js/nle/clip-link.js::linkDialog::dirtyDlg": {"visual": ["link_parent_dialog", "link_copy_dialog"], "english": ["リンクの親を選ぶ画面", "難易度間コピーの確認の画面"],
+      "note": "リンクの親を選ぶ画面と難易度間コピーの確認で共通（data-lk で見分ける）"},
+    "js/rating/rating-panel.js::build::rtPanel": {"visual": ["rating"], "english": ["難易度を測る"]},
+    "js/review/review-panel.js::build::rvPanel": {"visual": ["review_panel"], "english": ["審査の指摘の一覧"]},
+    "js/review/review-panel.js::dialog::dirtyDlg": {
+      "noNeed": {"visual": "審査の指摘の画面に共通の部品（画面は下の dialog('…') ごとに確かめる）", "english": "同じ"}},
+    "js/review/review-panel.js::dialog('rvPasteDlg')": {"visual": ["review_paste"], "english": ["審査の指摘: 貼り付け"]},
+    "js/review/review-panel.js::dialog('rvImport')": {"visual": ["review_import"], "english": ["審査の指摘の読み込み"]},
+    "js/review/review-panel.js::dialog('rvClearDlg')": {"visual": ["review_clear"], "english": ["審査の指摘: 消すの確認"]},
+    "js/review/review-panel.js::dialog('rvExportDlg')": {"visual": ["review_export"], "english": ["審査の指摘: 書き出し（返事）", "審査の指摘: 書き出し（NLM の確かめ）"]},
+    "js/runtime/editor-app.js::busyDialog::busyDlg": {"visual": ["bulk_busy_dialog"], "english": ["曲データを読み込む（読み込み中）"]},
+    "js/runtime/editor-app.js::lightHeavyWarn::dirtyDlg[lightHeavy]": {"visual": ["light_heavy_dialog"], "english": ["ライトがとても多い時の警告"]},
+    "js/runtime/editor-app.js::askYesNo::dirtyDlg": {"visual": ["tempo_import_dialog", "media_lib_look"], "english": ["MEDIA 🔍 の確認"],
+      "note": "はい／いいえの確認の共通の部品（文は呼ぶ側ごと。訳のキーは test_lang_keys が見る）"},
+    "js/runtime/editor-app.js::confirmDiscard::dirtyDlg": {"visual": ["dirty_dialog"], "english": ["未保存の3択"]},
+    "js/update/update-dialog.js::openDlg::updDlg": {"visual": ["plugin_update"], "english": ["プラグインの更新の知らせ", "更新の確認のまとめ", "プラグインを更新した通知"]},
+    "editor.html::#sqEnvPanel": {"visual": ["env_panel"], "english": ["環境（ステージ）の一覧"]},
+    "editor.html::#infoPanel": {"visual": ["info"], "english": ["INFO"]},
+    "editor.html::#tbSnapPanel": {"visual": ["snap_panel"], "english": ["スナップの一覧"]},
+    "editor.html::#tbDirPanel": {"visual": ["dir_panel"], "english": ["ノーツの向きの一覧"]},
+    "editor.html::#settingsBg": {"visual": ["settings_app", "settings_vol", "settings_preview", "settings_cam", "settings_keys", "settings_media"], "english": ["環境設定 {tab}"]}
+  },
+  "api": {
+    "/__rating/check": {"tests": ["unit_py/test_rating_plugin.py"], "note": "中身（RatingPlugin.check）を偽の取得先で確かめる。HTTP の窓口は通さない（ネットへ出るため）"},
+    "/__rating/install": {"tests": ["unit_py/test_rating_plugin.py"], "note": "中身（RatingPlugin.install）を確かめる。HTTP の窓口は通さない"},
+    "/__automodder/check": {"tests": ["unit_py/test_automodder_plugin.py"], "note": "中身（AutoModderPlugin.check）を確かめる。HTTP の窓口は通さない"},
+    "/__automodder/install": {"tests": ["unit_py/test_automodder_plugin.py"], "note": "中身（AutoModderPlugin.install）を確かめる。HTTP の窓口は通さない"},
+    "/__update/check": {"tests": ["unit_py/test_update_selftest.py"], "note": "中身（Updater.check）を偽の配布元で確かめる（tools/update_test.py）。HTTP の窓口は通さない"},
+    "/__update/download": {"tests": ["unit_py/test_update_selftest.py"], "note": "中身（Updater.start_download・照合）を確かめる"},
+    "/__update/progress": {"tests": ["unit_py/test_update_selftest.py"], "note": "中身（Updater.progress）をダウンロードの待ちで使う"},
+    "/__update/apply": {"manual": {"test": "新しい版の exe を起動して自分は終了する所（Updater.apply）は自動では確かめられない。差し替え役（apply_main）は unit_py/test_update_selftest.py。exe の更新はリリースのたびに手で確かめる"}},
+    "/__lib/rescan": {"tests": ["unit_py/test_media_library.py", "e2e_nle/test_media_library.py"], "note": "中身（MediaLibrary.rescan）と、画面の右クリック「読み直す」"}
+  },
+  "lang": {}
+}

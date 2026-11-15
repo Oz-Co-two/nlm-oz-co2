@@ -5557,8 +5557,18 @@ function stashCurrentDiff(){ if(!currentDiffName||!rawDiff) return;
 // 空の難易度ベース（v3）。ゼロから作る難易度の切替・書き出しの土台
 const EMPTY_V3=()=>({version:'3.2.0',bpmEvents:[],rotationEvents:[],colorNotes:[],bombNotes:[],obstacles:[],
   sliders:[],burstSliders:[],waypoints:[],basicBeatmapEvents:[],colorBoostBeatmapEvents:[],
-  lightColorEventBoxGroups:[],lightRotationEventBoxGroups:[],
+  lightColorEventBoxGroups:[],lightRotationEventBoxGroups:[],lightTranslationEventBoxGroups:[],
   basicEventTypesWithKeywords:{d:[]},useNormalEventsAsCompatibleEvents:true});
+// v3.2.0 の難易度のファイルで必須の lightTranslationEventBoxGroups を、lightRotationEventBoxGroups の直後に入れた物を返す（あれば中身はそのまま・
+// 配列でなければ空の配列。lightRotationEventBoxGroups が無ければ末尾）。以前の EMPTY_V3 に無く、BeatSaver が「Must be present」で受け付けなかった（2026-11-15）。
+// 書き出しは .nlmf に保存した土台（base）を使うので、雛形を直す前に作った難易度の分は書き出しの時にここで足す
+function withLightTranslation(d){
+  const tr=Array.isArray(d.lightTranslationEventBoxGroups)?d.lightTranslationEventBoxGroups:[];
+  const o={};
+  for(const k in d){ if(k==='lightTranslationEventBoxGroups') continue;
+    o[k]=d[k]; if(k==='lightRotationEventBoxGroups') o.lightTranslationEventBoxGroups=tr; }
+  if(!('lightTranslationEventBoxGroups' in o)) o.lightTranslationEventBoxGroups=tr;
+  return o; }
 // notes/lights配線を現在のsectionsへ張り直す（audio/info/coverは維持）。難易度切替でIDが変わっても配置ガードが誤爆しない
 function relinkDiffEdges(){
   graphEdges=graphEdges.filter(e=>e.sig!=='notes'&&e.sig!=='lights');
@@ -7194,13 +7204,15 @@ async function loadDiff(f){ if(!f) return;
     }
     selection.clear(); rebuild();   // 履歴は消さない＝難易度をまたいで1本で辿れる（各項目のdiffタグで戻り先が分かる・ヘルバ様指定 2026-07-17）
     stat(tf('msg.projStats','[project] BPM {bpm} ・ ノーツ{notes} ボム{bombs} 壁{walls} アーク{arcs} チェーン{chains}',{bpm:BPM,notes:notes.length,bombs:bombs.length,walls:walls.length,arcs:arcs.length,chains:chains.length}));
+    if(mapCheckPanel) mapCheckPanel.diffChanged();   // 譜面チェックの結果は今の難易度の分だけ開く
     return; }
   // 編集データが無い＝ゼロから作る新しい難易度（箱は難易度ごとに独立=空のタイムラインから）
   currentDiffName=f; rawDiff=EMPTY_V3(); diffV3=true;
   notes=[];bombs=[];walls=[];arcs=[];chains=[];lightEvents=[];
   resetDiffSections();
   selection.clear(); rebuild(); stashCurrentDiff();   // 履歴は消さない（上と同じ理由）
-  stat(tf('msg.newDiffStart','新しい難易度を開始: {name}',{name:f.replace(/Standard\.dat$/,'')})); }
+  stat(tf('msg.newDiffStart','新しい難易度を開始: {name}',{name:f.replace(/Standard\.dat$/,'')}));
+  if(mapCheckPanel) mapCheckPanel.diffChanged(); }
 function stat(s){ document.getElementById('stat').textContent=(typeof s==='string')?t('m:'+s,s):s; }
 
 function buildDiffJsonFor(st){
@@ -7235,6 +7247,7 @@ function buildDiffJsonFor(st){
       d.colorBoostBeatmapEvents=[...old.filter(e=>!seen.has((+e.b||0)+'|'+(e.o===true||e.o===1))),...bst].sort(sortB); }
     d.bpmEvents=tempoParts.map(p=>({b:p.beat,m:p.bpm}));   // 曲中のテンポ変更（パート機能）。拍番号はそのまま・以降の絶対時刻だけ変わるBS標準の仕組み
     d.version=d.version||'3.2.0'; delete d._version;              // v3構造 → v3のversionを自動
+    if(d.version==='3.2.0') return withLightTranslation(d);       // 3.2.0 で必須の lightTranslationEventBoxGroups（古い .nlmf の土台に無い）
   } else {
     const ns=mN.map(n=>({...(R2(n)||{}),_time:n.beat,_lineIndex:n.x,_lineLayer:n.y,_type:n.c,_cutDirection:n.d}));
     const bs=mB.map(n=>({...(R2(n)||{_cutDirection:0}),_time:n.beat,_lineIndex:n.x,_lineLayer:n.y,_type:3}));
@@ -7943,7 +7956,10 @@ songAna=installSongAnalysis({t,tf,FONT,showErr,showOk,stat,
 const ratingClient=createRatingClient({t,collect:collectRatingInput});
 // AutoModder の判定のプラグインの窓口（譜面チェックの3つ目のタブ。js/automodder/・automodder_plugin.py）
 const amClient=createAutoModderClient({t,collect:collectAutoModderInput});
-const mapCheckPanel=installMapCheckPanel({t,escHtml,dispDiff,collect:collectMapCheckInput,jump:mapCheckJump,autoLight:openAutoLight,coverFix:openCoverFit,rating:ratingClient,automodder:amClient});
+// curDiff＝今の難易度（開いておく結果・別の難易度の拍で切り替えを確かめる）・ask＝その確認の画面。var＝作る前に loadDiff（diffChanged）から参照されても TDZ で落ちない
+var mapCheckPanel=null;
+mapCheckPanel=installMapCheckPanel({t,escHtml,dispDiff,collect:collectMapCheckInput,jump:mapCheckJump,autoLight:openAutoLight,coverFix:openCoverFit,rating:ratingClient,automodder:amClient,
+  curDiff:curDiffDn,ask:askYesNo});
 // ---- カバー画像の補正（js/media/cover-fit.js）: 元の画像は変えず、カバーノードの data.fit={mode,bg} を書き出し・譜面チェックの時に当てる ----
 function connectedCoverFit(){ const cid=connectedNodeId('cover'), n=cid&&infoGraph.nodes[cid]; return (n&&n.data.fit)||null; }
 async function openCoverFit(after){   // after=補正した後に呼ぶ（譜面チェックの再実行）

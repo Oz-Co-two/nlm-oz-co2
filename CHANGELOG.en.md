@@ -8,6 +8,29 @@ For basic usage, see the [tutorial](docs/tutorial.en.md), the [advanced tutorial
 <!-- Format: one "## v1.2.3-oz" heading per version. Top-level bold items ("- **...**") are the headlines shown in the in-app
 update notice (tools/make_release.py puts them into update.json). Keep the same versions and the same number of headlines as CHANGELOG.md. -->
 
+## v2.1.2-oz
+
+- **Fixed BeatSaver rejecting exported maps**
+  Uploading to BeatSaver failed with "_difficultyBeatmaps[n].`XxxStandard.dat`.lightTranslationEventBoxGroups: Must be present".
+  Difficulties made in NLM were missing an item that difficulty .dat files (v3.2.0) must have. NLM now always writes it when exporting.
+  - Projects (.nlmf) made with earlier versions are fixed too: just export them again with this version.
+- **Map check results now open only the difficulty you're editing**
+  This keeps you from mistaking another difficulty's beats for the current one's.
+  - The "Same as BS Map Check" and "AutoModder" tabs open only the overall section (song info) and the current difficulty, whose heading gets
+    an "Editing" tag. Other difficulties appear as closed headings (the counts are shown; click to open).
+  - In the "NLM BL criteria list", findings with beats in another difficulty show only the row (difficulty, text, count); click the row to show the beats.
+  - Clicking a beat of another difficulty asks "Switch to … and show it?" before switching. Beats of the current difficulty still jump right away.
+  - When you switch difficulties, what is open follows the new current difficulty (re-checking or switching tabs keeps what you opened or closed).
+- **Song analysis is faster**
+  Calculations that were repeated are now done once. The results are the same as before. For a 3:49 song, analyzing the tempo and structure
+  went from about 45 seconds to about 17 seconds.
+- **The "Estimate difficulty" plugin nlm-rating v4.1.0 supports BeatLeader's PPv4.1**
+  This version follows BeatLeader's PPv4.1 of November 2026 (no NLM update needed: update it from the notice at startup or with "Check for updates" in the panel).
+  From now on, the plugin's version follows BeatLeader's PP version (PPv4.1 → 4.1.x).
+  - The plugin got bigger, so the size shown in the install guide changed from "about 20 MB" to "about 34 MB".
+- **Updated the bundled components**
+  Python 3.14.10 (with OpenSSL 3.5.9), pythonnet 3.2.1 and others, including security fixes. Nothing changes in how you use NLM.
+
 ## v2.1.1-oz
 
 - **The menus are now split by the flow of your work**

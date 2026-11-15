@@ -68,6 +68,9 @@ def _jump_other_diff(t, ed, label):
     for ref in refs:
         _click_chip(ed, ref)
         ed.wait(0.3)
+        if ed.js("!!document.querySelector('#dirtyDlg .ddBtns button.pri')"):   # 別の難易度の拍＝「切り替えて表示しますか？」で確かめる
+            _click_el(ed, '#dirtyDlg .ddBtns button.pri')
+            wait_until(ed, f"window._dbgApp.state().diff!=={json.dumps(start)}", label='確かめてから切り替え')
         if state(ed)['diff'] != start:
             wait_until(ed, "window._dbgApp.dirty().inputSinceBase===true", label='操作の記録')
             return state(ed)['diff']
@@ -88,6 +91,9 @@ def test_dirty_mapcheck_jump_other_diff(t):
     _click_el(ed, '#mcPanel .mcTab[data-tab="bl"]')
     wait_until(ed, "document.getElementById('mcPanel').classList.contains('blMode')", label='BL評価リストのタブ')
     wait_until(ed, DONE, label='BL評価リストの表示')
+    # 別の難易度（Hard）の所見は拍を隠してある＝行を押して出す（行の押し方・開閉は e2e/test_mapcheck.py の test_mapcheck_other_diff）
+    t.ok(ed.js("(()=>{let q,n=0;while((q=document.querySelector('#mcPanel .blF.blOther:not(.open)'))&&n<200){q.click();n++;}return n})()") > 0,
+         'Hard の所見の拍を出す')
     to = _jump_other_diff(t, ed, 'BL評価リスト')
     t.eq(to, 'HardStandard.dat', 'BL評価リストの拍で Hard へ戻る')
     _clean(t, ed, 'BL評価リストの拍で Hard へ飛んだ後')
