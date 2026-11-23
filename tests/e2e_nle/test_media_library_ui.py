@@ -153,8 +153,10 @@ def test_head_row_layout(t):
         t.ok(h[i]["vis"] and h[i]["r"] <= h["pane"]["r"] - 8, f"{i} は MEDIA の中に見えている")
     t.eq(lib(ed)["count"], "4曲・9譜面（全4曲）", "件数（全文はツールチップにも）")
     t.eq(ed.js("document.getElementById('libCount').title"), "4曲・9譜面（全4曲）", "件数の全文のツールチップ")
-    # 既定の幅では検索欄はフォルダを追加と同じ段の残り（約83px。2段目へ送ると3段になるので送らない）
-    t.ok(abs(h["libSearchBox"]["cy"] - h["libAddBtn"]["cy"]) <= 4, "既定の幅では検索欄はフォルダを追加と同じ段")
+    # 既定の幅では検索欄は2段目の頭（2026-11-22 から。左上の窓の見出しに MEDIA・PREVIEW・REPLAY の3つを並べて帯が広くなり、フォルダを追加の
+    # 右に残る幅が検索欄の最小より狭くなった＝送っても2段のまま。前はフォルダを追加と同じ段の残り約83px）
+    t.ok(h["libSearchBox"]["cy"] > h["libAddBtn"]["cy"] + 10 and abs(h["libSearchBox"]["cy"] - h["libFiltBtn"]["cy"]) <= 4,
+         "既定の幅では検索欄は2段目（フィルターと同じ段）")
     _set_pane(ed, 600)
     h = _head(ed)
     t.ok(h["libSearchBox"]["w"] >= 150, f"段に余った幅は検索欄が先に取る（600px で {h['libSearchBox']['w']:.0f}px）")
@@ -163,10 +165,11 @@ def test_head_row_layout(t):
     h = _head(ed)
     t.eq(_lines(h), 1, "広げると1段")
     t.ok(h["libAddBtn"]["l"] >= h["label"]["r"] + 6, "広げても帯と重ならない")
-    t.ok(_placeholder_fits(ed), "960px では検索欄の案内「曲名・アーティスト・マッパー」が全部見える")
     _set_pane(ed, 1100)
     h = _head(ed)
     t.eq(_lines(h), 1, "1100px でも1段")
+    # 案内「曲名・アーティスト・マッパー」が全部見えるのは 1100px（2026-11-22 から。左上の窓の見出しに3つを並べて帯が広くなった分、前の 960px では少し切れる）
+    t.ok(_placeholder_fits(ed), "1100px では検索欄の案内「曲名・アーティスト・マッパー」が全部見える")
     t.eq(ed.js("document.getElementById('libCount').textContent"), "4曲・9譜面（全4曲）", "もっと広げると件数は全文")
     t.ok(h["libSize"]["r"] <= h["pane"]["r"] - 8 and h["libSize"]["r"] >= h["pane"]["r"] - 30, "大きさのスライダーは行の右端")
     t.ok(h["libFiltClear"]["l"] - h["libCount"]["r"] <= 8, "［解除］は件数の文字のすぐ右")
@@ -186,16 +189,19 @@ def test_head_row_layout(t):
     t.ok(all(abs(r["searchCy"] - r["addCy"]) <= 4 and r["searchW"] >= 150 for r in mid),
          f"740〜800px: 検索欄は1段目で広い（{[(r['w'], round(r['searchW'])) for r in mid]}）")
     # 2段の時、検索欄は 140px 以上（1段目に細く押し込まれる幅＝520px 付近では2段目へ送る）。ただし一番狭い所（〜500px）と全部が1段に入る幅
-    # （820〜860px 付近）は、送ると段が増えるので細いまま1段目に残す（段を増やさないことを優先＝縦の場所を使わないため）
+    # （900〜940px 付近・2026-11-22 までは 820〜860px）は、送ると段が増えるので細いまま1段目に残す（段を増やさないことを優先＝縦の場所を使わないため）
+    # 〜500px は 100px 以上（2026-11-22 から。左上の窓の見出しに3つを並べて帯が広くなり、この幅では1段目に残らず2段目でフィルターの組と分け合う
+    # ＝480px で約 115px。前は1段目に約 83px で残していたので、それより広い）
     bad = [(r["w"], round(r["searchW"])) for r in rows
-           if r["lines"] == 2 and r["searchW"] < 139.5 and not (r["w"] <= 500 and abs(r["searchCy"] - r["addCy"]) <= 4)]
-    t.eq(bad, [], "2段の時は検索欄が 140px より細くならない（〜500px で1段目に残す時を除く。違った幅・検索欄の幅）")
-    t.ok(all(r["lines"] == 1 for r in rows if r["w"] >= 820), "820px 以上は1段（検索欄を送って段を増やさない）")
+           if r["lines"] == 2 and r["searchW"] < (99.5 if r["w"] <= 500 else 139.5)]
+    t.eq(bad, [], "2段の時は検索欄が 140px より細くならない（〜500px は 100px。違った幅・検索欄の幅）")
+    # 1段に収まるのは 900px から（2026-11-22 から。左上の窓の見出しに3つを並べて帯が約 80px 広くなった＝前は 820px）
+    t.ok(all(r["lines"] == 1 for r in rows if r["w"] >= 900), f"900px 以上は1段（検索欄を送って段を増やさない）: 1段 {[r['w'] for r in rows if r['lines'] == 1]}")
     _set_pane(ed, 480)
     # PREVIEW の時は出さない（Tab で切り替え）
     ed.move(240, 300); ed.wait(0.2); ed.key("Tab")
     wait_until(ed, "!document.getElementById('libHead').checkVisibility()", label="PREVIEW では見出しの行を出さない")
-    ed.move(240, 300); ed.wait(0.2); ed.key("Tab")
+    ed.move(240, 300); ed.wait(0.2); ed.key("Tab"); ed.wait(0.2); ed.key("Tab")   # PREVIEW → REPLAY → MEDIA（左上の窓は3つ・2026-11-22）
     wait_until(ed, "document.getElementById('libHead').checkVisibility()", label="MEDIA に戻す")
     ed.wait(0.3)
     h = _head(ed)
@@ -656,7 +662,7 @@ def test_measure_4000_rows_all_columns(t):
     ed.wait(0.8)
     s = lib(ed)
     t.eq((s["measured"]["count"], s["measured"]["dirty"]), (c0, True), "隠れている間は測らない（測り直しは後へ）")
-    ed.move(240, 300); ed.wait(0.2); ed.key("Tab")
+    ed.move(240, 300); ed.wait(0.2); ed.key("Tab"); ed.wait(0.2); ed.key("Tab")   # PREVIEW → REPLAY → MEDIA
     wait_until(ed, "document.getElementById('libTable').checkVisibility()", label="MEDIA に戻す")
     wait_until(ed, f"!window._dbgApp.lib().measured.dirty&&window._dbgApp.lib().measured.count>{c0}", label="戻ると測る")
     t.ok(lib(ed)["widths"]["stars"] > w0 + 30, f"★の列が「NLM推定 12.34」の幅に広がる（{w0} → {lib(ed)['widths']['stars']}px）")

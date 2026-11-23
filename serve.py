@@ -9,6 +9,7 @@ from media_library import MediaLibrary, LibError, RatingCache
 from song_details import SongDetails
 from beatsaver_api import BeatSaverLookup
 from song_analysis.service import AnalysisService, AnalysisError, MAX_UPLOAD as ANALYSIS_MAX_UPLOAD
+from replays import ReplayStore, ReplayError, KEEP_MAX as REPLAY_KEEP_MAX, EGG_MAX as REPLAY_EGG_MAX, stop_viewers
 
 # BASE_DIR = Webコンテンツの置き場（読み取り専用でよい）。exe化(PyInstaller)ではバンドル展開先を渡す。
 # DATA_DIR = 書き込み対象（config/settings.json と asset/*.nlmclip）。exe化では exe と同居のユーザー書込み可フォルダを渡す。
@@ -43,6 +44,10 @@ RATING_CACHE = RatingCache(DATA_DIR)
 # 曲の解析（song_analysis/。2026-10-19）。音源は OS の一時フォルダの下の専用フォルダに置く（exe 隣の config/ ではない）。
 # NLM_ANALYSIS_DIR はその置き場の差し替え（テスト用）
 ANALYSIS = AnalysisService(os.environ.get('NLM_ANALYSIS_DIR') or None)
+# REPLAY の窓（BeatLeader のリプレイ・replays.py・2026-11-22）。リプレイのフォルダは exe 版のダイアログ（app.py の Api.replay_pick_folder）で
+# 選んだ物か自動（MEDIA のライブラリに記録したフォルダから推定）。JS から場所を渡す口は無い。
+# NLM_REPLAYS はリプレイのフォルダの差し替え（テスト用。os.pathsep 区切り・あれば自動の検出をしない＝利用者の本物のリプレイを読まない）
+REPLAYS = ReplayStore(DATA_DIR, BASE_DIR, library=LIBRARY, env_dirs=os.environ.get('NLM_REPLAYS'))
 
 # ヘルプのメニュー・「NLM について」から開くページと文書（/__help/*・2026-10-28）。JS から受け取るのは下の表の名前と言語だけ
 # （URL・ファイルの場所はここに固定）。文書は exe の隣（DATA_DIR）を先に、無ければ BASE_DIR を探してメモ帳で開く。
@@ -642,6 +647,48 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
             return self._reply(200, {'ok': False, 'error': e.code, 'detail': e.detail})
         return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
 
+    def _replay(self):
+        # REPLAY の窓（replays.py）。JS から受け取るのは曲名・マッパー名・一覧の id・開く位置と、書き出しの控え（Info.dat・難易度の .dat・
+        # カバー・song.egg のバイト列とファイル名だけ）。リプレイのフォルダの場所は受け取らない。エラーは種類で返す（JS が訳す）
+        act = self.path.split('?', 1)[0][len('/__replay/'):]
+        n = self._content_length()
+        qs = parse_qs(urlsplit(self.path).query)
+        q1 = lambda k: (qs.get(k) or [''])[0]
+        try:
+            if act == 'keepEgg':   # 本体＝song.egg。?hash=<控えの hash>&sha1=<中身の SHA-1>
+                if n > REPLAY_EGG_MAX:
+                    self._discard(n)
+                    raise ReplayError('too-large')
+                self._raw = b''   # 本体は keep_egg が最後まで読む（_reply の _drain に読ませない）
+                return self._reply(200, REPLAYS.keep_egg(q1('hash'), q1('sha1'), self.rfile, n))
+            if act == 'keep':   # 本体＝ファイルを m の順に繋げた物。?m=<JSON {files:[{name,size}]}>
+                if n > REPLAY_KEEP_MAX:
+                    self._discard(n)
+                    raise ReplayError('too-large')
+                return self._reply(200, REPLAYS.keep(q1('m'), self._raw_body()))
+            if n > 1024 * 1024:
+                self._discard(n)
+                raise ReplayError('too-large')
+            try:
+                b = self._body()
+            except ValueError:
+                raise ReplayError('bad-request')
+            if not isinstance(b, dict):
+                raise ReplayError('bad-request')
+            if act == 'status':
+                return self._reply(200, REPLAYS.status())
+            if act == 'resetFolder':
+                return self._reply(200, REPLAYS.reset_folder())
+            if act == 'list':
+                return self._reply(200, REPLAYS.list(b.get('song')))
+            if act == 'open':   # viewer（別のオリジンの BL のリプレイアプリ）は最初の open で待ち始める
+                return self._reply(200, REPLAYS.open(b.get('id'), b.get('t'), self.server.server_address[1]))
+            if act == 'events':
+                return self._reply(200, REPLAYS.events(b.get('id')))
+        except ReplayError as e:
+            return self._reply(200, {'ok': False, 'error': e.code})
+        return self._reply(404, {'ok': False, 'error': 'unknown endpoint'})
+
     _JSON_MAX = 16 * 1024 * 1024   # 解析の JSON の本体の上限（目盛り at は1曲で数百KB）
 
     def _discard(self, n, cap=4 * 1024 ** 3):
@@ -733,6 +780,8 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
                 return self._lib()
             if self.path.startswith('/__help/'):   # ヘルプのページ・ライセンスの文書を開く。詳細は _help
                 return self._help()
+            if self.path.startswith('/__replay/'):   # REPLAY の窓（BeatLeader のリプレイ）。詳細は _replay
+                return self._replay()
             os.makedirs(ASSET_DIR, exist_ok=True)
             if self.path == '/__asset/save':
                 b = self._body()
@@ -783,12 +832,24 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             return self._reply(500, {'ok': False, 'error': str(e)})
 
+class _MainServer(http.server.ThreadingHTTPServer):
+    """本体のサーバー。止める時（shutdown・server_close）に、この本体の REPLAY の窓の viewer（replays.py・最初の open で待ち始めた
+    別の番号のサーバー）も止める＝app.py から起動した時も python serve.py 単体の時も同じ"""
+    def shutdown(self):
+        stop_viewers(self.server_address[1])
+        super().shutdown()
+
+    def server_close(self):
+        stop_viewers(self.server_address[1])
+        super().server_close()
+
+
 def make_server(port=8138, bind='127.0.0.1'):
     # ランチャー(app.py)から呼ぶ用。BASE_DIR/DATA_DIR は環境変数で差し替え済み。
     # NoCacheHandler は __init__ 内で directory=BASE_DIR を自前指定するため、ここでは渡さない。
     os.makedirs(CONFIG_DIR, exist_ok=True)
     os.makedirs(ASSET_DIR, exist_ok=True)
-    return http.server.ThreadingHTTPServer((bind, port), NoCacheHandler)
+    return _MainServer((bind, port), NoCacheHandler)
 
 if __name__ == '__main__':
     os.chdir(BASE_DIR)

@@ -8,6 +8,38 @@ For basic usage, see the [tutorial](docs/tutorial.en.md), the [advanced tutorial
 <!-- Format: one "## v1.2.3-oz" heading per version. Top-level bold items ("- **...**") are the headlines shown in the in-app
 update notice (tools/make_release.py puts them into update.json). Keep the same versions and the same number of headlines as CHANGELOG.md. -->
 
+## v2.2.0-oz
+
+- **Added "REPLAY" to the top-left pane (watch your BeatLeader replays inside NLM)**
+  Replays you played in Beat Saber after exporting from NLM (the .bsor files saved by the BeatLeader mod) open in the same viewer
+  as BeatLeader's web replays (the BL replay app, BeatSaber-Web-Replays). Press Tab over the top-left pane to cycle MEDIA → PREVIEW → REPLAY.
+  - The list shows only replays of the song you have open, played on a version exported from NLM (found by song name and mapper name).
+    Each row shows the difficulty, date, accuracy, number of misses, practice / failed / quit tags and the modifiers used.
+    After playing, come back from Beat Saber and press ↻ to reload the list.
+  - Every export keeps a copy of the exported map and song.egg. Even if you edit the map and export again after playing, the replay plays
+    with the map you played ("Earlier export" is shown). Versions exported before this version are copied when you open REPLAY,
+    if that version is still in the export folder. Replays without a copy are grayed out with "Can't play"
+    (NLM does not download maps from BeatSaver or anywhere else).
+  - The copies are kept in `replays/` in the same folder as the exe. They are not deleted automatically for now.
+  - The replay folder (`UserData\BeatLeader\Replays`) is found automatically from the song folders recorded in MEDIA (BSManager's SharedMaps,
+    Beat Saber's CustomLevels) and Steam's default location. If it isn't found, choose it with [Change…] below the list (exe version).
+    Replays are only read, never changed.
+  - Opening a replay switches NLM to the replay's difficulty (if the project has it).
+  - While [Sync] is on, NLM's playback position (NLE and 3D) follows the replay's play, pause and time bar. NLM's ▶, Space, the ruler and ← → also move
+    the replay (the replay plays the sound). Quit or failed plays stop at the end of the recording.
+  - Turn the mouse wheel over the replay to zoom toward the mouse pointer (1× to 8×).
+  - After clicking inside the replay, Tab (switching the pane) and Ctrl shortcuts (save, undo, ...) still work in NLM.
+- **Replay scores can be shown on the NLE and the 3D view**
+  While [Score] in the REPLAY header is on and the current difficulty matches the replay (Standard plays only), your results are shown on the map.
+  - 3D: notes get a ring in the score color. The colors are the same tiers as the BL replay app (115 = 6-color rainbow, 113+ purple, 110+ blue,
+    106+ green, 100+ yellow, 99 or less pink). Bad cuts get a thick orange ring, misses a thick red ring (with a large ✕), and bomb hits a thick magenta ring.
+    Hover over a note to see its score.
+  - NLE: the beat-number strip shows marks for misses ✕, bad cuts ◆, bombs ●, and walls ▬. Click a mark to jump there.
+  - Where you edited after playing and no note in the current map matches, no 3D ring is shown and the NLE mark is faded (the counts are in the legend row).
+- **The top-left pane header now lists all three screens**
+  Instead of the old "MEDIA [TAB] PREVIEW", it shows MEDIA, PREVIEW and REPLAY side by side, with a purple frame around the current one.
+  Click another name to switch to it.
+
 ## v2.1.2-oz
 
 - **Fixed BeatSaver rejecting exported maps**

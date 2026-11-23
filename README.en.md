@@ -15,7 +15,7 @@ helba kindly gave permission (in the comments on note) to publish, modify and re
 - **Reference manual**: https://helba.flashhub.net/nlm/manual/ (Japanese)
 - **Original changelog**: https://helba.flashhub.net/nlm/changelog.html (Japanese)
 - **Tutorials for this fork** (with screenshots): [basic](docs/tutorial.en.md) — from loading a song to placing notes, exporting and saving /
-  [advanced](docs/tutorial-advanced.en.md) — faster workflows, song analysis (tempo & structure), Edit only, linked clips, the MEDIA library, tempo, lights, the INFO screen, the checks before publishing and responding to ranking review notes
+  [advanced](docs/tutorial-advanced.en.md) — faster workflows, song analysis (tempo & structure), Edit only, linked clips, the MEDIA library, tempo, lights, the INFO screen, the checks before publishing, checking your replays and responding to ranking review notes
 
 The English tutorials show the English UI; the Japanese tutorials ([basic](docs/tutorial.md) / [advanced](docs/tutorial-advanced.md)) show the Japanese UI.
 
@@ -38,6 +38,9 @@ The English tutorials show the English UI; the Japanese tutorials ([basic](docs/
   in a tab of the map check panel, using the optional plugin [nlm-automodder](https://github.com/Oz-Co-two/nlm-automodder). **Not an official BeatLeader or AutoModder tool.**
 - **Ranking review notes**: load review notes ("beat - text" .txt files or the text of a Discord message), jump to each note on the map,
   mark notes as done, add replies and export them in the same form. NLM's check results can be exported in that form too.
+- **REPLAY (watch your replays)**: shows BeatLeader replays of maps you exported from NLM and played, in the same viewer as BeatLeader's web replays
+  ([BeatSaber-Web-Replays](https://github.com/BeatLeader/BeatSaber-Web-Replays)), in the top-left pane. It syncs with NLM's playback position, and misses, bad cuts and score colors
+  can be shown on the map in the NLE and the 3D view. Even if you edit and export again after playing, the replay plays with the map you played.
 - **Estimate difficulty (approx. BeatLeader stars)**: shows ★ and Pass / Tech / Acc with the optional plugin [nlm-rating](https://github.com/Oz-Co-two/nlm-rating).
   The values are approximations and this is **not an official BeatLeader tool**.
 - **Bring in existing maps**: load v2, v3 and v4 maps (tempo changes and environment included) with "Load song data" or by dragging them from MEDIA.
@@ -60,7 +63,7 @@ See [CHANGELOG.en.md](CHANGELOG.en.md) for the changes in each version.
 2. Extract it to a place you can write to (Desktop, Documents, etc.)
 3. Run `NonLinearMapper.exe` (it needs the `_internal` folder next to it)
 
-From v2.0.0-oz the app includes the components for song analysis (tempo & structure), so the zip is about 118 MB (about 290 MB after extracting).
+From v2.0.0-oz the app includes the components for song analysis (tempo & structure), so the zip is about 121 MB (about 290 MB after extracting; as of v2.2.0-oz).
 
 The exe is not code-signed, so Windows SmartScreen may show "Windows protected your PC" on the first launch.
 In that case, click "More info" → "Run anyway".
@@ -93,7 +96,7 @@ choose "Update" and the app downloads it and restarts. You can also use "Check f
 From v2.1.1-oz on, new versions of installed plugins ("Estimate difficulty" and the map check's "AutoModder") are announced the same way
 (plugin updates are installed without restarting the app).
 
-- `config/`, `asset/`, `lang/` and `plugins/` (preferences, clips, translations, plugins) are kept; only `NonLinearMapper.exe` and `_internal/` are replaced.
+- `config/`, `asset/`, `lang/`, `plugins/` and `replays/` (preferences, clips, translations, plugins, copies of exported maps for REPLAY) are kept; only `NonLinearMapper.exe` and `_internal/` are replaced.
 - The previous version is kept (one generation only) in `_previous_<version>` next to the exe. If something goes wrong with the new version,
   close the app and copy `NonLinearMapper.exe` and `_internal` from that folder back to the original place (you can delete the folder if you don't need it).
 - If you choose "Don't update", you won't be notified at startup again until an even newer version comes out. The startup check can be turned off in Preferences.
@@ -109,6 +112,8 @@ To update manually (or from v1.2.0-oz or earlier):
    - `config/` … preferences, shortcut assignments, etc.
    - `asset/` … clips saved with right-click → "Save to assets" in the NLE (not needed if you never saved any)
    - `lang/` … only if you edited a translation file yourself
+   - `plugins/` … installed plugins (Estimate difficulty, AutoModder; if you don't copy it, install them again when you use them)
+   - `replays/` … copies of exported maps used by REPLAY (from v2.2.0-oz; if you don't copy it, earlier replays may show "Can't play")
 5. Start the new `NonLinearMapper.exe` and check that the version in the window title and at the top right of the screen is the new one
    (opening `.nlmf` files by double-click switches to the new exe automatically when it starts)
 6. If everything works, you can delete the old folder

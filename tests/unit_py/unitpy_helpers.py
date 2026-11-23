@@ -43,6 +43,7 @@ def server():
     os.environ["NLM_NO_NET"] = "1"   # 全曲データ・BeatSaver の取得でネットへ出ない（serve.py の _no_net）
     os.environ["NLM_NO_OPEN"] = "1"   # ヘルプ・リリースのページ等をブラウザで開かない（開く物は応答の opened で返る）
     os.environ["NLM_ANALYSIS_DIR"] = os.path.join(s.data_dir, "analysis")   # 曲の解析の音源の置き場（OS の一時フォルダの専用フォルダを使わない）
+    os.environ["NLM_REPLAYS"] = os.path.join(s.data_dir, "bl-replays")   # REPLAY の窓のリプレイのフォルダ（利用者の本物のリプレイを読まない）
     os.environ.pop("NLM_OPEN_FILE", None)
     sys.path.insert(0, str(ROOT))
     if "serve" in sys.modules:

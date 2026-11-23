@@ -12,7 +12,7 @@ make_tutorial_shots.py のものを使う。NLE の帯の位置は _dbgApp.nleSc
 「曲を解析しますか？」(06-1b)と、解析が終わった時の「次にやること」の案内(06-3b)は、テストの環境（tools/cdp.py の Editor.TEST_SETTINGS）では
 出ない設定なので、撮る時だけ localStorage の bsnm_anaAsk / bsnm_anaGuide を消して出し（基本編と同じ analysis_helpers の ask_on・guide_on）、
 撮った後に '0' へ戻す。
-環境設定(11-1)の「曲の解析」の2つのチェックも、初めて使う人と同じ（オン）に見せて撮る。
+環境設定(12-1)の「曲の解析」の2つのチェックも、初めて使う人と同じ（オン）に見せて撮る。
 
 「曲を解析」(6章)は、解析の応答を自動テストと同じ偽物（tests/_lib/analysis_helpers.py の ana_mock）にして、見本の結果
 （TEMPO_SHOT・STRUCT_SHOT。曲名の無い、イントロ・Aメロ・Bメロ・サビが繰り返す形）で撮る。合成音を本当に解析しても中身が乏しいため。
@@ -32,15 +32,19 @@ make_tutorial_shots.py のものを使う。NLE の帯の位置は _dbgApp.nleSc
 読み込んだ後の知らせ(03-10)は作り物の v4 の見本（NJS の変化・ライトボックス・難易度ごとに違う環境）で、数秒で消えるので写しを作って撮る。
 3D プレビューに無い環境の印(03-11)の説明はツールチップ（ブラウザの吹き出し）で撮れないので、同じ文の写しの吹き出しを置いて撮る。
 
-10章「審査の指摘に対応する」(10-1〜10-5) も別の起動で、素材 tools/fixtures/rich.nlmf（Hard・Expert）を開き、作り物の指摘の文（RV_PASTE・RV_FILE・
-RV_NOHEAD。実物の審査の文は使わない）を読み込んで撮る。10-5 の★/Tech は「難易度を測る」の結果を使うので、プラグイン（NLM_RATING_DIR）があれば先に測る。
+10章「遊んだリプレイを見る（REPLAY）」(10-1〜10-4) も別の起動で、素材 rich（テンポパートを外す）を INFO から本当に書き出して書き出しの控えを作り、
+その版で遊んだことにした合成のリプレイ（作り物のプレイヤー・セイバーの動きも合成）を一時のリプレイのフォルダ（tools/cdp.py の ed.replays_dir）に
+置いて、本物の裏側と本物の BL のリプレイアプリで撮る（説明は replay_shots の上）。利用者の本物のリプレイは読まない。
+
+11章「審査の指摘に対応する」(11-1〜11-5) も別の起動で、素材 tools/fixtures/rich.nlmf（Hard・Expert）を開き、作り物の指摘の文（RV_PASTE・RV_FILE・
+RV_NOHEAD。実物の審査の文は使わない）を読み込んで撮る。11-5 の★/Tech は「難易度を測る」の結果を使うので、プラグイン（NLM_RATING_DIR）があれば先に測る。
 
 9章の AutoModder のタブ（09-7・09-8）は追加プラグイン nlm-automodder が要る。最初はプラグインの無い状態で取り込みの案内(09-8)を撮り、
 次に一時のデータフォルダへプラグインを置いて［GitHub から取り込む］を押す（取り込みの要求は状態の問い合わせに差し替える＝ネットへは出ない）。
 プラグインは、取り込み済みのフォルダ（plugins/automodder。中に current.json と版のフォルダ）を環境変数 NLM_AUTOMODDER_DIR で、
 または配布の zip を NLM_AUTOMODDER_ZIP で指定する。省略時は配布フォルダ NLM-app/plugins/automodder を探し、無ければ 09-7 は撮らない。
 
-MEDIA ライブラリ（3章・11章の MEDIA タブ）は、自動テストと同じ素材 tools/fixtures/media_lib（架空の曲）を一時フォルダの
+MEDIA ライブラリ（3章・12章の MEDIA タブ）は、自動テストと同じ素材 tools/fixtures/media_lib（架空の曲）を一時フォルダの
 「CustomLevels」へ写し、撮影用のデータフォルダの config/library.json に記録してから読み直させる（exe 版のフォルダ選択で
 選んだのと同じ状態。JS から記録を増やす口は無い）。部品は tests/_lib/e2e_helpers.py の media_lib_*（tests/ 側は変えない）。
 ネットへは出ない（tools/cdp.py が NLM_NO_NET=1）。全曲データ・NLM推定の★は見本の値（SAMPLE_DETAILS・media_lib_sample_extra）、
@@ -56,6 +60,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -68,6 +73,8 @@ import e2e_helpers as lib_h  # noqa: E402
 import analysis_helpers as ana_h  # noqa: E402
 import nle_helpers as nh  # noqa: E402
 import review_helpers as rv_h  # noqa: E402
+import replay_fixture as RF  # noqa: E402
+import replay_helpers as rp_h  # noqa: E402
 
 mts.OUT = HERE.parent / "docs" / "images" / ("tutorial-advanced-en" if mts.LANG == "en" else "tutorial-advanced")
 # 上級編だけで文言から要素を探す所の、英語表示での文言（lang/en.json と同じ。基本編の表 mts.TEXT_EN に足す）
@@ -555,7 +562,7 @@ def clip_link(ed, t):
 
 
 def media_library(ed, t):
-    """3章「MEDIA ライブラリ」と11章の環境設定の MEDIA タブ（03-3〜03-8・11-2）"""
+    """3章「MEDIA ライブラリ」と12章の環境設定の MEDIA タブ（03-3〜03-8・12-2）"""
     # 素材（架空の曲）を一時フォルダの CustomLevels へ写して記録する（カタログに「CustomLevels」と出る）。
     # Extras の画像・音楽は名前だけ分かりやすくする（見本の値は曲のフォルダ名で引くので影響しない）
     tmp = Path(tempfile.mkdtemp(prefix="nlm_shots_lib_"))
@@ -645,7 +652,7 @@ def media_library(ed, t):
                clip=box(ed, ["#ctxmenu", [x - 60, y - 40, 120, 80], [x2 - 60, y2 - 14, 120, 28]], pad=50))
         hide_menu(ed)
 
-        # ---- 11-2: 環境設定の MEDIA タブ ----
+        # ---- 12-2: 環境設定の MEDIA タブ ----
         # exe 版の画面（［ファイルを選ぶ…］がある）で撮るため、exe 版の窓口（pywebview）のプレイ記録の選択だけを置く。撮った後に外す
         ed.js("window.pywebview={api:{lib_pick_playdata:async()=>null}};true")
         t.click_el("#mbSettings"); ed.wait(0.3); t.click_el(".mbMenu button[data-act=settings]"); ed.wait(0.6)
@@ -659,7 +666,7 @@ def media_library(ed, t):
           const a=document.getElementById('libRatePar').closest('.slRow'), b=a.nextElementSibling;
           const r1=a.getBoundingClientRect(), r2=b.getBoundingClientRect();
           return [r1.left, r1.top, Math.max(r1.right,r2.right)-r1.left, r2.bottom-r1.top]; })()""")
-        t.shot("11-2-settings-media", marks=json.dumps([{"t": "#tutSetNet", "n": 1, "at": "l"}, {"t": rate, "n": 2, "at": "l"},
+        t.shot("12-2-settings-media", marks=json.dumps([{"t": "#tutSetNet", "n": 1, "at": "l"}, {"t": rate, "n": 2, "at": "l"},
                                                          {"t": "#tutSetPlay", "n": 3, "at": "l"}]),
                clip=box(ed, ["#settingsBox"], pad=40))
         t.click_el("#settingsBox .setTab[data-tab=app]"); ed.wait(0.3)
@@ -792,7 +799,293 @@ def bulk_notices(ed, t):
     ed.js("document.getElementById('tutToast').remove();true")
 
 
-# ---- 10章「審査の指摘に対応する」（10-1〜10-5）。指摘の文は作り物（実物の審査の文は使わない）。
+# ---- 10章「遊んだリプレイを見る（REPLAY）」（10-1〜10-4） ----
+# 素材 rich を開き（テンポパートを外す＝下の注意）、INFO から本当に書き出して（ブラウザの中の仮想フォルダ）書き出しの控え（一時のデータフォルダの
+# replays/）を作り、その版で遊んだことにした合成のリプレイ（.bsor）を一時のリプレイのフォルダ（tools/cdp.py の ed.replays_dir＝NLM_REPLAYS）に置いて、
+# 本物の裏側（serve.py の /__replay/*）・本物の BL のリプレイアプリ（replay-viewer/blreplay/）で撮る。利用者の本物のリプレイ・プレイヤーは使わない
+# （プレイヤーの番号は tests/_lib/replay_fixture.py の作り物・名前は RP_PLAYER）。リプレイの場所は一時フォルダ（PC のユーザー名を含む）なので、
+# 一覧の下の表示だけ Steam の既定の場所（RP_DIR_SHOWN）・「（自動）」に置き換えて撮る。
+# テンポパートを外す理由: BL のリプレイアプリ（2026-11 に写した版）は、最初の BPM 変化が拍 0 に無い譜面で、その変化より前の拍を後の BPM で
+# 秒にしてしまう（拍16から BPM 150 の rich では拍1が 2 秒になる）＝ノーツの時刻がリプレイの出来事とずれて、ノーツが出ない。
+# 一覧の3行: ①最新の書き出しで遊んだ Expert（再生して撮る物）②1つ前の書き出し（Hard の NJS を変える前）で遊んで途中でやめた Hard
+# ③控えの無い版（灰色）。セイバーの動き（フレーム）は、切る時刻の前後に振りかぶる・振り抜く形を補って作る（_rp_frames）。
+RP_PLAYER = "Player"
+RP_DIR_SHOWN = r"C:\Program Files (x86)\Steam\steamapps\common\Beat Saber\UserData\BeatLeader\Replays"
+RP_SRC_AUTO = {"ja": "（自動）", "en": "(automatic)"}   # lang の rp.src.auto
+# 点の段 → 切った時の (振り始め, 振り終わり, 真ん中からの距離)。点＝70×振り始め＋30×振り終わり＋15×(1−距離÷0.3)（bsor.py の cut_score）
+RP_CUT = {115: (1.0, 1.0, 0.0), 113: (1.0, 1.0, 0.04), 110: (1.0, 1.0, 0.1), 106: (1.0, 1.0, 0.18), 104: (1.0, 0.8, 0.1), 83: (0.86, 0.6, 0.2)}
+# 素材 rich の Expert に合わせた出来事: (拍, 列, 段, 色, 向き, 点の種類（3 通常・4 アークの頭・5 アークの尾・6 チェーンの頭）, 結果（点の段・'bad'・'miss'）)
+RP_PLAN = [
+    (1, 1, 0, 0, 1, 3, 115), (1, 2, 0, 1, 1, 3, 113), (2, 1, 0, 0, 0, 3, 110), (2, 2, 0, 1, 0, 3, 106),
+    (3, 0, 1, 0, 2, 3, "bad"), (3, 3, 1, 1, 3, 3, 115), (4, 1, 2, 0, 4, 3, 104), (4, 2, 2, 1, 5, 3, 115),
+    (5, 0, 0, 0, 6, 3, 83), (5, 3, 0, 1, 7, 3, 113), (6, 1, 1, 0, 8, 3, 115), (6, 2, 1, 1, 8, 3, "miss"),
+    (7.5, 1, 0, 0, 1, 3, 110), (10, 1, 2, 0, 1, 6, 115), (12, 2, 2, 1, 1, 6, 110),
+    (14, 1, 0, 0, 1, 4, 115), (16, 1, 2, 0, 0, 5, 113), (17, 0, 1, 0, 2, 3, 110), (18, 2, 0, 1, 1, 4, 115),
+    (19, 3, 1, 1, 3, 3, 106), (20, 2, 2, 1, 0, 5, "miss"), (22, 1, 0, 0, 1, 3, 115), (22, 2, 0, 1, 1, 3, 115),
+    (24, 1, 1, 0, 8, 3, 113), (24, 2, 1, 1, 8, 3, 110),
+]
+# チェーンのつなぎ目（BL のリプレイアプリの番号の付け方: 頭の列・段・向き 8、最後だけ尾の列・段）: (拍, 列, 段, 色)
+RP_LINKS = [(10 + 0.5 * i / 4, 1, 2 if i < 4 else 0, 0) for i in range(1, 5)] + [(12 + 0.5 * i / 3, 2, 2 if i < 3 else 0, 1) for i in range(1, 4)]
+RP_BOMBS = [(8, 3, 0)]   # 当たったボム (拍, 列, 段)
+RP_WALLS = [(9.2, 1)]    # 入った壁 (拍, 壁の番号)
+# ②の Hard（途中でやめた＝5.5 秒まで）と、③の灰色の行（Expert をミス無く）
+RP_PLAN_HARD = [(2, 1, 0, 0, 1, 3, 115), (3, 2, 0, 1, 1, 3, 113), (4, 0, 1, 0, 2, 3, 110), (5, 3, 1, 1, 3, 3, "miss"),
+                (6, 1, 0, 0, 8, 3, 106), (8, 2, 0, 1, 1, 4, 115), (10, 2, 2, 1, 0, 5, 113)]
+RP_PLAN_CLEAN = [p[:6] + (110 if p[6] in ("bad", "miss") else p[6],) for p in RP_PLAN]
+RP_SWING = {0: (0, 1), 1: (0, -1), 2: (-1, 0), 3: (1, 0), 4: (-0.7, 0.7), 5: (0.7, 0.7), 6: (-0.7, -0.7), 7: (0.7, -0.7), 8: (0, -1)}
+
+
+def _rp_sec(b):
+    """拍 → 曲の秒（テンポパートを外した rich＝BPM 120）"""
+    return b * 0.5
+
+
+def _rp_quat(v):
+    """前（0,0,1）を向き v へ回す回転（x,y,z,w）"""
+    import math
+    n = math.sqrt(sum(a * a for a in v)) or 1.0
+    v = [a / n for a in v]
+    d = v[2]
+    if d > 0.999999:
+        return (0.0, 0.0, 0.0, 1.0)
+    ax = [-v[1], v[0], 0.0]   # (0,0,1)×v
+    al = math.sqrt(ax[0] ** 2 + ax[1] ** 2) or 1.0
+    ang = math.acos(max(-1.0, min(1.0, d)))
+    s = math.sin(ang / 2)
+    return (ax[0] / al * s, ax[1] / al * s, 0.0, math.cos(ang / 2))
+
+
+def _rp_hand_keys(cuts, c):
+    """その手の切る所 [(秒, 列, 段, 向き)] → 手の位置と刃の向きの鍵 [(秒, 位置, 向き)]（切る 0.16 秒前に振りかぶり・後に振り抜く）"""
+    keys = [(0.0, (-0.3 if c == 0 else 0.3, 1.0, 0.25), (0.0, 0.35, 1.0))]
+    for t, x, y, d in sorted(cuts):
+        sx, sy = RP_SWING.get(d, (0, -1))
+        hx, hy = (x - 1.5) * 0.45 + (-0.08 if c == 0 else 0.08), 0.6 + y * 0.5
+        keys.append((t - 0.16, (hx - sx * 0.12, hy - sy * 0.15, 0.25), (-sx * 1.3, 0.25 - sy * 1.3, 1.0)))
+        keys.append((t, (hx, hy, 0.3), (0.0, 0.25, 1.0)))
+        keys.append((t + 0.16, (hx + sx * 0.12, hy + sy * 0.15, 0.28), (sx * 1.3, 0.25 + sy * 1.3, 1.0)))
+    return sorted(keys, key=lambda k: k[0])
+
+
+def _rp_at(keys, t):
+    if t <= keys[0][0]:
+        return keys[0][1], keys[0][2]
+    for a, b in zip(keys, keys[1:]):
+        if a[0] <= t <= b[0]:
+            w = (t - a[0]) / max(1e-6, b[0] - a[0])
+            w = w * w * (3 - 2 * w)
+            return (tuple(a[1][i] + (b[1][i] - a[1][i]) * w for i in range(3)), tuple(a[2][i] + (b[2][i] - a[2][i]) * w for i in range(3)))
+    return keys[-1][1], keys[-1][2]
+
+
+def _rp_frames(cuts, end, fps=60):
+    """フレーム（.bsor の 1 の区切り）: 頭は少し揺れるだけ・両手は _rp_hand_keys の鍵の間をなめらかにつなぐ"""
+    import math
+    import struct
+    kl, kr = _rp_hand_keys(cuts[0], 0), _rp_hand_keys(cuts[1], 1)
+    n = int(end * fps) + 1
+    out = [struct.pack("<Bi", 1, n)]
+    for i in range(n):
+        t = min(end, i / fps)
+        head = (0.04 * math.sin(t * 1.3), 1.62 + 0.02 * math.sin(t * 2.1), 0.0) + _rp_quat((0.05 * math.sin(t * 0.9), -0.12, 1.0))
+        pl, vl = _rp_at(kl, t)
+        pr, vr = _rp_at(kr, t)
+        out.append(struct.pack("<fi", t, fps) + struct.pack("<7f", *head) + struct.pack("<7f", *(tuple(pl) + _rp_quat(vl)))
+                   + struct.pack("<7f", *(tuple(pr) + _rp_quat(vr))))
+    return b"".join(out)
+
+
+def _rp_bsor(song, mapper, h, diff, plan, links=(), bombs=(), walls=(), end=15.9, ts=0, score=0):
+    """合成の .bsor（BeatLeader の Open Replay Format。形は tests/_lib/replay_fixture.py の bsor_bytes と同じで、セイバーの動き・
+    切った手（saberType）・点の段を足した物）"""
+    import struct
+
+    def s(x):
+        b = x.encode("utf-8")
+        return struct.pack("<i", len(b)) + b
+    notes, cuts = [], {0: [], 1: []}
+    for b, x, y, c, d, st, res in plan:
+        t = _rp_sec(b)
+        nid = RF.nid(st, x, y, c, d)
+        if res == "miss":
+            notes.append((nid, t + 0.15, t, RF.MISS, c, 0, 0, 0))
+            continue
+        if res == "bad":
+            notes.append((nid, t + 0.01, t, RF.BAD, c, 0.5, 0.2, 0.2))
+        elif st == 6:   # チェーンの頭（振り終わりは数えない・満点 85）
+            notes.append((nid, t + 0.01, t, RF.GOOD, c, 1.0, 0.0, 0.0 if res == 115 else 0.1))
+        else:
+            notes.append((nid, t + 0.01, t, RF.GOOD, c) + RP_CUT[res])
+        cuts[c].append((t, x, y, d))
+    for b, x, y, c in links:
+        notes.append((RF.nid(7, x, y, c, 8), _rp_sec(b) + 0.01, _rp_sec(b), RF.GOOD, c, 0.0, 0.0, 0.0))
+    for b, x, y in bombs:   # ボムの番号: 点の種類 2・色 -1・向き 9（＝下 1 桁が 9）
+        notes.append((2 * 10000 + x * 1000 + y * 100 - 10 + 9, _rp_sec(b) + 0.01, _rp_sec(b), RF.BOMB, 0, 0, 0, 0))
+    notes.sort(key=lambda n: n[1])
+    head = struct.pack("<iBB", RF.MAGIC, 1, 0)
+    info = b"".join(s(x) for x in ["0.9.0", "1.40.8", str(ts), RF.PLAYER, RP_PLAYER, "steam", "Oculus", "Quest3", "Touch",
+                                    h, song, mapper, diff]) + struct.pack("<i", score)
+    info += s("Standard") + s("DefaultEnvironment") + s("") + struct.pack("<f?ffff", 17.0, False, 1.75, 0.0, 0.0, 1.0)
+    ns = struct.pack("<Bi", 2, len(notes))
+    for nid, t, sp, kind, c, before, after, dist in notes:
+        ns += struct.pack("<iffi", nid, t, sp, kind)
+        if kind in (RF.GOOD, RF.BAD):
+            ns += struct.pack("<????f3fiff3f3f4f", True, kind == RF.GOOD, True, False, 4.0, 0, -1, 0, c, 0.0, 0.0,
+                              0, 1, 0, 1, 0, 0, dist, 0.0, before, after)
+    ws = struct.pack("<Bi", 3, len(walls)) + b"".join(struct.pack("<ifff", wid, 0.8, _rp_sec(b), _rp_sec(b) - 0.2) for b, wid in walls)
+    return head + info + _rp_frames(cuts, end) + ns + ws + struct.pack("<Bi", 4, 0) + struct.pack("<Bi", 5, 0)
+
+
+def _rp_write(folder, song, mapper, h, diff, plan, flags=(), **kw):
+    """合成の .bsor を BeatLeader と同じ形の名前で folder に書く（ヘッダーの点は出来事から計算して入れる）"""
+    import bsor
+    data = _rp_bsor(song, mapper, h, diff, plan, **kw)
+    data = _rp_bsor(song, mapper, h, diff, plan, score=bsor.base_score(bsor.parse(data)), **kw)
+    (Path(folder) / RF.replay_name(song=song, diff=diff, h=h, ts=kw.get("ts", 0), flags=flags)).write_bytes(data)
+
+
+def _rp_kept(ed):
+    """書き出しの控え（音つき）→ [(hash, 書き出した時刻)] 古い順"""
+    root = Path(ed.data_dir) / "replays" / "maps"
+    out = []
+    for p in root.glob("*/nlm.json") if root.is_dir() else ():
+        m = json.loads(p.read_text(encoding="utf-8"))
+        if m.get("egg"):
+            out.append((p.parent.name, m.get("exportedAt") or 0))
+    return sorted(out, key=lambda x: x[1])
+
+
+def _rp_export(ed, t, n, first):
+    """INFO の書き出しノードから書き出し（first＝出力フォルダを選んで名前を入れる）、書き出しの控えが n 個（音つき）になるまで待つ"""
+    ed.move(1200, 300); ed.wait(0.3); ed.key("Tab"); ed.wait(1.5)   # NLE の上で Tab = INFO へ
+    if first:
+        t.click_el("#infoWorld button.oPick"); ed.wait(1.0)
+        t.click_el("#infoWorld input.oName"); ed.wait(0.2); t.type("RichTestSong"); ed.wait(0.3)
+    ed.js("(()=>{const b=[...document.querySelectorAll('#infoWorld button')].find(x=>x.textContent.includes(" + repr(mts.L("カスタム曲書き出し"))
+          + "));b.id='tutExportBtn';return 1})()")
+    t.click_el("#tutExportBtn")
+    for _ in range(120):
+        if len(_rp_kept(ed)) >= n:
+            break
+        ed.wait(0.5)
+    else:
+        raise SystemExit(f"書き出しの控えが {n} 個になりません: {_rp_kept(ed)} {ed.errors()}")
+    hide_toast(ed)
+    ed.move(1200, 300); ed.key("Tab"); ed.wait(1.0)   # NLE へ戻す
+
+
+def tip_box(ed, x, y, text, tid="tutTip"):
+    """ツールチップ（ブラウザの吹き出しは撮れない）の写しを (x, y) に置く（見た目は tooltip_copy と同じ）。画面の右端に入るよう左へ寄せる"""
+    ed.js(f"""(()=>{{ const tip=document.createElement('div'); tip.id={tid!r}; tip.textContent={json.dumps(text)};
+      Object.assign(tip.style,{{position:'fixed',left:Math.round({x})+'px',top:Math.round({y})+'px',maxWidth:'460px',padding:'5px 9px',
+        background:'#2b2b2b',color:'#f2f2f2',border:'1px solid #6e6e6e',borderRadius:'4px',font:'12px/1.45 "Segoe UI","Yu Gothic UI",sans-serif',
+        whiteSpace:'pre-wrap',zIndex:99997,boxShadow:'1px 2px 6px rgba(0,0,0,.55)',pointerEvents:'none'}});
+      document.body.appendChild(tip);
+      const tr=tip.getBoundingClientRect(); if(tr.right>{RIGHT - 12}) tip.style.left=Math.max(8,{RIGHT - 12}-tr.width)+'px';
+      return 1; }})()""")
+    ed.wait(0.2)
+
+
+def replay_shots(ed, t):
+    """10章 REPLAY: 10-1 一覧 → 10-2 再生中の窓（同期・点数・ズームの案内）→ 10-3 NLE の拍番号の帯の印 → 10-4 3D の点数の輪"""
+    song = "Rich Test Song" if mts.LANG == "en" else "リッチ テスト曲"
+    mapper = "NLM Tester"
+    # 書き出しを2回（2回目の前に Hard の NJS を1つ上げる＝Info.dat が変わり別の版になる。Expert の譜面は同じ）
+    _rp_export(ed, t, 1, True)
+    t.click_el("#njsField .bfA[data-k=up]"); ed.wait(0.4)
+    _rp_export(ed, t, 2, False)
+    (h_old, _), (h_new, _) = _rp_kept(ed)[-2:]
+    now = int(time.time())
+    _rp_write(ed.replays_dir, song, mapper, h_new, "Expert", RP_PLAN, links=RP_LINKS, bombs=RP_BOMBS, walls=RP_WALLS, end=15.9, ts=now - 600)
+    _rp_write(ed.replays_dir, song, mapper, h_old, "Hard", RP_PLAN_HARD, flags=("exit",), end=5.5, ts=now - 3 * 3600)
+    _rp_write(ed.replays_dir, song, mapper, "5e" * 20, "Expert", RP_PLAN_CLEAN, links=RP_LINKS, end=15.9, ts=now - 2 * 86400)
+
+    # ---- 10-1: 一覧（①見出し ②読み直す ③開いている行 ④以前の書き出し ⑤灰色の行 ⑥リプレイの場所） ----
+    # exe 版の画面（［変更…］がある）で撮るため、exe 版の窓口（pywebview）のフォルダの選択だけを置く。撮った後に外す
+    ed.js("window.pywebview={api:{replay_pick_folder:async()=>null}};true")
+    rp_h.to_replay(ed)
+    rp_h.wait_list(ed, 3)
+    rp_h.wait_state(ed, "linked", timeout=60)   # 一番新しい再生できる物（①）が自動で開く
+    wait_until(ed, "(r=>r.ready&&r.dur>10)(window._dbgApp.replay())", "BL のリプレイアプリが曲を読めません", timeout=60)
+    rp_h.click_id(ed, "#rpBack")
+    wait_until(ed, "window._dbgApp.replay().view==='list'", "一覧へ戻れません")
+    ok = ed.js(f"""(()=>{{ const p=document.querySelector('#rpDirs .rpDirPath'), s=document.querySelector('#rpDirs .rpDirSrc');
+      if(!p||!s) return false; p.textContent={json.dumps(RP_DIR_SHOWN)}; p.title=p.textContent; s.textContent={json.dumps(RP_SRC_AUTO[mts.LANG])};
+      const rows=[...document.querySelectorAll('#rpList .rpRow')];
+      const cur=rows.find(r=>r.classList.contains('cur')), old=rows.find(r=>r.querySelector('.rpVer.old')), off=rows.find(r=>r.classList.contains('off'));
+      if(!cur||!old||!off) return false; cur.id='tutRpCur'; old.id='tutRpOld'; off.id='tutRpOff'; return !document.getElementById('rpPick').hidden; }})()""")
+    if not ok:
+        raise SystemExit("REPLAY の一覧が見本と違います: " + json.dumps(rp_h.rp(ed), ensure_ascii=False)[:800])
+    ed.move(1700, 1060); ed.wait(0.4)
+    t.shot("10-1-replay-list", marks="""[{t:'#pvModeLabel .mlSet',n:1,at:'tl'},{t:'#rpReloadList',n:2,at:'r'},{t:'#tutRpCur',n:3,at:'tr'},
+      {t:'#tutRpOld',n:4,at:'tr'},{t:'#tutRpOff',n:5,at:'tr'},{t:'#rpFoot',n:6,at:'tr'}]""", clip=media_pane_clip(ed))
+    ed.js("delete window.pywebview;true")
+
+    # ---- 10-2: 再生中の窓（①一覧へ ②同期 ③点数 ④開き直す ⑤凡例 ⑥ズームの案内）。NLM の ▶（Space）でリプレイも進む ----
+    rp_h.click_id(ed, "#tutRpCur")
+    rp_h.wait_state(ed, "linked", timeout=30)
+    g = nle(ed, 2)
+    ed.click(g["x"], g["ruler"] + 6)   # 拍2（1 秒）へ＝リプレイも同じ秒へ
+    wait_until(ed, "(r=>Math.abs(r.t-1)<0.05&&!r.hold)(window._dbgApp.replay())", "リプレイが 1 秒へ動きません")
+    ed.wait(1.0)
+    nh.nle_mouse(ed); ed.key(" ")
+    wait_until(ed, "(r=>r.playing&&r.t>1.05)(window._dbgApp.replay())", "リプレイが再生で進みません")
+    ed.wait(1.15)   # 拍4〜5（2〜2.5 秒）の切る所
+    t.shot("10-2-replay-play", marks="""[{t:'#rpBack',n:1,at:'tl'},{t:'#rpSync',n:2,at:'tl'},{t:'#rpMarks',n:3,at:'tl'},{t:'#rpReopen',n:4,at:'tr'},
+      {t:'#rpMk',n:5,at:'b'},{t:'#rpZoom',n:6,at:'l'}]""", clip=media_pane_clip(ed))
+    nh.nle_mouse(ed); ed.key(" ")
+    wait_until(ed, "(r=>!r.playing&&!r.nlm.playing)(window._dbgApp.replay())", "リプレイを止められません")
+
+    # ---- 10-3: NLE の拍番号の帯の印（①バッド ②ミス ③ボム ④壁）と、印の上のツールチップ（写し） ----
+    g = nle(ed, 0.5)
+    ed.click(g["x"], g["ruler"] + 6)   # 再生位置（赤い線）を印に重ねない
+    wait_until(ed, "Math.abs(window._dbgApp.state().cur-0.5)<1e-6", "拍0.5へ動きません")
+    wait_until(ed, "(m=>m&&m.on&&m.marks.length===5)(window._dbgApp.rpMarks())",
+               lambda: "NLE の点の印が見本と違います: " + json.dumps(ed.js("window._dbgApp.rpMarks().marks")))
+    mk = {(q["kind"], q["beat"]): q for q in ed.js("window._dbgApp.rpMarks().marks")}
+    q = mk[("miss", 6)]
+    ed.move(q["x"] + q["w"] / 2, q["y"] + q["h"] / 2)
+    wait_until(ed, "!!document.getElementById('ndcv').title", "印のツールチップが出ません")
+    tip = ed.js("document.getElementById('ndcv').title")
+    g = nle(ed)
+    tip_box(ed, q["x"] - 20, g["lanes"] + g["laneH"] + 6, tip)
+    box_of = lambda q: [q["x"], q["y"], q["w"], q["h"]]
+    x22 = nle(ed, 22)["x"]
+    t.shot("10-3-replay-nle-marks", marks=json.dumps([
+        {"t": box_of(mk[("bad", 3)]), "n": 1, "at": "b", "pad": 5}, {"t": box_of(mk[("miss", 6)]), "n": 2, "at": "b", "pad": 5},
+        {"t": box_of(mk[("bomb", 8)]), "n": 3, "at": "b", "pad": 5}, {"t": box_of(mk[("wall", 9.2)]), "n": 4, "at": "b", "pad": 5},
+        {"t": box_of(mk[("miss", 20)]), "n": 2, "at": "b", "pad": 5}]),
+        clip=(round(g["left"]) - 6, round(g["ruler"]) - 30, round(x22 - g["left"]) + 12, round(g["lanes"] + g["laneH"] * 2 + 40 - g["ruler"])))
+    ed.js("document.getElementById('tutTip').remove();true")
+
+    # ---- 10-4: 3D の点数の輪（①115＝虹色 ②ほかの段の色 ③バッド＝橙の太い輪 ④ミス＝赤い太い輪と ✕）と、ノーツの上のツールチップ（写し）。
+    # 拍3〜6の輪が見えるよう再生位置を拍3にし、上の端のツールバー（配置モードなど・この画像の説明に要らない）を撮る間だけ隠す ----
+    g = nle(ed, 3)
+    ed.click(g["x"], g["ruler"] + 6)
+    wait_until(ed, "Math.abs(window._dbgApp.state().cur-3)<1e-6", "拍3へ動きません")
+    ed.js("document.getElementById('maintb').style.visibility='hidden';true")
+    ed.wait(1.0)
+    objs = [o for o in ed.js("window._dbgApp.objScreen()") if o["kind"] == "note" and o["inView"]]
+    at = lambda b, x, y: next((o for o in objs if abs(o["beat"] - b) < 1e-6 and o["x"] == x and o["y"] == y), None)
+    pick = {"t115": at(3, 3, 1), "t100": at(4, 1, 2), "bad": at(3, 0, 1), "miss": at(6, 2, 1)}
+    if not all(pick.values()) or not at(4, 2, 2) or not at(6, 1, 1):
+        raise SystemExit("3D に見本のノーツが見えていません: " + str({k: bool(v) for k, v in pick.items()}))
+    lane = {3: abs(pick["t115"]["sx"] - pick["bad"]["sx"]) / 3, 4: abs(at(4, 2, 2)["sx"] - pick["t100"]["sx"]),
+            6: abs(pick["miss"]["sx"] - at(6, 1, 1)["sx"])}   # 拍ごとの1列の画面の幅（輪の大きさの目安）
+    o = pick["t100"]
+    ed.move(o["sx"], o["sy"])
+    wait_until(ed, "!!window._dbgApp.rpMarks().tip3", "3D のノーツのツールチップが出ません")
+    tip3 = ed.js("window._dbgApp.rpMarks().tip3")
+    tip_box(ed, o["sx"] - 120, o["sy"] + lane[4] * 0.9 + 8, tip3)
+    ring = lambda o, k=0.85: [o["sx"] - lane[o["beat"]] * k, o["sy"] - lane[o["beat"]] * k, lane[o["beat"]] * 2 * k, lane[o["beat"]] * 2 * k]
+    t.shot("10-4-replay-3d-rings", marks=json.dumps([
+        {"t": ring(pick["t115"]), "n": 1, "at": "tr", "pad": 0}, {"t": ring(pick["t100"]), "n": 2, "at": "tl", "pad": 0},
+        {"t": ring(pick["bad"]), "n": 3, "at": "tl", "pad": 0}, {"t": ring(pick["miss"], 1.0), "n": 4, "at": "tr", "pad": 0}]),
+        clip=VIEW3D)
+    ed.js("document.getElementById('tutTip').remove(); document.getElementById('maintb').style.visibility=''; true")
+
+
+# ---- 11章「審査の指摘に対応する」（11-1〜11-5）。指摘の文は作り物（実物の審査の文は使わない）。
 # 素材 rich の Expert: ノーツ 1〜6（2個ずつ）・7.5・10・12…／ボム 8・21／アーク 14・18 ----
 RV_PASTE = """Expert
 4 - the first notes come in a bit suddenly, consider more lead time
@@ -810,12 +1103,17 @@ RV_NOHEAD = """3 - double check this note
 RV_REPLY = "Moved them half a beat later"
 
 
-def load_rich(ed):
+def load_rich(ed, tempo=True):
     """素材 rich（Hard・Expert）を開き、basic.wav を音源にする（tools/cdp.py の load_fixture と同じ）。
-    英語で撮る時は、素材の日本語の曲名・クリップの名前（リッチ テスト曲）を英語にする（英語版の画像に日本語を写さない）"""
+    英語で撮る時は、素材の日本語の曲名・クリップの名前（リッチ テスト曲）を英語にする（英語版の画像に日本語を写さない）。
+    tempo=False は素材のテンポパート（拍16から BPM 150）を外す（10章 REPLAY。下の replay_shots の説明）"""
     text = (HERE / "fixtures" / "rich.nlmf").read_text(encoding="utf-8")
     if mts.LANG == "en":
         text = text.replace("リッチ テスト曲", "Rich Test Song")
+    if not tempo:
+        pj = json.loads(text)
+        pj["tempoParts"] = []
+        text = json.dumps(pj, ensure_ascii=False)
     ed.js("""(async()=>{ const rt=window._dbg.rt; const pj=%s;
       await rt.applyProject(pj);
       const blob=await (await fetch('tools/fixtures/basic.wav',{cache:'no-store'})).blob();
@@ -834,9 +1132,9 @@ def _rv_mark_row(ed, text, sel, tid):
 
 
 def review_notes(ed, t):
-    """10章「審査の指摘に対応する」: 10-2 貼り付けの画面 → 読み込む → 10-3 2回目の読み込みの確認（ファイル＋見出しの無い文・足すか置き換えるか）→
-    10-1 一覧（1行へ飛び、返事を書き、別の行を済みに）→ 10-4 NLE の数字の帯の印 → 10-5 書き出し（NLM の確かめの結果）"""
-    # ★/Tech（10-5 の R5.A）は「難易度を測る」の結果を使うので、プラグインがあれば先に測っておく
+    """11章「審査の指摘に対応する」: 11-2 貼り付けの画面 → 読み込む → 11-3 2回目の読み込みの確認（ファイル＋見出しの無い文・足すか置き換えるか）→
+    11-1 一覧（1行へ飛び、返事を書き、別の行を済みに）→ 11-4 NLE の数字の帯の印 → 11-5 書き出し（NLM の確かめの結果）"""
+    # ★/Tech（11-5 の R5.A）は「難易度を測る」の結果を使うので、プラグインがあれば先に測っておく
     if (PLUGIN_DIR / "current.json").exists():
         shutil.copytree(PLUGIN_DIR, Path(ed.data_dir) / "plugins" / "rating")
         t.click_el("#mCheckBtn"); ed.wait(0.5)
@@ -844,20 +1142,20 @@ def review_notes(ed, t):
         wait_until(ed, "!!document.querySelector('#rtPanel .rtTable, #rtPanel .rtErr')", "難易度を測るの結果が出ません", timeout=90)
         t.click_el("#rtPanel .rtClose"); ed.wait(0.4)
 
-    # ---- 10-2: 貼り付けの画面（Discord の本文の例） ----
+    # ---- 11-2: 貼り付けの画面（Discord の本文の例） ----
     t.click_el("#mReviewBtn"); ed.wait(0.5)
     t.click_el(".mbMenu button[data-act=reviewpaste]")
     wait_until(ed, "!!document.querySelector('#dirtyDlg[data-rv=rvPasteDlg] .rvPasteText')", "貼り付けの画面が出ません")
     ed.js(f"(a=>{{ a.value={json.dumps(RV_PASTE)}; a.dispatchEvent(new Event('input',{{bubbles:true}})); a.scrollTop=0; return 1; }})(document.querySelector('#dirtyDlg .rvPasteText'))")
     ed.move(1700, 1060); ed.wait(0.3)
-    t.shot("10-2-review-paste", clip=box(ed, ["#dirtyDlg"], pad=30))
+    t.shot("11-2-review-paste", clip=box(ed, ["#dirtyDlg"], pad=30))
     t.click_el("#dirtyDlg[data-rv=rvPasteDlg] .ddBtns button[data-v=ok]")
     wait_until(ed, "!!document.querySelector('#dirtyDlg[data-rv=rvImport] .ddBtns button.pri')", "貼り付けた文の読み込みの確認が出ません")
     t.click_el("#dirtyDlg[data-rv=rvImport] .ddBtns button.pri")
     wait_until(ed, "window._dbgApp.review().open&&window._dbgApp.review().items.length===4",
                lambda: "貼り付けた指摘を読み込めません: " + json.dumps(rv_h.rv(ed), ensure_ascii=False)[:600])
 
-    # ---- 10-3: 2回目の読み込みの確認（今ある指摘に足すか置き換えるかが出る）。ファイル（Hard.txt）＋見出しの無い貼り付けた文 ----
+    # ---- 11-3: 2回目の読み込みの確認（今ある指摘に足すか置き換えるかが出る）。ファイル（Hard.txt）＋見出しの無い貼り付けた文 ----
     rv_h.rv_open_import(ed, [RV_FILE, (None, RV_NOHEAD)])
     ed.js("""(()=>{ const d=document.querySelector('#dirtyDlg .rvWarns'); if(d) d.open=true;
       const st=[...document.querySelectorAll('#dirtyDlg .rvSrcStat')]; st.forEach((e,i)=>e.id='tutRvStat'+i); return st.length; })()""")
@@ -865,14 +1163,14 @@ def review_notes(ed, t):
         if not ed.js(f"!!document.querySelector({sel!r})"):
             raise SystemExit(f"読み込みの確認に「{what}」が出ません")
     ed.move(1700, 1060); ed.wait(0.3)
-    t.shot("10-3-review-import", marks="""[{t:'#tutRvStat0',n:1,at:'l'},{t:'#tutRvStat1'},{t:'#dirtyDlg .rvWarns',n:2,at:'l'},
+    t.shot("11-3-review-import", marks="""[{t:'#tutRvStat0',n:1,at:'l'},{t:'#tutRvStat1'},{t:'#dirtyDlg .rvWarns',n:2,at:'l'},
       {t:'#dirtyDlg .rvPick',n:3,at:'l'},{t:'#dirtyDlg .rvExisting',n:4,at:'l'},{t:'#dirtyDlg .rvISum',n:5,at:'l'}]""",
            clip=box(ed, ["#dirtyDlg"], pad=50))
     t.click_el("#dirtyDlg[data-rv=rvImport] .ddBtns button.pri")
     wait_until(ed, "!document.querySelector('#dirtyDlg[data-rv=rvImport]')&&window._dbgApp.review().items.length===8",
                lambda: "2回目の指摘を読み込めません: " + str(len(rv_h.rv(ed)["items"])))
 
-    # ---- 10-1: 一覧。Expert の拍4の指摘へ飛び、返事を書く。Hard の1つを済みにする ----
+    # ---- 11-1: 一覧。Expert の拍4の指摘へ飛び、返事を書く。Hard の1つを済みにする ----
     ed.js("(()=>{ document.querySelectorAll('#rvPanel details').forEach(d=>d.open=true); return 1; })()")
     done_id = rv_h.rv_row(ed, "parity feels awkward")["id"]
     ed.js(f"(c=>{{ c.click(); return 1; }})(document.querySelector('#rvPanel .rvItem[data-id={json.dumps(done_id)}] .rvDone'))")
@@ -890,12 +1188,12 @@ def review_notes(ed, t):
       const f=p.querySelector('.rvFilt').getBoundingClientRect(), h=p.querySelector('.rvHideDone').getBoundingClientRect();
       return [[a.left,a.top,b.right-a.left,Math.max(a.bottom,b.bottom)-a.top],[f.left,Math.min(f.top,h.top),h.right-f.left,Math.max(f.bottom,h.bottom)-Math.min(f.top,h.top)]]; })()""")
     ed.move(1700, 1060); ed.wait(0.4)
-    t.shot("10-1-review-panel", marks=json.dumps([
+    t.shot("11-1-review-panel", marks=json.dumps([
         {"t": u[0], "n": 1, "at": "r"}, {"t": u[1], "n": 2, "at": "r"}, {"t": "#tutRvDone", "n": 3, "at": "l"},
         {"t": "#tutRvBeat", "n": 4, "at": "r"}, {"t": "#tutRvText", "n": 5, "at": "r"}, {"t": "#tutRvReply", "n": 6, "at": "r"}]),
         clip=box(ed, ["#rvPanel"], pad=46))
 
-    # ---- 10-4: NLE の拍の数字の帯の印（①▼＝拍7.5・②範囲の帯＝13〜15・③選んでいる指摘（範囲 13〜15）の点線と薄い帯） ----
+    # ---- 11-4: NLE の拍の数字の帯の印（①▼＝拍7.5・②範囲の帯＝13〜15・③選んでいる指摘（範囲 13〜15）の点線と薄い帯） ----
     # 行をクリックすると再生位置もその拍へ動き、点線が再生位置の線に隠れるので、選んだ後に再生位置を拍9へ離す
     rv_h.rv_click_row(ed, "cramped")
     mts.seek_to(ed, 9)
@@ -905,20 +1203,20 @@ def review_notes(ed, t):
         raise SystemExit(f"指摘の印が NLE に見えていません: {x}")
     bot = g["tempo"]   # 印は数字の帯の下端（テンポの帯の上）に描かれる
     lanes_bot = g["lanes"] + g["laneH"] * 2
-    t.shot("10-4-review-marks", marks=json.dumps([
+    t.shot("11-4-review-marks", marks=json.dumps([
         {"t": [x[7.5] - 6, bot - 11, 12, 12], "n": 1, "at": "b", "pad": 2},
         {"t": [x[13] - 4, bot - 11, x[15] - x[13] + 8, 12], "n": 2, "at": "b", "pad": 2},
         {"t": [x[13] - 3, g["lanes"] + 2, x[15] - x[13] + 6, lanes_bot - g["lanes"] - 6], "n": 3, "at": "r", "pad": 1}]),
         clip=(round(g["left"]), round(g["ruler"]) - 30, round(min(x[21] + 160, g["left"] + g["w"]) - g["left"]), round(lanes_bot - g["ruler"]) + 40))
 
-    # ---- 10-5: 書き出し（NLM の確かめの結果） ----
+    # ---- 11-5: 書き出し（NLM の確かめの結果） ----
     t.click_el("#rvPanel .rvExport")
     wait_until(ed, "!!document.querySelector('#dirtyDlg[data-rv=rvExportDlg]')", "書き出しの画面が出ません")
     t.click_el("#dirtyDlg input[name=rvXKind][value=check]")
     wait_until(ed, "(p=>!!p&&p.value.length>0)(document.querySelector('#dirtyDlg .rvXPre'))", "NLM の確かめの結果が出ません", timeout=40)
     ed.js("""(()=>{ const o=[...document.querySelectorAll('#dirtyDlg .rvXOpts')].find(e=>e.offsetParent); if(o) o.id='tutRvXOpts'; return !!o; })()""")
     ed.move(1700, 1060); ed.wait(0.3)
-    t.shot("10-5-review-export", marks="""[{t:'#dirtyDlg .lkOpts',n:1,at:'l'},{t:'#tutRvXOpts',n:2,at:'l'},{t:'#dirtyDlg .rvXPre',n:3,at:'l'},
+    t.shot("11-5-review-export", marks="""[{t:'#dirtyDlg .lkOpts',n:1,at:'l'},{t:'#tutRvXOpts',n:2,at:'l'},{t:'#dirtyDlg .rvXPre',n:3,at:'l'},
       {t:'#dirtyDlg .ddBtns',n:4,at:'l'}]""", clip=box(ed, ["#dirtyDlg"], pad=50))
     t.click_el("#dirtyDlg .ddBtns button[data-v=cancel]"); ed.wait(0.3)
 
@@ -1075,7 +1373,7 @@ def want_main():
         return True
     for o in mts.ONLY:
         ch = o.split("-")[0]
-        if ch in ("01", "02", "05", "07", "08", "09", "11", "12"):
+        if ch in ("01", "02", "05", "07", "08", "09", "12", "13"):
             return True
         if ch in ("03", "04") and (o == ch or o not in SEP_03_04 + BULK_03):
             return True
@@ -1100,8 +1398,17 @@ def main():
             mts.use_lang(ed)
             bulk_notices(ed, mts.Tut(ed))
             print(ed.errors())
-    # 10章の審査の指摘（素材 rich を開いて撮る）
+    # 10章の REPLAY（素材 rich を本当に書き出し、合成のリプレイを本物の裏側・BL のリプレイアプリで撮る）
     if mts.want_ch("10"):
+        with Editor(width=W, height=H) as ed:
+            mts.use_lang(ed)
+            load_rich(ed, tempo=False)
+            t = mts.Tut(ed)
+            mts.stub_pickers(ed)
+            replay_shots(ed, t)
+            print(ed.errors())
+    # 11章の審査の指摘（素材 rich を開いて撮る）
+    if mts.want_ch("11"):
         with Editor(width=W, height=H) as ed:
             mts.use_lang(ed)
             load_rich(ed)
@@ -1240,7 +1547,7 @@ def main():
             raise SystemExit("自動ライトを取り消せません")
         ed.move(960, 800); ed.key("Tab"); ed.wait(1.0)   # NOTESへ戻す
 
-        # ---- 8章・12章: INFO（曲情報を入れ、書き出しノードをもう1つ作る） ----
+        # ---- 8章・13章: INFO（曲情報を入れ、書き出しノードをもう1つ作る） ----
         ed.move(1200, 300); ed.wait(0.3); ed.key("Tab"); ed.wait(1.5)
         for f, text in (("name", "My First Map"), ("artist", "NLM Tutorial"), ("author", "YourName")):
             t.click_el(f"#infoWorld input[data-f={f}]"); ed.wait(0.2); t.type(text); ed.wait(0.2)
@@ -1261,17 +1568,17 @@ def main():
         t.shot("08-1-info-nodes", marks="""[
           {t:'#tutN_meta',n:1,at:'tr'},{t:'#tutN_cover',n:2,at:'tr'},{t:'#tutN_set',n:3,at:'tr'},{t:'#tutN_prev',n:4,at:'tr'},
           {t:'#tutOut0',n:5,at:'tr'},{t:'#tutOut1',n:5,at:'tl'}]""", clip=box(ed, ["#nodecol"], pad=0))
-        # 12章: 新しい書き出しノード（アクティブ）は出力フォルダ未設定＝必須項目に ✕。拡大して枠の中だけを撮る
+        # 13章: 新しい書き出しノード（アクティブ）は出力フォルダ未設定＝必須項目に ✕。拡大して枠の中だけを撮る
         c = t.rect("#tutOut1 .oChk")
         for _ in range(2):
             ed.wheel(c["x"] + c["w"] / 2, c["y"] + c["h"] / 2, -120); ed.wait(0.3)
         x, y, w, h = box(ed, ["#tutOut1"], pad=40)
         x1, y1 = min(x + w, nr["x"] + nr["w"]), min(y + h, nr["y"] + nr["h"])
         x, y = max(x, nr["x"]), max(y, nr["y"])
-        t.shot("12-1-export-blocked", marks="[{t:'#tutOut1 .oChk',n:1,at:'l'}]", clip=(round(x), round(y), round(x1 - x), round(y1 - y)))
+        t.shot("13-1-export-blocked", marks="[{t:'#tutOut1 .oChk',n:1,at:'l'}]", clip=(round(x), round(y), round(x1 - x), round(y1 - y)))
         ed.move(1200, 300); ed.key("Tab"); ed.wait(1.0)   # NLEへ戻す
 
-        # ---- 11章・1章: 環境設定 ----
+        # ---- 12章・1章: 環境設定 ----
         t.click_el("#mbSettings"); ed.wait(0.3); t.click_el(".mbMenu button[data-act=settings]"); ed.wait(0.6)
         # 「曲の解析」の2つのチェックは、テストの環境（聞かない・案内しない）でなく初めて使う人と同じ（オン）に見せる（表示だけ・撮った後に戻す）
         # アプリケーション設定の欄は箱の中でスクロールする＝「ノーツのレーンの本数」が欄の上端に来るまでスクロールして、新しい項目（③④）を見せる
@@ -1281,7 +1588,7 @@ def main():
           const p=document.querySelector('#settingsBox .setPanel.on');
           p.scrollTop+=lanes.getBoundingClientRect().top-p.getBoundingClientRect().top-6; return 1; })()""")
         ed.wait(0.3)
-        t.shot("11-1-settings", marks="""[{t:'#settingsBox .setTabs',n:1,at:'l'},{t:'#settingsReset',n:2,at:'l'},
+        t.shot("12-1-settings", marks="""[{t:'#settingsBox .setTabs',n:1,at:'l'},{t:'#settingsReset',n:2,at:'l'},
           {t:'#tutSetLanes',n:3,at:'l'},{t:'#tutSetAna',n:4,at:'l'}]""",
                clip=box(ed, ["#settingsBox"], pad=40))
         ed.js("""(()=>{ for(const id of ['anaAskOn','anaGuideOn']) document.getElementById(id).checked=false;
@@ -1426,7 +1733,7 @@ def main():
         print("測定結果あり" if has_table else "未導入の画面")
         t.click_el("#rtPanel .rtClose"); ed.wait(0.4)
 
-        # ---- 3章・11章: MEDIA ライブラリ（MEDIA の幅を変えるので最後に撮る） ----
+        # ---- 3章・12章: MEDIA ライブラリ（MEDIA の幅を変えるので最後に撮る） ----
         media_library(ed, t)
         print(ed.errors())
 

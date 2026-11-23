@@ -169,8 +169,9 @@ def tour(ed):
     """主な画面・メニュー・パネルを順に開いて scan する"""
     g = nle(ed)
     scan(ed, "起動直後")
-    # 左上: MEDIA ⇄ PREVIEW、右上: NLE ⇄ INFO、下: NOTES ⇄ LIGHTING
-    tab_over(ed, 280, 300); scan(ed, "PREVIEW"); tab_over(ed, 280, 300); scan(ed, "MEDIA")
+    # 左上: MEDIA → PREVIEW → REPLAY → MEDIA、右上: NLE ⇄ INFO、下: NOTES ⇄ LIGHTING
+    # REPLAY はここでは素材 basic（曲名が空）＝「曲名がありません」の文。一覧・再生は最後の replay_tour（応答は偽物）
+    tab_over(ed, 280, 300); scan(ed, "PREVIEW"); tab_over(ed, 280, 300); scan(ed, "REPLAY"); tab_over(ed, 280, 300); scan(ed, "MEDIA")
     # MEDIA の記録したライブラリ（2026-10-12）: グリッド・詳細表示（全部の列）・列のメニュー・絞り込みのパネル
     media_lib_load(ed, extra=media_lib_sample_extra(), covers=1, details=SAMPLE_DETAILS); scan(ed, "MEDIA ライブラリ")   # 全曲データは取得済み（出どころの表示・🔍）
     click_sel(ed, "#libViewSeg button[data-view=detail]", "詳細表示"); ed.wait(0.4); scan(ed, "MEDIA 詳細表示")
@@ -305,6 +306,11 @@ def tour(ed):
     import_tour(ed)
     from plugin_update_helpers import plugin_update_tour   # 本体とプラグインの更新の知らせ（2026-10-28）: 知らせ・更新した通知・まとめ（応答は偽物）
     plugin_update_tour(ed, scan)
+    # REPLAY の窓（2026-11-22）: 一覧・再生・ズームの案内・Standard 以外の知らせ・空の一覧・フォルダが無い（応答と窓は偽物）。
+    # 素材 basic に英語の曲名を入れて読み直す（rich の曲名は日本語＝点検に出てしまう）＝最後に置く
+    from replay_helpers import load_named, replay_tour
+    load_named(ed)
+    replay_tour(ed, scan)
 
 
 def cover_fit_tour(ed):

@@ -1,5 +1,5 @@
 """各ペインの左上のモードの表示（例: NOTES ［TAB］ LIGHTING）: 「［TAB］ 次の画面名」の所をクリックしても、Tab キーと同じ切り替えになる
-（MEDIA⇄PREVIEW・NLE⇄INFO・NOTES⇄LIGHTING）。"""
+（MEDIA→PREVIEW→REPLAY→MEDIA・NLE⇄INFO・NOTES⇄LIGHTING）。"""
 from misc_helpers import click_sel, open_fixture_ready, wait_until
 
 
@@ -33,11 +33,15 @@ def test_mode_label_click_switches(t):
     _wait_main(ed, "#nodeColModeLabel", "INFO")
     click_sel(ed, "#nodeColModeLabel .mlNext", "［TAB］ NLE")
     wait_until(ed, "window._dbgApp.view()==='nle'", label="NLE へ戻る")
-    # MEDIA ⇄ PREVIEW
+    # MEDIA → PREVIEW → REPLAY → MEDIA（REPLAY は 2026-11-22）
     t.eq(_main(ed, "#pvModeLabel"), "MEDIA", "最初は MEDIA")
     click_sel(ed, "#pvModeLabel .mlNext", "［TAB］ PREVIEW")
     wait_until(ed, "document.getElementById('bodyPv').classList.contains('on')", label="PREVIEW へ")
     _wait_main(ed, "#pvModeLabel", "PREVIEW")
+    t.eq(ed.js("document.querySelector('#pvModeLabel .mlNext').title"), "クリックで REPLAY へ切り替え", "PREVIEW の次は REPLAY")
+    click_sel(ed, "#pvModeLabel .mlNext", "［TAB］ REPLAY")
+    wait_until(ed, "document.getElementById('bodyRp').classList.contains('on')", label="REPLAY へ")
+    _wait_main(ed, "#pvModeLabel", "REPLAY")
     click_sel(ed, "#pvModeLabel .mlNext", "［TAB］ MEDIA")
     wait_until(ed, "document.getElementById('tabFolder').classList.contains('on')", label="MEDIA へ戻る")
     # 今の画面名の文字・アイコンはクリックを下へ通す（従来どおり）

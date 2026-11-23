@@ -645,10 +645,11 @@ def test_metronome(t):
 PV_BTNS = ('Notes', 'Lights', 'Struct', 'Ambient')
 PV_VIS = "Object.fromEntries(['Notes','Lights','Struct','Ambient'].map(k=>[k,document.getElementById('pvVis'+k).classList.contains('on')]))"
 PV_MODE = "[document.getElementById('bodyPv').classList.contains('on'), document.getElementById('tabFolder').classList.contains('on')]"
+RP_ON = "document.getElementById('bodyRp').classList.contains('on')"
 
 
 def test_preview_toggles(t):
-    '''左上のペインでTab＝MEDIA⇄PREVIEW。PREVIEWの表示切替（ノーツ・ライト・構造物・環境ライト）は押すたびに入/切が替わり（既定は環境ライトだけ切）、互いに独立・MEDIAへ切り替えて戻っても保たれる・編集の履歴にも未保存にも関係しない'''
+    '''左上のペインでTab＝MEDIA→PREVIEW→REPLAY→MEDIA。PREVIEWの表示切替（ノーツ・ライト・構造物・環境ライト）は押すたびに入/切が替わり（既定は環境ライトだけ切）、互いに独立・MEDIAへ切り替えて戻っても保たれる・編集の履歴にも未保存にも関係しない'''
     ed = open_ed(t)
     t.eq(ed.js(PV_MODE), [False, True], '起動時は MEDIA')
     u0 = state(ed)['undo']
@@ -665,11 +666,14 @@ def test_preview_toggles(t):
         t.eq(ed.js(PV_VIS), vis, f'{k} を押した後（押したものだけが変わる）')
     hover_pv(ed)
     ed.key('Tab')
-    wait_until(ed, f"!({PV_MODE})[0]&&({PV_MODE})[1]", label='もう一度Tab＝MEDIA')
+    wait_until(ed, f"!({PV_MODE})[0]&&!({PV_MODE})[1]&&{RP_ON}", label='もう一度Tab＝REPLAY（2026-11-22）')
+    hover_pv(ed)
+    ed.key('Tab')
+    wait_until(ed, f"!({PV_MODE})[0]&&({PV_MODE})[1]&&!{RP_ON}", label='もう一度Tab＝MEDIA')
     hover_pv(ed)
     ed.key('Tab')
     wait_until(ed, f"({PV_MODE})[0]", label='PREVIEW へ戻る')
-    t.eq(ed.js(PV_VIS), vis, 'MEDIA を挟んでも表示切替は保たれる')
+    t.eq(ed.js(PV_VIS), vis, 'REPLAY・MEDIA を挟んでも表示切替は保たれる')
     for k in PV_BTNS:
         click_el(ed, f'#pvVis{k}')
     wait_until(ed, f"JSON.stringify({PV_VIS})==='{{\"Notes\":true,\"Lights\":true,\"Struct\":true,\"Ambient\":false}}'", label='もう一度押すと既定へ戻る')

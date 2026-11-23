@@ -314,6 +314,11 @@ class Editor:
         os.environ["NLM_DATA_DIR"] = self.data_dir
         # MEDIA ライブラリのプレイ記録の既定の場所も一時フォルダへ（利用者の本物の PlayerData.dat を読まない。テストはここに置いて使う）
         os.environ["NLM_PLAYDATA"] = os.path.join(self.data_dir, "PlayerData.dat")
+        # REPLAY の窓のリプレイのフォルダも一時フォルダへ（利用者の本物の BeatLeader のリプレイを読まない。テストは合成の .bsor をここに置く
+        # ＝tests/_lib/replay_fixture.py の write_replay(ed.replays_dir, …)）。serve は import 時に読む
+        self.replays_dir = os.path.join(self.data_dir, "bl-replays")
+        os.makedirs(self.replays_dir, exist_ok=True)
+        os.environ["NLM_REPLAYS"] = self.replays_dir
         # ネットへ出ない（記録したライブラリを読むと画面が全曲データの取得を頼む＝毎回 jsDelivr から約10MB を取りに行かないように）。
         # 実際に取得して確かめる時だけ、先に NLM_NO_NET=0 を設定しておく
         os.environ.setdefault("NLM_NO_NET", "1")

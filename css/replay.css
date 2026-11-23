@@ -1,0 +1,98 @@
+/* Non-Linear Mapper — replay.css（左上の窓の3つ目「REPLAY」・js/replay/replay-pane.js・2026-11-22） */
+
+  /* .pvbody.on の display:block を上書き（縦積みで、一覧・リプレイの窓を残りの高さに伸ばす） */
+  #bodyRp{padding:8px 12px 10px;font-size:12px;color:var(--textdim);overflow:hidden;flex-direction:column;min-height:0;}
+  #bodyRp.pvbody.on{display:flex;}
+
+  /* 見出しの行: REPLAY [TAB] MEDIA の帯（#pvModeLabel・position:absolute）の右から。入りきらない分は2行目へ折り返す */
+  #rpHead{display:flex;flex-wrap:wrap;align-items:center;column-gap:6px;row-gap:5px;flex:0 0 auto;margin:0 0 6px;min-width:0;}
+  #rpHeadGap{flex:0 0 auto;width:236px;height:31px;}
+  #rpHead .rpGrp{display:flex;align-items:center;gap:6px;min-width:0;}
+  #rpHead .rpGrp[hidden]{display:none;}
+  #rpCount{color:var(--textmute);white-space:nowrap;}
+  .rpBtn{padding:4px 9px;white-space:nowrap;flex:0 0 auto;}
+  /* 同期: オン（つないでいる間）は緑。切っている時は薄く */
+  .rpSync{display:inline-flex;align-items:center;gap:6px;}
+  .rpSync .rpDot{width:9px;height:9px;border-radius:50%;background:#5a5a5a;box-shadow:inset 0 0 0 1px #777;}
+  .rpSync.on{border-color:#2f8f69;color:#bff5dd;background:#173b2e;}
+  .rpSync.on:hover{background:#1d4a3a;}
+  .rpSync.on .rpDot{background:var(--green);box-shadow:0 0 6px rgba(86,255,193,.7);}
+  .rpSync.off{color:var(--textmute);}
+  /* 点を重ねる（2026-11-22）: オンは点の段の色の小さな丸（NLE の印・3D の輪を出している）。オフは薄く */
+  .rpMkBtn{display:inline-flex;align-items:center;gap:4px;padding:4px 7px;color:var(--textmute);}   /* 見出しの1行に収める（幅 1600 の既定の窓で REPLAY [TAB] MEDIA の帯の右に入る） */
+  .rpMkBtn .rpDot{width:9px;height:9px;border-radius:50%;background:#5a5a5a;box-shadow:inset 0 0 0 1px #777;}
+  .rpMkBtn.on{border-color:#6d5cc4;color:#e4ddff;background:#262040;}
+  .rpMkBtn.on:hover{background:#2f2850;}
+  .rpMkBtn.on .rpDot{background:conic-gradient(#ffffff 0 17%,#8500ff 0 33%,#00a3ff 0 50%,#00ff00 0 67%,#ffff00 0 83%,#ff0038 0);box-shadow:0 0 5px rgba(180,160,255,.6);}
+
+  /* 開いているリプレイの要点・知らせ */
+  #rpSum{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;flex:0 0 auto;margin:0 0 5px;}
+  #rpSum[hidden]{display:none;}
+  #rpNote{flex:0 0 auto;margin:0 0 6px;font-size:11.5px;line-height:1.45;color:#d8d8d8;}
+  #rpNote > div{padding:3px 8px;border-radius:4px;background:#232327;margin-bottom:3px;}
+  #rpNote > div.old{background:#3a3220;color:#f2d79a;border-left:3px solid #c9a14a;}
+  #rpNote > div.bad{background:#3a2024;color:#ffb3bd;border-left:3px solid var(--red);}
+  /* 点を重ねる: 凡例（印の形・段の名前・数）と、合わないノーツの数・出していない理由（js/replay/replay-pane.js の renderMk） */
+  #rpMk{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:3px 10px;margin:0 0 6px;font-size:11px;line-height:1.4;color:#cfcfd6;}
+  #rpMk[hidden]{display:none;}
+  .rpMkLegend{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;}
+  .rpMkC{display:inline-flex;align-items:baseline;gap:3px;white-space:nowrap;}
+  .rpMkC.zero{opacity:.45;}
+  .rpMkG{font-weight:700;font-size:11.5px;text-shadow:0 0 2px #000;}
+  /* 115 は 3D の輪と同じ6色の帯の虹（2026-11-22・境目をはっきり切る＝円の周りに conic で塗り分け）。字の色は JS が段の色を入れるので !important で透かして背景の虹を字の形に切り抜く */
+  .rpMkC[data-k="t115"] .rpMkG{background:conic-gradient(#ff2a2a 0 16.67%,#ff9a1f 0 33.33%,#ffe81f 0 50%,#33e04a 0 66.67%,#2aa8ff 0 83.33%,#a64dff 0);
+    -webkit-background-clip:text;background-clip:text;
+    color:transparent!important;text-shadow:none;}
+  .rpMkN{font-variant-numeric:tabular-nums;color:var(--textmute);}
+  .rpMkUn{white-space:nowrap;color:#f2d79a;}
+  .rpMkMsg{color:var(--textdim);}
+  .rpMkMsg.bad{color:#ffb3bd;}
+
+  /* 一覧（1行＝1つのプレイ・2段） */
+  #rpListView{flex:1 1 0%;min-height:0;display:flex;flex-direction:column;}
+  #rpListView[hidden],#rpPlayView[hidden]{display:none;}
+  #rpEmpty{padding:10px 6px;line-height:1.55;color:var(--textdim);}
+  #rpEmpty.bad{color:#ffb3bd;}
+  #rpList{flex:1 1 0%;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:3px;padding-right:2px;}
+  .rpRow{padding:5px 8px;border-radius:5px;background:#202023;cursor:pointer;border:1px solid transparent;}
+  .rpRow:hover{background:#2a2a30;border-color:#3a3a44;}
+  .rpRow.cur{border-color:var(--accent);background:#25222f;}
+  .rpRow.off{opacity:.45;cursor:not-allowed;}
+  .rpRow.off:hover{background:#202023;border-color:transparent;}
+  .rpL1,.rpL2{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;min-width:0;}
+  .rpL2{margin-top:2px;font-size:11px;color:var(--textmute);}
+  .rpWhen{font-variant-numeric:tabular-nums;color:#dcdcdc;white-space:nowrap;}
+  .rpDiff{--dc:#8a8a8a;padding:0 6px;border-radius:3px;font-weight:700;font-size:11px;color:#111;background:var(--dc);white-space:nowrap;}
+  .rpAcc{font-variant-numeric:tabular-nums;font-weight:700;color:#f0f0f0;white-space:nowrap;}
+  .rpTag{padding:0 5px;border-radius:3px;font-size:10.5px;white-space:nowrap;background:#3a3a3a;color:#ddd;}
+  .rpTag.quit{background:#4a4a52;color:#e6e6ee;}
+  .rpTag.bad{background:#5a2730;color:#ffc5cd;}
+  .rpTag.prac{background:#263f5a;color:#c5e1ff;}
+  .rpMiss{white-space:nowrap;}
+  .rpMods{display:inline-flex;gap:3px;}
+  .rpMods:empty{display:none;}
+  .rpMod{padding:0 4px;border-radius:3px;background:#30303a;color:#cfd0ff;font-size:10.5px;}
+  .rpVer{white-space:nowrap;margin-left:auto;}
+  .rpVer.latest{color:#9fe7c8;}
+  .rpVer.old{color:#e9c983;}
+  .rpVer.none{color:#9a9a9a;}
+
+  /* 下の端: リプレイの場所 */
+  #rpFoot{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:6px;padding-top:6px;border-top:1px solid #2a2a2e;font-size:11px;color:var(--textmute);}
+  #rpDirs{flex:1 1 200px;min-width:0;display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline;}
+  .rpDirPath{color:#cfcfcf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;user-select:text;}
+  .rpDirLbl,.rpDirN,.rpDirSrc{white-space:nowrap;}
+  .rpDirPath.missing{color:#ff9aa8;text-decoration:line-through;}
+  .rpFootBtns{display:flex;gap:6px;flex:0 0 auto;}
+  .rpFootBtns .rpBtn{padding:3px 8px;font-size:11px;}
+  .rpFootBtns .rpBtn[hidden]{display:none;}
+
+  /* 再生: リプレイの窓（iframe）と右下の「🔍 ホイールでズーム」（操作は通す） */
+  #rpPlayView{flex:1 1 0%;min-height:0;display:flex;}
+  #rpFrameBox{flex:1;position:relative;min-height:0;border-radius:6px;overflow:hidden;background:#0b0b0d;}
+  #rpFrameBox .rpFrame{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;}
+  /* 上の端の右寄り（2026-11-22）: 下の端は BL のリプレイアプリの再生バー（中央・幅 360〜420px＝小さい窓ではほぼ横いっぱい）の時刻と重なった。
+     右上の角は BL の赤い三角（約 70px）があるので、その左に置く */
+  #rpZoom{position:absolute;right:76px;top:6px;z-index:2;pointer-events:none;padding:2px 8px;border-radius:10px;
+    background:rgba(0,0,0,.5);color:#d6d6d6;font-size:11px;opacity:.8;white-space:nowrap;}
+  #rpZoom[hidden]{display:none;}

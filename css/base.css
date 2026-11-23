@@ -107,6 +107,16 @@
 
   .mlNext:hover,.mlNext:hover svg{color:#e8e8e8;}
 
+  /* 左上の窓（MEDIA・PREVIEW・REPLAY の3つ・2026-11-22）: ［TAB］の後に3つを同じ順に並べ、今の物だけ大きい字で紫の枠（オンエアの印のように）。
+     ほかの2つは小さい灰色の字で、押すとその画面へ直接移る（editor-app.js の setPvModeLabel） */
+  .modeLabel .mlTab{margin-left:2px;}
+  .mlSet{display:flex;align-items:center;gap:5px;}
+  .mlCur{padding:0 8px;line-height:30px;border:1.5px solid var(--accent);border-radius:7px;background:rgba(129,96,227,.18);
+    box-shadow:0 0 8px rgba(129,96,227,.45);}
+  .mlItem{font-size:12px;font-weight:600;letter-spacing:.3px;color:#7a7a7a;text-shadow:none;pointer-events:auto;cursor:pointer;
+    padding:4px 5px;border-radius:5px;}
+  .mlItem:hover{color:#e8e8e8;background:rgba(255,255,255,.07);}
+
   /* .tbi.snapNum で .tbi{width:28px}(chrome.css・後読み)に勝つ＝スナップボタンが28pxに潰れて「1/2 ▼」がはみ出す崩れを解消 */
   .tbi.snapNum{width:auto;padding:0 7px;gap:6px;font-size:12.5px;font-weight:600;}
   .tbi.tbAuto{width:auto;padding:0 9px;font-size:12px;font-weight:600;white-space:nowrap;}   /* LIGHTINGの「自動ライト」（文字のボタン） */

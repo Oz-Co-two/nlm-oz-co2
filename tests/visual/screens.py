@@ -10,7 +10,7 @@
 
 ■ 手順の部品（steps / leave に並べる）
   click(sel) / rclick(sel or (x,y)) / key(k, at=sel or (x,y), ctrl=, shift=) / tab(pane) / wait(秒) / js(式) / until(式)
-  pane は 'nle'（右上: NLE⇄INFO）/ 'main'（下: NOTES⇄LIGHTING）/ 'pv'（左上: MEDIA⇄PREVIEW）。
+  pane は 'nle'（右上: NLE⇄INFO）/ 'main'（下: NOTES⇄LIGHTING）/ 'pv'（左上: MEDIA→PREVIEW→REPLAY→MEDIA）。
 
 ■ 比較から除く所
   hide: 撮影の間だけ visibility:hidden にする（上に重なる操作部品は写る）。3Dビューの canvas のように中身が揺れる所。
@@ -205,6 +205,19 @@ def plugin_update_mock(ed):
     plugin_update_helpers.mock_manual_rating_newer(ed)
 
 
+def replay_setup(ed):
+    """REPLAY の窓: /__replay/* の応答を見本にし（tests/_lib/replay_helpers.py の rp_mock・一覧5件・場所は自動）、リプレイの窓は偽の窓（http://localhost の小さなページ）"""
+    import replay_helpers   # tests/_lib（nlmtest が読み込み先に足している）
+    replay_helpers.rp_mock(ed)
+    replay_helpers.rp_watch(ed)
+
+
+def replay_marks_mock(ed):
+    """REPLAY の点を重ねる: /__replay/events の応答を素材 rich の Expert に合わせた見本にする（tests/_lib/replay_helpers.py の RICH_EVENTS）"""
+    import replay_helpers   # tests/_lib（nlmtest が読み込み先に足している）
+    replay_helpers.rp_mock(ed, events=replay_helpers.RICH_EVENTS)
+
+
 def mock_song_details(ed):
     """全曲データの状態の応答を見本（2026-10-12 06:30 時点のデータ）に差し替える（環境設定の MEDIA タブの状態の表示を毎回同じにする）"""
     h = _e2e_helpers()
@@ -352,6 +365,17 @@ SCENES = [
     Scene('PREVIEW', FIXTURE, [
         Screen('preview', 'PREVIEW（左上でTab）', steps=[tab('pv', 1.5)]),
     ]),
+    Scene('REPLAY', FIXTURE, [
+        Screen('replay_play', 'REPLAY: 再生（一番新しいリプレイを自動で開いた・要点・同期は緑・右上のズームの案内。窓は偽物）',
+               steps=[tab('pv', 0.8), tab('pv', 0.8), until("window._dbgApp.replay().state==='linked'", what='リプレイの窓とつながる')]),
+        Screen('replay_list', 'REPLAY: 一覧（新しい順・難易度・精度・ミス・札・版・灰色＝譜面の控えが無い・下の端にリプレイの場所）',
+               steps=[click('#rpBack', 0.5), until("window._dbgApp.replay().view==='list'", what='一覧')]),
+        Screen('replay_old', 'REPLAY: 以前の書き出しの版・途中でやめたプレイの知らせ',
+               steps=[click('#rpList .rpRow[data-id=r2]', 0.5), until("window._dbgApp.replay().state==='linked'&&window._dbgApp.replay().stopEnd===6", what='やめたプレイ')]),
+        Screen('replay_marks', 'REPLAY: 点を重ねる（NLE の拍番号の帯にミス✕赤・バッド◆橙・ボム●マゼンタ・壁▬灰色・合わない物は薄く・凡例＝BL のアプリの点数の色の6段と合わない数。3D の輪は #cv を隠すので写らない）',
+               steps=[replay_marks_mock, click('#rpBack', 0.4), click('#rpList .rpRow[data-id=r1]', 0.5),
+                      until("window._dbgApp.replay().state==='linked'&&window._dbgApp.rpMarks().marks.length===10&&window._dbgApp.replay().mkChips.length===10", what='点の印と凡例')]),
+    ], setup=[replay_setup]),
     Scene('環境設定', FIXTURE, [
         Screen('settings_app', '環境設定: アプリケーション設定', steps=[click('#mbSettings'), click('.mbMenu button[data-act=settings]', 0.6)]),
         Screen('settings_vol', '環境設定: 音量設定', steps=[click('#settingsBox .setTab[data-tab=vol]')]),

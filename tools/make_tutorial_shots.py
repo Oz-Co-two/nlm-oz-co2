@@ -393,12 +393,13 @@ def main():
         ed.move(960, 800); ed.key("Tab"); ed.wait(1.0)   # NOTESへ戻す
 
         # 12 PREVIEW（実機に近い3Dプレビュー）
-        ed.move(300, 300); ed.wait(0.3); ed.key("Tab"); ed.wait(1.0)   # 左上の枠でTab = MEDIA⇄PREVIEW
+        ed.move(300, 300); ed.wait(0.3); ed.key("Tab"); ed.wait(1.0)   # 左上の枠でTab = MEDIA → PREVIEW（→ REPLAY → MEDIA）
         seek_to(ed, 1)
         ed.move(300, 300); ed.wait(1.5)
-        t.shot("12-preview", marks="[{t:[%d,%d,%d,%d],n:1,at:'r',pad:7},{t:'#transportBar',n:2,at:'l'}]"
-               % tuple(_union(t, "#pvModeLabel", "#pvModeLabel .mlNext")))
-        ed.move(300, 300); ed.key("Tab"); ed.wait(0.5)
+        t.shot("12-preview", marks="[{t:'#pvModeLabel',n:1,at:'r',pad:7},{t:'#transportBar',n:2,at:'l'}]")
+        t.click_el("#pvModeLabel .mlItem[data-mode=media]"); ed.wait(0.5)   # 見出しの MEDIA を押して戻す（Tab だと次の REPLAY へ進む）
+        if ed.js("window._dbgApp.replay().pvMode") != "media":
+            raise SystemExit("左上の窓を MEDIA へ戻せません")
 
         # 13〜14 INFO画面: 曲情報・難易度・カバー・書き出し
         ed.move(1200, 300); ed.wait(0.3); ed.key("Tab"); ed.wait(1.5)   # NLEの上でTab = NLE⇄INFO

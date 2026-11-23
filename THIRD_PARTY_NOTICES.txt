@@ -7,7 +7,7 @@ NLM は、以下の第三者の部品・移植元プロジェクトを同梱・�
 各項に説明と、その部品のライセンス全文（元のライセンスのファイルの写し）を載せています。
 Apache License 2.0 と GNU LGPL 2.1 の全文は、何度も出てくるので最後の付録にまとめました。
 
-第3部の部品の版は、v2.1.2-oz の配布用に 2026-11-15 にビルドした exe 版の中身で確かめたものです。
+第3部の部品の版は、v2.2.0-oz の配布用に 2026-11-22 にビルドした exe 版の中身で確かめたものです。
 exe 版では、多くの部品の元のライセンスのファイルが _internal フォルダの
 <部品名>-<版>.dist-info/ にも入っています。
 
@@ -29,6 +29,10 @@ The source code of the LGPL components is attached to each GitHub release from v
 第2部 画面の部品（ソースと exe 版の両方に入っている）
   1.  three.js r160（js/vendor/three/）                             MIT
   2.  M PLUS Rounded 1c 1.059（fonts/）                              SIL Open Font License 1.1
+  2b. BL のリプレイアプリ BeatSaber-Web-Replays（replay-viewer/blreplay/・REPLAY の窓）  MIT
+      - A-Frame 0.8.2 を元にした版（中に three.js r95）・LZMA-JS・JSZip 3.10.1・pako・drag-drop・
+        buffer・NoSleep.js ほか（MIT）・ieee754（BSD-3-Clause）・字の Teko（SIL OFL 1.1）
+  2c. Font Awesome Free 6.4.0（replay-viewer/blreplay/fontawesome/）  アイコン CC BY 4.0・字 SIL OFL 1.1・コード MIT
 
 第3部 exe 版（配布 zip）だけに入っている部品（_internal フォルダ）
   3.  pywebview 6.2.1（アプリの窓）                                  BSD-3-Clause
@@ -306,6 +310,133 @@ DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 Copyright 2016 The Rounded M+ Project Authors.
+
+
+---------------------------------------------------------------------
+2b. BL のリプレイアプリ BeatSaber-Web-Replays（REPLAY の窓・replay-viewer/blreplay/）
+    https://github.com/BeatLeader/BeatSaber-Web-Replays
+    License: MIT
+---------------------------------------------------------------------
+左上の窓の「REPLAY」で、遊んだリプレイ（BeatLeader の .bsor）を見るために、
+BeatLeader の Web のリプレイの見え方「BeatSaber-Web-Replays」（Supermedium の
+beatsaver-viewer から分かれた物）の組み立て済みの物を、ほぼそのまま同梱しています。
+組み立て済みの物は BeatLeader の公開ページ（https://replay.beatleader.com/）の物で、
+素材の一覧は GitHub のコミット cb3e9b81776d41cfdc25fa410ce4fdd9811662ed のものです
+（写した日・ファイルごとの SHA-256 は replay-viewer/blreplay/MANIFEST.json、
+出典と変えた所は replay-viewer/blreplay/SOURCE.md）。変えたのは、サーバーの頭からの
+場所 2 つをページからの場所にした所と、Font Awesome の CSS を同梱の物から読む所だけです。
+窓どうしの伝言とホイールのズームは NLM のコード（replay-viewer/bridge.js・GPLv3）で、
+写した物には手を入れていません。
+
+The MIT License
+
+Copyright © 2018 Supermedium.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+中に入っている部品（組み立て済みの物の中身・本体の build/build.*.js にまとめた
+物は、BeatLeader の公開ページの build.*.js.LICENSE.txt と package.json で確かめた）:
+
+  - A-Frame 0.8.2 を元にした版（vendor/aframe-master.min.js・2023-02-11 の
+    commit 50eae056）  MIT  Copyright © 2015-2017 A-Frame authors
+    https://github.com/aframevr/aframe
+    中に three.js r95（MIT・Copyright © 2010-2018 three.js authors）と、
+    anime.js・debug・deep-assign・document-register-element・load-bmfont・
+    three-bmfont-text・object-assign・present・style-attr ほかの小さな部品
+    （MIT・ISC などの許可の広いライセンス）が入っています。
+  - three.js の BufferGeometryUtils（vendor/BufferGeometryUtils.js）
+    MIT  Copyright © 2010-2018 three.js authors
+  - LZMA-JS（vendor/lzma-min.js・vendor/lzma_worker.js と本体の中）
+    MIT  © 2015 Nathan Rugg  https://github.com/LZMA-JS/LZMA-JS
+  - JSZip 3.10.1  MIT と GPLv3 の選択（MIT で使う）
+    Copyright (c) 2009-2016 Stuart Knightley, David Duponchel, Franz Buchinger,
+    António Afonso  https://github.com/Stuk/jszip
+    中の pako  MIT（zlib の移植の部分は zlib License）
+    Copyright (C) 2014-2017 by Vitaly Puzrin and Andrei Tuputcyn
+  - drag-drop・buffer・queue-microtask・run-parallel
+    MIT  Copyright (c) Feross Aboukhadijeh
+  - ieee754  BSD-3-Clause  Copyright 2008 Fair Oaks Labs, Inc.（本文は下）
+  - NoSleep.js 0.12  MIT  Copyright (c) Rich Tibbett
+    https://github.com/richtr/NoSleep.js
+  - A-Frame の部品（aabb-collider・atlas-uvs・event-set・geometry-merger・
+    layout・orbit-controls・proxy-event・render-order・ring-shader・slice9・
+    state-component。元のリポジトリの src/vendor/aframe-components/ に
+    写された物）  MIT（それぞれの作者）
+  - Safari で Ogg の音を読むための oggdec（src/lib/oggdec.js・Emscripten で
+    組み立てた物。元のリポジトリに出典の記載はありません）
+  - 字の Teko（assets/fonts/Teko-Bold.*）  SIL Open Font License 1.1
+    Copyright (c) 2014, Indian Type Foundry (info@indiantypefoundry.com).
+    本文は replay-viewer/blreplay/assets/fonts/Teko-OFL.txt（上の 2. と同じ
+    SIL Open Font License 1.1）
+
+上の MIT の部品の許諾の文は、上の BeatSaber-Web-Replays の MIT License と同じ
+文面（著作権の行だけがそれぞれの物）です。
+
+ieee754（BSD-3-Clause）:
+
+Copyright 2008 Fair Oaks Labs, Inc.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+---------------------------------------------------------------------
+2c. Font Awesome Free 6.4.0（REPLAY の窓のアイコン・replay-viewer/blreplay/fontawesome/）
+    https://fontawesome.com
+    License: アイコン CC BY 4.0・字 SIL OFL 1.1・コード MIT
+             （https://fontawesome.com/license/free）
+---------------------------------------------------------------------
+BL のリプレイアプリ（上の 2b.）はアイコンの字を CDN から読んでいます。NLM では
+開く時にネットへ出ないよう、同じ版の CSS と字（webfonts/）を同梱し、そこから
+読むようにしています（中身は変えていません）。CSS の先頭の表示と
+replay-viewer/blreplay/fontawesome/LICENSE.txt に、次の表示があります。
+
+Font Awesome Free 6.4.0 by @fontawesome - https://fontawesome.com
+License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License)
+Copyright 2023 Fonticons, Inc.
+
+- アイコン: Creative Commons Attribution 4.0 International
+  （https://creativecommons.org/licenses/by/4.0/）
+- 字（webfonts/ の .woff2・.ttf）: SIL Open Font License 1.1（本文は上の 2.）
+- コード（CSS）: MIT License（文面は上の 2b. と同じ・著作権は Fonticons, Inc.）
 
 
 =====================================================================

@@ -249,6 +249,15 @@ def test_place_undo(t):
 `test-out/history/<日時>/` の記録と見比べて、下の「残っている候補」を絞り込み、結果をここに書き足す。
 切り分けの実験は `tools/test_diag.py`（`reload` / `files` / `burst`）でやり直せる。
 
+### e2e_nle「『曲を解析』で構成の解析が終わって帯が出た時…案内が出る」で「案内が閉じる」が時間切れ（2026-11-22・未解決）
+
+- **起きたこと**: REPLAY の窓を入れた後の全テスト（937件）で1回、`test_analysis_guide.py::test_guide_after_analysis` の案内を閉じる所（Esc か［OK］の後に
+  `#dirtyDlgBg` の案内が消えるのを待つ）で 15 秒の待ちを使い切った（記録は `test-out/history/` の 2026-11-22 15 時台の回）。
+  同じ回に e2e_misc の `test_automodder.py` が起動の `ERR_CONNECTION_REFUSED`（下の既知の形）で落ちており、全体が重かった。直後にファイル単独で3回回すと全部通った。
+- **分かっていること**: この回で変えたのは左上の窓の見出し・REPLAY の点数の色で、案内（song-analysis.js の `showGuide`）・閉じる処理には触っていない。
+- **残っている候補**: 負荷の高い時に Esc・クリックが案内の出る前（他の画面が閉じるのを待っている間）に届いて空振りする。また出たら、押した時に案内が出ていたか
+  （`#dirtyDlg[data-dlg]` の値）を記録に足して絞り込む。
+
 ### e2e_misc「Musicを拍2（1秒）から始めると…」で「INFOへの切替」が時間切れ（2026-10-28・未解決）
 
 - **起きたこと**: v2.1.1-oz の準備の全テストで1回、`test_music_egg.py::test_music_moved_adds_silence` の準備（exe 版で保存した rich を開き直した後の `to_info`＝
@@ -332,6 +341,10 @@ def test_place_undo(t):
   （同時3・`test-out/history/20261115_193951/`）で `e2e/test_export.py::test_export_after_bulk_import` の起動待ちの時間切れ（Log 領域に `net::ERR_NO_BUFFER_SPACE`・
   `js/audio/spectro-levels.js`）、`run_tests.py e2e_project …`（e2e_project を同時15・`20261115_194221/`）で `e2e_project/test_diff_ops.py::test_clear_all_current_and_undo` の
   起動待ちの時間切れ（`net::ERR_CONNECTION_REFUSED`・`js/mapcheck/*.js` など）＝どちらも上と同じ形。前者は `--changed` で、後者は `e2e_project/test_diff_ops.py` だけで回し直すと通った。
+- **2026-11-22**（v2.2.0-oz のリリース前の全テスト `run_tests.py`・937件。同じ PC でチュートリアルの撮影（ヘッドレス Edge）が同時に流れていた・`test-out/history/20261122_164551/`）:
+  `e2e_edit/test_arc_chain.py::test_arc_create_ctrl_r` と `visual/test_visual.py::test_layout_boot` の起動待ちの時間切れ（`net::ERR_CONNECTION_REFUSED`・
+  `js/constants.js`・`js/mapcheck/env-tables.js` など起動時に読むモジュール）、`visual/test_visual.py::test_image_review_menu` の比べる画像の読み込みで
+  `TypeError: Failed to fetch`＝どれも上と同じ形。`e2e_edit/test_arc_chain.py` と `visual --accept` で回し直すと全部通った（撮影はまだ流れていた）。
 
 ### e2e_nle「帯のセクションの右クリック『クリップを作る…』…」で解析のメニューが出ない（2026-10-20・未解決）
 

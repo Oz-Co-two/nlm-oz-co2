@@ -1,0 +1,2363 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Beat Saber web replays</title>
+		<link rel="apple-touch-icon-precomposed" sizes="57x57" href="assets/img/apple-touch-icon-57x57.png" />
+		<link rel="apple-touch-icon-precomposed" sizes="114x114" href="assets/img/apple-touch-icon-114x114.png" />
+		<link rel="apple-touch-icon-precomposed" sizes="72x72" href="assets/img/apple-touch-icon-72x72.png" />
+		<link rel="apple-touch-icon-precomposed" sizes="144x144" href="assets/img/apple-touch-icon-144x144.png" />
+		<link rel="apple-touch-icon-precomposed" sizes="60x60" href="assets/img/apple-touch-icon-60x60.png" />
+		<link rel="apple-touch-icon-precomposed" sizes="120x120" href="assets/img/apple-touch-icon-120x120.png" />
+		<link rel="apple-touch-icon-precomposed" sizes="76x76" href="assets/img/apple-touch-icon-76x76.png" />
+		<link rel="apple-touch-icon-precomposed" sizes="152x152" href="assets/img/apple-touch-icon-152x152.png" />
+		<link rel="icon" type="image/png" href="assets/img/favicon-196x196.png" sizes="196x196" />
+		<link rel="icon" type="image/png" href="assets/img/favicon-96x96.png" sizes="96x96" />
+		<link rel="icon" type="image/png" href="assets/img/favicon-32x32.png" sizes="32x32" />
+		<link rel="icon" type="image/png" href="assets/img/favicon-16x16.png" sizes="16x16" />
+		<link rel="icon" type="image/png" href="assets/img/favicon-128.png" sizes="128x128" />
+		<meta name="application-name" content="Beat Saber web replays" />
+		<meta name="msapplication-TileColor" content="#FFFFFF" />
+		<meta name="msapplication-TileImage" content="assets/img/mstile-144x144.png" />
+		<meta name="msapplication-square70x70logo" content="assets/img/mstile-70x70.png" />
+		<meta name="msapplication-square150x150logo" content="assets/img/mstile-150x150.png" />
+		<meta name="msapplication-wide310x150logo" content="assets/img/mstile-310x150.png" />
+		<meta name="msapplication-square310x310logo" content="assets/img/mstile-310x310.png" />
+
+		<meta property="og:title" content="Beat Saber replay" />
+		<meta name="twitter:title" content="Beat Saber replay" />
+		<meta name="twitter:site" content="replay.beatleader.xyz" />
+		<meta name="twitter:image:alt" content="Beat Saber replay" />
+
+		<meta name="twitter:player:width" content="700" />
+		<meta name="twitter:player:height" content="400" />
+		<meta name="twitter:card" content="summary_large_image" />
+
+		<meta property="og:type" content="website" />
+		<meta property="og:image:width" content="700" />
+		<meta property="og:image:height" content="400" />
+
+		<script>
+			['og:url', 'og:video:url', 'og:video:secure_url', 'twitter:player'].forEach(attribute => {
+				var link = document.createElement('meta');
+				link.setAttribute('property', attribute);
+				link.content = document.location;
+				document.getElementsByTagName('head')[0].appendChild(link);
+			});
+			['twitter:image', 'og:image'].forEach(attribute => {
+				var link = document.createElement('meta');
+				link.setAttribute('property', attribute);
+				link.content = document.location.protocol + '//' + document.location.host + '/preview.png' + window.location.search;
+				if (attribute == 'twitter:image') {
+					link.content += '&twitter=true';
+				}
+				document.getElementsByTagName('head')[0].appendChild(link);
+			});
+		</script>
+
+		<script type="text/javascript">
+			window.vrDisabled = true;
+		</script>
+		
+		<script src="vendor/aframe-master.min.js"></script>
+		
+		<script src="build/build.1794234981.js"></script>
+		<link rel="stylesheet" href="build/style.1794234981.css" />
+		<link rel="stylesheet" href="fontawesome/css/all.css" />
+	</head>
+	<body id="body" class="showControls">
+		<div style="position: fixed; inset: auto 0 0 0; height: 2px; overflow: auto; opacity: 0; pointer-events: none">
+			<div style="height: 4px"></div>
+		</div>
+		<!-- Stage, neons, animations launched from beat-generator events. -->
+<a-mixin
+	id="bgColorAnimation"
+	animation__bgcoloroff="isRawProperty: true; property: systems.materials.stageNormal.uniforms.backglowColor.value; type: color; to: #081a0f; dur: 500; easing: linear; startEvents: bgcoloroff"
+	animation__bgcolorblue="isRawProperty: true; property: systems.materials.stageNormal.uniforms.backglowColor.value; type: color; to: #2851b8; dur: 5; easing: linear; startEvents: bgcolorblue"
+	animation__bgcolorbluefade="isRawProperty: true; property: systems.materials.stageNormal.uniforms.backglowColor.value; type: color; from: #58bbed; to: #2851b8; dur: 500; easing: linear; startEvents: bgcolorbluefade"
+	animation__bgcolorred="isRawProperty: true; property: systems.materials.stageNormal.uniforms.backglowColor.value; type: color; to: #ff1f81; dur: 5; easing: linear; startEvents: bgcolorred"
+	animation__bgcolorredfade="isRawProperty: true; property: systems.materials.stageNormal.uniforms.backglowColor.value; type: color; from: #ff6bb0; to: #ff1f81; dur: 500; easing: linear; startEvents: bgcolorredfade"
+	animation__skycoloroff="isRawProperty: true; property: systems.materials.stageNormal.uniforms.skyColor.value; type: color; to: #297547; dur: 500; easing: linear; startEvents: bgcoloroff"
+	animation__skycolorblue="isRawProperty: true; property: systems.materials.stageNormal.uniforms.skyColor.value; type: color; to: #840d42; dur: 5; easing: linear; startEvents: bgcolorblue"
+	animation__skycolorred="isRawProperty: true; property: systems.materials.stageNormal.uniforms.skyColor.value; type: color; to: #154136; dur: 5; easing: linear; startEvents: bgcolorred"
+	animation__bgcolorgameover="isRawProperty: true; property: systems.materials.stageNormal.uniforms.backglowColor.value; type: color; to: #081a0f; dur: 500; easing: linear; startEvents: bgcolorgameover"
+	animation__skycolorgameover="isRawProperty: true; property: systems.materials.stageNormal.uniforms.skyColor.value; type: color; to: #840d42; dur: 5; easing: linear; startEvents: bgcolorgameover"></a-mixin>
+
+<a-mixin
+	id="tunnelColorAnimation"
+	animation__tunnelcoloroff="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.tunnelNeon.value; type: color; to: #000; dur: 500; easing: linear; startEvents: tunnelcoloroff"
+	animation__tunnelcolorblue="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.tunnelNeon.value; type: color; to: #00708a; dur: 5; easing: linear; startEvents: tunnelcolorblue"
+	animation__tunnelcolorbluefade="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.tunnelNeon.value; type: color; from: #87c2ff; to: #00708a; dur: 500; easing: linear; startEvents: tunnelcolorbluefade"
+	animation__tunnelcolorred="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.tunnelNeon.value; type: color; to: #f01978; dur: 5; easing: linear; startEvents: tunnelcolorred"
+	animation__tunnelcolorredfade="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.tunnelNeon.value; type: color; from: #ff70b5; to: #f01978; dur: 500; easing: linear; startEvents: tunnelcolorredfade"></a-mixin>
+
+<a-mixin
+	id="floorColorAnimation"
+	animation__floorcoloroff="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.floorNeon.value; type: color; to: #000; dur: 500; easing: linear; startEvents: floorcoloroff"
+	animation__floorcolorblue="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.floorNeon.value; type: color; to: #00708a; dur: 5; easing: linear; startEvents: floorcolorblue"
+	animation__floorcolorbluefade="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.floorNeon.value; type: color; from: #87c2ff; to: #00708a; dur: 500; easing: linear; startEvents: floorcolorbluefade"
+	animation__floorcolorred="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.floorNeon.value; type: color; to: #f01978; dur: 5; easing: linear; startEvents: floorcolorred"
+	animation__floorcolorredfade="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.floorNeon.value; type: color; from: #ff70b5; to: #f01978; dur: 500; easing: linear; startEvents: floorcolorredfade"></a-mixin>
+
+<a-mixin
+	id="leftLaserColorAnimation"
+	animation__leftlasercoloroff="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.leftLaser.value; type: color; to: #000; dur: 500; easing: linear; startEvents: leftlasercoloroff"
+	animation__leftlasercolorblue="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.leftLaser.value; type: color; to: #00708a; dur: 5; easing: linear; startEvents: leftlasercolorblue"
+	animation__leftlasercolorbluefade="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.leftLaser.value; type: color; from: #87c2ff; to: #00708a; dur: 500; easing: linear; startEvents: leftlasercolorbluefade"
+	animation__leftlasercolorred="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.leftLaser.value; type: color; to: #f01978; dur: 5; easing: linear; startEvents: leftlasercolorred"
+	animation__leftlasercolorredfade="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.leftLaser.value; type: color; from: #ff70b5; to: #f01978; dur: 500; easing: linear; startEvents: leftlasercolorredfade"></a-mixin>
+
+<a-mixin
+	id="rightLaserColorAnimation"
+	animation__rightlasercoloroff="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.rightLaser.value; type: color; to: #000; dur: 500; easing: linear; startEvents: rightlasercoloroff"
+	animation__rightlasercolorblue="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.rightLaser.value; type: color; to: #00708a; dur: 5; easing: linear; startEvents: rightlasercolorblue"
+	animation__rightlasercolorbluefade="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.rightLaser.value; type: color; from: #87c2ff; to: #00708a; dur: 500; easing: linear; startEvents: rightlasercolorbluefade"
+	animation__rightlasercolorred="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.rightLaser.value; type: color; to: #f01978; dur: 5; easing: linear; startEvents: rightlasercolorred"
+	animation__rightlasercolorredfade="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.rightLaser.value; type: color; from: #ff70b5; to: #f01978; dur: 500; easing: linear; startEvents: rightlasercolorredfade"></a-mixin>
+
+<a-mixin
+	id="textGlowColorAnimation"
+	animation__textglowoff="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.textGlow.value; type: color; to: #000; dur: 5; easing: easeInOutCubic; startEvents: textglowoff"
+	animation__textglownormal="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.textGlow.value; type: color; to: #444; dur: 750; easing: easeInOutCubic; delay: 100; startEvents: textglownormal"
+	animation__textglowbold="isRawProperty: true; property: systems.materials.stageAdditive.uniforms.textGlow.value; type: color; from: #888; to: #444; dur: 500; easing: easeInOutCubic; startEvents: textglowbold"></a-mixin>
+
+
+		<canvas id="main-canvas"></canvas>
+		<div id="controls">
+  <div id="controlsVolume" title="Adjust volume"><img src="assets/img/volume.svg"></div>
+
+  <div id="volumeSliderContainer">
+    <button id="mixer" title="Volume mixer"><i class="fas fa-sliders-h"></i></button>
+    <input id="volumeSlider" class="settingRange" title="Volume" type="range" min="0" max="1" step="0.005" value="0.3"></input>
+    <div id="mixerContainer" class="volumeHide" style="display: flex; flex-direction: row-reverse;">
+      <div style="display: grid;">
+        <i class="fas fa-music" style="color: white; transform: rotate(90deg);"></i>
+        <i class="fas fa-caret-square-down" style="color: white; transform: rotate(90deg);"></i>
+        <i class="fas fa-clock" style="color: white; transform: rotate(90deg);"></i>
+      </div>
+      
+      <div style="display: grid;">
+        <input id="musicSlider" class="settingRange" title="Music Volume" type="range" min="0" max="1" step="0.005" value="0.3"></input>
+        <input id="hitsoundSlider" class="settingRange" title="Hitsound Volume" type="range" min="0" max="1" step="0.005" value="0.3"></input>
+        
+
+<div class="delaySliderContainer">
+    <div class="rangeTicksDelay">
+      <svg role="presentation" class="rangeSVG" height="8" width="100" xmlns="http://www.w3.org/2000/svg">
+        <rect class="range__tick" x="0%" y="3" width="1" height="10"></rect>
+        <rect class="range__tick" x="25%" y="3" width="1" height="10"></rect>
+        <rect class="range__tick" x="50%" y="3" width="1" height="10"></rect>
+        <rect class="range__tick" x="75%" y="3" width="1" height="10"></rect>
+        <rect class="range__tick" x="100%" y="3" width="1" height="10"></rect>
+      </svg>
+    </div>
+    <input id="delaySlider" class="settingRange" title="Sound Delay" type="range" min="-1" max="1" step="0.01" value="0"></input>
+
+    <div class="rangePointsDelay">
+      <svg role="presentation" class="rangePointsSvg" height="20" width="112" xmlns="http://www.w3.org/2000/svg">
+        <text class="range__point_delay" x="1" y="-5" transform="rotate(90.1)" text-anchor="start">-1s</text>
+        <text class="range__point_delay" x="10" y="-52" transform="rotate(90)" text-anchor="middle">  0s </text>
+        <text class="range__point_delay" x="14" y="-100" transform="rotate(90)" text-anchor="end">  1s</text>
+      </svg>
+    </div>
+</div>
+
+<p class="songDelay">
+    <span class="songDelayPercent">0s</span>
+</p>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <label>
+      <div class="btn play" id="controlsPause" title="Play/Pause">
+        <span class="bar bar-1"></span>
+        <span class="bar bar-2"></span>
+        <span class="bar bar-3"></span>
+      </div>
+    </label>
+  </div>
+
+  <div id="timeline">
+    <div id="timelineLine">
+      <div id="playhead"></div>
+    </div>
+    <p id="timelineHover"></p>
+    <div id="timelineCursor"></div>
+  </div>
+
+  <p id="songTime">
+    <span id="songProgress">0:00</span>
+    /
+    <span id="songDuration">-:--</span>
+  </p>
+
+  <div id="desktopContainer" style="display: flex">
+    <div class="speedSliderContainer">
+    <div class="rangeTicks">
+      <svg role="presentation" class="rangeSVG" height="8" width="100" xmlns="http://www.w3.org/2000/svg">
+        <rect class="range__tick" x="0%" y="3" width="1" height="10"></rect>
+        <rect class="range__tick" x="25%" y="3" width="1" height="10"></rect>
+        <rect class="range__tick" x="50%" y="3" width="1" height="10"></rect>
+        <rect class="range__tick" x="75%" y="3" width="1" height="10"></rect>
+        <rect class="range__tick" x="100%" y="3" width="1" height="10"></rect>
+      </svg>
+    </div>
+    <input class="speedSlider" title="Replay speed" type="range" min="0" max="2" step="0.01" oninput="this.style.setProperty('--value',this.value)"; ></input>
+
+    <div class="rangePoints">
+      <svg role="presentation" class="rangePointsSvg" height="8" width="112" xmlns="http://www.w3.org/2000/svg">
+        <text class="range__point" x="0%" y="8" text-anchor="start">  0  </text>
+        <text class="range__point" x="25%" y="8" text-anchor="middle">  0.5</text>
+        <text class="range__point" x="50%" y="8" text-anchor="middle">  1  </text>
+        <text class="range__point" x="75%" y="8" text-anchor="middle">1.5  </text>
+        <text class="range__point" x="99%" y="8" text-anchor="end">  2  </text>
+      </svg>
+    </div>
+</div>
+
+<p class="songSpeed">
+    <span class="songSpeedPercent">1x</span>
+</p>
+
+<p class="songEffectiveSpeed" title="Effective speed around mistakes" style="display: none">1x</p>
+  </div>
+
+  <div id="mobileContainer">
+    <div class="speedSliderContainer">
+    <div class="rangeTicks">
+      <svg role="presentation" class="rangeSVG" height="8" width="100" xmlns="http://www.w3.org/2000/svg">
+        <rect class="range__tick" x="0%" y="3" width="1" height="10"></rect>
+        <rect class="range__tick" x="25%" y="3" width="1" height="10"></rect>
+        <rect class="range__tick" x="50%" y="3" width="1" height="10"></rect>
+        <rect class="range__tick" x="75%" y="3" width="1" height="10"></rect>
+        <rect class="range__tick" x="100%" y="3" width="1" height="10"></rect>
+      </svg>
+    </div>
+    <input class="speedSlider" title="Replay speed" type="range" min="0" max="2" step="0.01" oninput="this.style.setProperty('--value',this.value)"; ></input>
+
+    <div class="rangePoints">
+      <svg role="presentation" class="rangePointsSvg" height="8" width="112" xmlns="http://www.w3.org/2000/svg">
+        <text class="range__point" x="0%" y="8" text-anchor="start">  0  </text>
+        <text class="range__point" x="25%" y="8" text-anchor="middle">  0.5</text>
+        <text class="range__point" x="50%" y="8" text-anchor="middle">  1  </text>
+        <text class="range__point" x="75%" y="8" text-anchor="middle">1.5  </text>
+        <text class="range__point" x="99%" y="8" text-anchor="end">  2  </text>
+      </svg>
+    </div>
+</div>
+
+<p class="songSpeed">
+    <span class="songSpeedPercent">1x</span>
+</p>
+
+<p class="songEffectiveSpeed" title="Effective speed around mistakes" style="display: none">1x</p>
+    <div class="controlsCamera mobileControl" title="Camera settings"><img src="assets/img/camera.png"></div>
+    <div class="controlsSettings mobileControl" title="Settings"><img src="assets/img/settings.png"></div>
+    <div class="controlsFullscreen mobileControl" title="Enter fullscreen (f)">
+      <svg class="enterFullscreen" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px">
+          <g><path d="M7 3H2v5h2V5h3V3zM18 8V3h-5v2h3v3h2zM13 17v-2h3v-3h2v5h-5zM4 12H2v5h5v-2H4v-3z"></path></g>
+      </svg>
+      <svg class="exitFullscreen" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px">
+          <g><path d="M8 8V3H6v3H2v2h6zM12 8h6V6h-4V3h-2v5zM12 17v-5h6v2h-4v3h-2zM8 12H2v2h4v3h2v-5z"></path></g>
+      </svg>
+    </div>
+    <button class="povswitch mobileControl" onmousedown="event.preventDefault();" title="First person view (shift+f)"></button>
+  </div>
+
+  <p id="skipIntro" style="display: none;">Skip intro</p>
+
+  <div class="controlsMobile" title="More..."><i style="color: white" class="fas fa-sliders-h"></i></div>
+
+  <div class="controlsCamera desktopControl" title="Camera settings"><img src="assets/img/camera.png"></div>
+
+  <script>
+	function changeCameraTab(index) {
+		let buttons = Array.from(document.getElementsByClassName('camera-tab-button'));
+		let panes = Array.from(document.getElementsByClassName('camera-tab-pane'));
+
+		buttons.forEach((button, buttonIndex) => {
+			if (buttonIndex === index) {
+				button.classList.add('active');
+				panes[buttonIndex].classList.add('active');
+			} else {
+				button.classList.remove('active');
+				panes[buttonIndex].classList.remove('active');
+			}
+		});
+	}
+</script>
+<div id="cameraSettingsContainer">
+	<div class="tab-container">
+		<div class="tab-buttons">
+			<button class="camera-tab-button tab-button active" onclick="changeCameraTab(0)"><i class="fas fa-home"></i> Main</button>
+			<button class="camera-tab-button tab-button" onclick="changeCameraTab(1)"><i class="fas fa-vr-cardboard"></i> FPV</button>
+			<button class="camera-tab-button tab-button" onclick="changeCameraTab(2)"><i class="fas fa-camera-retro"></i> Ortho</button>
+		</div>
+		<div class="tab-content">
+			<div class="camera-tab-pane tab-pane active"><div class="settingHeader">Main camera</div>
+<div id="cameraPositionContainer">
+	<button id="cameraToLeft" class="settingButton" title="Select left camera (shift+q)">< left</button>
+	<button id="cameraToCenter" class="settingButton" title="Select center camera (shift+r)">center</button>
+	<button id="cameraToRight" class="settingButton" title="Select right camera (shift+e)">right ></button>
+</div>
+<div id="cameraSaveContainer">
+	<button id="cameraSave" class="settingButton" title="Save current camera position and rotation">Save</button>
+	<button id="cameraRestore" class="settingButton" title="Restore saved camera position and rotation">Restore</button>
+</div>
+<div class="toggleButton" title="Use saved camera location and rotation as default on start.">
+	<label class="switch">
+		<input type="checkbox" id="savedCameraDefault" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel"
+		><td><nobr>Saved camera as default</nobr></td></label
+	>
+</div>
+</div>
+			<div class="camera-tab-pane tab-pane"><div class="settingHeader">First person camera</div>
+<div class="toggleButton" title="First person camera field of view">
+	<label>
+		<div class="toggleButtonContainer">
+			<label class="toggleButtonLabel" style="margin-left: 5px"
+				><td><nobr>Field of view:</nobr></td></label
+			>
+			<label id="fovLabel" class="toggleButtonLabel" style="margin-left: 33px">60°</label>
+		</div>
+		<input id="fov" class="settingRange" type="range" min="30" max="150" step="1" value="60" />
+	</label>
+</div>
+<div class="toggleButton" title="How far back would be camera relative to the player.">
+	<label>
+		<div class="toggleButtonContainer">
+			<label class="toggleButtonLabel" style="margin-left: 5px"
+				><td><nobr>Z position offset:</nobr></td></label
+			>
+			<label id="cameraZPositionLabel" class="toggleButtonLabel" style="margin-left: 51px">1m</label>
+		</div>
+		<input id="cameraZPosition" class="settingRange" type="range" min="-5" max="5" step="0.1" value="1" />
+	</label>
+</div>
+<div class="toggleButton" title="Rotate camera higher or lower on X axis">
+	<label>
+		<div class="toggleButtonContainer">
+			<label class="toggleButtonLabel" style="margin-left: 5px"
+				><td><nobr>X rotation offset:</nobr></td></label
+			>
+			<label id="cameraXRotationLabel" class="toggleButtonLabel" style="margin-left: 51px">0°</label>
+		</div>
+		<input id="cameraXRotation" class="settingRange" type="range" min="-100" max="100" step="1" value="0" />
+	</label>
+</div>
+<div class="toggleButton" title="How fast the camera follows the head position, the same as in the Camera2 mod. &#10;Lower value means more smoothing.">
+	<label>
+		<div class="toggleButtonContainer">
+			<label class="toggleButtonLabel" style="margin-left: 5px"
+				><td><nobr>Position smoothing:</nobr></td></label
+			>
+			<label id="cameraPositionSmoothingLabel" class="toggleButtonLabel" style="margin-left: 68px">10</label>
+		</div>
+		<input id="cameraPositionSmoothing" class="settingRange" type="range" min="0.1" max="50" step="0.1" value="10" />
+	</label>
+</div>
+<div class="toggleButton" title="How fast the camera follows the head rotation, the same as in the Camera2 mod. &#10;Lower value means more smoothing.">
+	<label>
+		<div class="toggleButtonContainer">
+			<label class="toggleButtonLabel" style="margin-left: 5px"
+				><td><nobr>Rotation smoothing:</nobr></td></label
+			>
+			<label id="cameraRotationSmoothingLabel" class="toggleButtonLabel" style="margin-left: 68px">4</label>
+		</div>
+		<input id="cameraRotationSmoothing" class="settingRange" type="range" min="0.1" max="50" step="0.1" value="4" />
+	</label>
+</div>
+<div class="toggleButton" title="Normalize look direction in First Person Camera. &#10;(Ignores 'X rotation offset' option)">
+	<label class="switch">
+		<input type="checkbox" id="forceForwardLookDirection" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel"
+		><td><nobr>Force look upright</nobr></td></label
+	>
+</div>
+<div class="toggleButton" title="Preserve FPV camera toggle state">
+	<label class="switch">
+		<input type="checkbox" id="saveFpvToggle" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel"
+		><td><nobr>Save FPV toggle</nobr></td></label
+	>
+</div>
+</div>
+			<div class="camera-tab-pane tab-pane"><div class="settingHeader">Orthographic camera</div>
+<div class="orthoSettingsContainer">
+	<div class="toggleButtons" style="display: flex; flex-direction: column; justify-content: flex-end">
+		<div class="toggleButton" title="Show top orthographic camera.">
+			<label class="switch">
+				<input type="checkbox" id="orthographicTopEnabled" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel"
+				><td><nobr>Top camera</nobr></td></label
+			>
+		</div>
+		<div class="toggleButton" title="How far away from player camera would be">
+			<label>
+				<div class="toggleButtonContainer">
+					<label class="toggleButtonLabel" style="margin-left: 5px"
+						><td><nobr>Zoom:</nobr></td></label
+					>
+					<label id="orthographicTopFrustumLabel" class="toggleButtonLabel" style="margin-left: 15px">1.8</label>
+				</div>
+				<input id="orthographicTopFrustum" class="settingRange" type="range" min="0.5" max="5" step="0.01" value="1.8" />
+			</label>
+		</div>
+		<div class="toggleButton" title="How far camera will render">
+			<label>
+				<div class="toggleButtonContainer">
+					<label class="toggleButtonLabel" style="margin-left: 5px"
+						><td><nobr>Render:</nobr></td></label
+					>
+					<label id="orthographicTopFarLabel" class="toggleButtonLabel" style="margin-left: 15px">10</label>
+				</div>
+				<input id="orthographicTopFar" class="settingRange" type="range" min="0.1" max="50" step="0.1" value="10" />
+			</label>
+		</div>
+	</div>
+	<div class="toggleButtons" style="display: flex; flex-direction: column; justify-content: space-between">
+		<div class="toggleButton" title="Show right orthographic camera.">
+			<label class="switch">
+				<input type="checkbox" id="orthographicRightEnabled" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel"
+				><td><nobr>Right camera</nobr></td></label
+			>
+		</div>
+		<div class="toggleButton" title="How far away from player camera would be">
+			<label>
+				<div class="toggleButtonContainer">
+					<label class="toggleButtonLabel" style="margin-left: 5px"
+						><td><nobr>Zoom:</nobr></td></label
+					>
+					<label id="orthographicRightFrustumLabel" class="toggleButtonLabel" style="margin-left: 15px">1.8</label>
+				</div>
+				<input id="orthographicRightFrustum" class="settingRange" type="range" min="0.5" max="5" step="0.01" value="1.8" />
+			</label>
+		</div>
+		<div class="toggleButton" title="How far camera will render">
+			<label>
+				<div class="toggleButtonContainer">
+					<label class="toggleButtonLabel" style="margin-left: 5px"
+						><td><nobr>Render:</nobr></td></label
+					>
+					<label id="orthographicRightFarLabel" class="toggleButtonLabel" style="margin-left: 15px">10</label>
+				</div>
+				<input id="orthographicRightFar" class="settingRange" type="range" min="0.1" max="50" step="0.1" value="10" />
+			</label>
+		</div>
+		<div class="toggleButton" title="Show back orthographic camera.">
+			<label class="switch">
+				<input type="checkbox" id="orthographicBackEnabled" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel"
+				><td><nobr>Back camera</nobr></td></label
+			>
+		</div>
+		<div class="toggleButton" title="How far away from player camera would be">
+			<label>
+				<div>
+					<label class="toggleButtonLabel" style="margin-left: 5px"
+						><td><nobr>Zoom:</nobr></td></label
+					>
+					<label id="orthographicBackFrustumLabel" class="toggleButtonLabel" style="margin-left: 15px">1.8</label>
+				</div>
+				<input id="orthographicBackFrustum" class="settingRange" type="range" min="0.5" max="5" step="0.01" value="1.8" />
+			</label>
+		</div>
+		<div class="toggleButton" title="How far camera will render">
+			<label>
+				<div class="toggleButtonContainer">
+					<label class="toggleButtonLabel" style="margin-left: 5px"
+						><td><nobr>Render:</nobr></td></label
+					>
+					<label id="orthographicBackFarLabel" class="toggleButtonLabel" style="margin-left: 15px">10</label>
+				</div>
+				<input id="orthographicBackFar" class="settingRange" type="range" min="0.1" max="50" step="0.1" value="10" />
+			</label>
+		</div>
+	</div>
+</div>
+</div>
+		</div>
+	</div>
+</div>
+
+
+  <div class="controlsFullscreen desktopControl" title="Enter fullscreen (f)">
+    <svg class="enterFullscreen" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px">
+        <g><path d="M7 3H2v5h2V5h3V3zM18 8V3h-5v2h3v3h2zM13 17v-2h3v-3h2v5h-5zM4 12H2v5h5v-2H4v-3z"></path></g>
+    </svg>
+    <svg class="exitFullscreen" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px">
+        <g><path d="M8 8V3H6v3H2v2h6zM12 8h6V6h-4V3h-2v5zM12 17v-5h6v2h-4v3h-2zM8 12H2v2h4v3h2v-5z"></path></g>
+    </svg>
+  </div>
+
+  <div class="controlsSettings desktopControl" title="Settings"><img src="assets/img/settings.png"></div>
+  <script>
+	function changeTab(index) {
+		let buttons = Array.from(document.getElementsByClassName('settings-tab-button'));
+		let panes = Array.from(document.getElementsByClassName('settings-tab-pane'));
+
+		buttons.forEach((button, buttonIndex) => {
+			if (buttonIndex === index) {
+				button.classList.add('active');
+				panes[buttonIndex].classList.add('active');
+			} else {
+				button.classList.remove('active');
+				panes[buttonIndex].classList.remove('active');
+			}
+		});
+	}
+</script>
+<div id="settingsContainer">
+	<div class="tab-container">
+		<div class="tab-buttons">
+			<button class="settings-tab-button tab-button active" onclick="changeTab(0)"><i class="fas fa-home"></i> Main</button>
+			<button class="settings-tab-button tab-button" onclick="changeTab(1)"><i class="fas fa-xmarks-lines"></i> Markers</button>
+			<button class="settings-tab-button tab-button" onclick="changeTab(2)"><i class="fas fa-mountain-city"></i> Visuals</button>
+			<button class="settings-tab-button tab-button" onclick="changeTab(3)"><i class="fas fa-palette"></i> Colors</button>
+			<button class="settings-tab-button tab-button" onclick="changeTab(4)"><i class="fas fa-wand-sparkles"></i> Sabers</button>
+			<button class="settings-tab-button tab-button" onclick="changeTab(5)"><i class="fas fa-circle-play"></i> Playback</button>
+			<button class="settings-tab-button tab-button" onclick="changeTab(6)"><i class="fas fa-folder-open"></i> Local files</button>
+			<button class="settings-tab-button tab-button" id="extensionsTab" style="display: none" onclick="changeTab(7)">
+				<i class="fas fa-puzzle-piece"></i> Mods
+			</button>
+		</div>
+		<div class="tab-content">
+			<div class="settings-tab-pane tab-pane active"><div class="generalSettingsContainer">
+	<div class="toggleButtons" style="display: flex; flex-direction: column; justify-content: space-between">
+		<div class="toggleButton" title="Show 3D model of headset synced with replay.">
+			<label>
+				<div class="toggleButtonContainer">
+					<label class="toggleButtonLabel" style="margin-left: 5px"
+						><td><nobr>Headset opacity:</nobr></td></label
+					>
+					<label id="headsetOpacityLabel" class="toggleButtonLabel" style="margin-left: 50px">100</label>
+				</div>
+				<input id="headsetOpacity" class="settingRange" type="range" min="0" max="100" step="1" value="100" />
+			</label>
+		</div>
+
+		<div class="toggleButton" title="Will play hitsound only when note is actually cut.">
+			<label class="switch">
+				<input type="checkbox" id="realHitsounds" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel"
+				><td><nobr>Real hitsounds</nobr></td></label
+			>
+		</div>
+		<div class="toggleButton" title="Display time in map beat time as well.">
+			<label class="switch">
+				<input type="checkbox" id="timeInBeats" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel"
+				><td><nobr>Time in beats</nobr></td></label
+			>
+		</div>
+
+		<div class="toggleButton" title="Will add color highlight for all missed notes, walls and bombs.">
+			<label class="switch">
+				<input type="checkbox" id="highlightErrors" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Highlight errors</nobr>
+				</td>
+			</label>
+		</div>
+		<div class="toggleButton" title="Will add color highlight for all 115 cuts.">
+			<label class="switch">
+				<input type="checkbox" id="highlight115s" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Highlight 115s</nobr>
+				</td>
+			</label>
+		</div>
+
+		<div class="toggleButton" title="Different note score color based on score value.">
+			<label class="switch">
+				<input type="checkbox" id="colorScores" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel"
+				><td><nobr>Color scores</nobr></td></label
+			>
+		</div>
+
+		<div class="toggleButton" title="Disable parts of notes flying off.">
+			<label class="switch">
+				<input type="checkbox" id="reducedDebris" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Reduced debris</nobr>
+				</td>
+			</label>
+		</div>
+		<div class="toggleButton" title="Disable jump animations.">
+			<label class="switch">
+				<input type="checkbox" id="disableJumps" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>No jumps</nobr>
+				</td>
+			</label>
+		</div>
+
+		<div class="exportButtons">
+			<button id="exportSettings" title="Export settings to a file."><i class="fas fa-file-export"></i>Export settings</button>
+			<button id="importSettings" title="Import settings from a file." onclick="document.getElementById('importSettingsPicker').click();">
+				<i class="fas fa-file-import"></i> Import settings
+			</button>
+		</div>
+		<input id="importSettingsPicker" style="display: none" type="file" accept=".json" />
+	</div>
+
+	<div class="sliders" style="display: flex; flex-direction: column; justify-content: space-between">
+		<div class="toggleButton" title="Show score, combo, accuracy">
+			<label class="switch">
+				<input type="checkbox" id="showHud" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Show HUD</nobr>
+				</td>
+			</label>
+		</div>
+		<div class="toggleButton" title="Show fps counter for viewer and replay.">
+			<label class="switch">
+				<input type="checkbox" id="showFps" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Show fps</nobr>
+				</td>
+			</label>
+		</div>
+
+		<div class="toggleButton" title="Show collision boxes for notes and walls.">
+			<label class="switch">
+				<input type="checkbox" id="showHitboxes" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Show hitboxes</nobr>
+				</td>
+			</label>
+		</div>
+
+		<div class="toggleButton" title="Display note modifiers visuals.">
+			<label class="switch">
+				<input type="checkbox" id="showNoteModifierVisuals" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Modifiers visuals</nobr>
+				</td>
+			</label>
+		</div>
+		<div class="toggleButton" title="Distance from player to note slowdown.">
+			<label>
+				<div class="toggleButtonContainer">
+					<label class="toggleButtonLabel" style="margin-left: 5px"
+						><td><nobr>Jump Distance:</nobr></td></label
+					>
+					<label id="jdLabel" class="toggleButtonLabel" style="margin-left: 40px">-</label>
+				</div>
+				<div style="height: 0; margin-left: 13px">
+					<svg role="presentation" class="jdRangePoint" height="30" width="100" xmlns="http://www.w3.org/2000/svg">
+						<rect id="jdTick" class="jd__tick" x="33%" y="0" width="1" height="10"></rect>
+					</svg>
+				</div>
+				<div style="height: 0; margin-left: 13px; display: none" title="Effective VNJS JD">
+					<svg role="presentation" class="jdRangePoint" height="30" width="100" xmlns="http://www.w3.org/2000/svg">
+						<rect id="vnjsjdTick" class="vnjsjd__tick" x="33%" y="0" width="1" height="10"></rect>
+					</svg>
+				</div>
+				<input id="jd" class="settingRange" type="range" min="5" max="50" step="0.2" />
+				<div style="height: 10px; margin-left: 13px">
+					<svg role="presentation" class="rangePointsSvg" height="30" width="120" xmlns="http://www.w3.org/2000/svg">
+						<text id="jdPoint" class="jd__point" x="33%" y="8" text-anchor="start">0</text>
+					</svg>
+				</div>
+				<div style="height: 10px; margin-left: 13px; display: none" title="Effective VNJS JD">
+					<svg role="presentation" class="rangePointsSvg" height="30" width="120" xmlns="http://www.w3.org/2000/svg">
+						<text id="vnjsjdPoint" class="vnjsjd__point" x="33%" y="8" text-anchor="start">0</text>
+					</svg>
+				</div>
+			</label>
+		</div>
+
+		<div class="toggleButton" title="How many pixels would be rendered for point.">
+			<label>
+				<div class="toggleButtonContainer">
+					<label class="toggleButtonLabel" style="margin-left: 5px"
+						><td><nobr>Pixel ratio:</nobr></td></label
+					>
+					<label id="pixelRatioLabel" class="toggleButtonLabel" style="margin-left: 20px">1.5</label>
+				</div>
+				<input id="pixelRatio" class="settingRange" type="range" min="0.1" max="3" step="0.1" value="1.5" />
+			</label>
+		</div>
+
+		<button id="hitsounds-button" class="settingButton" onclick="document.getElementById('hitSoundPicker').click();">
+			Change hitsounds
+		</button>
+		<input id="hitSoundPicker" style="display: none" type="file" accept=".mp3, .wav, .ogg" />
+		<span id="resetHitsounds"><u>reset to default</u></span>
+	</div>
+</div>
+</div>
+			<div class="settings-tab-pane tab-pane"><div class="toggleButton" title="Show pause markers on timeline">
+	<label class="switch">
+		<input type="checkbox" id="pauseMarkers" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel"
+		><td><nobr>Pauses</nobr></td></label
+	>
+</div>
+<div class="toggleButton" title="Show note miss markers on timeline">
+	<label class="switch">
+		<input type="checkbox" id="missMarkers" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel"
+		><td><nobr>Misses</nobr></td></label
+	>
+</div>
+<div class="toggleButton" title="Show note bad cut markers on timeline">
+	<label class="switch">
+		<input type="checkbox" id="badCutMarkers" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel"
+		><td><nobr>Bad cuts</nobr></td></label
+	>
+</div>
+<div class="toggleButton" title="Show bomb hit markers on timeline">
+	<label class="switch">
+		<input type="checkbox" id="bombMarkers" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel"
+		><td><nobr>Bombs</nobr></td></label
+	>
+</div>
+<div class="toggleButton" title="Show wall colission markers on timeline">
+	<label class="switch">
+		<input type="checkbox" id="wallMarkers" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel"
+		><td><nobr>Walls</nobr></td></label
+	>
+</div>
+<div class="toggleButton" title="Show marker where the map was started or failed on timeline.">
+	<label class="switch">
+		<input type="checkbox" id="failMarkers" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel"
+		><td><nobr>Start and fail</nobr></td></label
+	>
+</div>
+<div class="toggleButton" title="Show marker where the max 115 streak was started on timeline.">
+	<label class="switch">
+		<input type="checkbox" id="maxStreakMarkers" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel"
+		><td><nobr>115 streak</nobr></td></label
+	>
+</div>
+</div>
+			<div class="settings-tab-pane tab-pane"><div class="toggleButton" style="border-bottom: 1px solid white; margin-bottom: 4px" title="Disable color changes, rotations, sparks, etc.">
+	<label class="switch">
+		<input type="checkbox" id="noEffects" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel">
+		<td>
+			<nobr>Disable events</nobr>
+		</td>
+	</label>
+</div>
+
+<div class="generalSettingsContainer">
+	<div class="toggleButtons" style="display: flex; flex-direction: column; justify-content: space-between">
+		<div class="toggleButton" title="Display lasers on the back.">
+			<label class="switch">
+				<input type="checkbox" id="showLasers" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Lasers</nobr>
+				</td>
+			</label>
+		</div>
+
+		<div class="toggleButton" title="Display twisting animation.">
+			<label class="switch">
+				<input type="checkbox" id="showTwister" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Twister</nobr>
+				</td>
+			</label>
+		</div>
+
+		<div class="toggleButton" title="Display columns to the sides.">
+			<label class="switch">
+				<input type="checkbox" id="showAudioColumns" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Audio columns</nobr>
+				</td>
+			</label>
+		</div>
+	</div>
+
+	<div class="toggleButtons" style="display: flex; flex-direction: column; justify-content: space-between">
+		<div class="toggleButton" title="Display platform on the front.">
+			<label class="switch">
+				<input type="checkbox" id="showPlatform" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Platform</nobr>
+				</td>
+			</label>
+		</div>
+
+		<div class="toggleButton" title="Display floor.">
+			<label class="switch">
+				<input type="checkbox" id="showFloor" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Floor</nobr>
+				</td>
+			</label>
+		</div>
+
+		<div class="toggleButton" title="Lights!">
+			<label class="switch">
+				<input type="checkbox" id="showLight" />
+				<span class="slider round"></span>
+			</label>
+			<label class="toggleButtonLabel">
+				<td>
+					<nobr>Light</nobr>
+				</td>
+			</label>
+		</div>
+	</div>
+</div>
+</div>
+			<div class="settings-tab-pane tab-pane"><div class="generalSettingsContainer">
+	<div class="toggleButtons" style="display: flex; flex-direction: column">
+		<span class="patreonColors"
+			>If you are supporting project on Patreon, these two colors will be visible for everyone and on replay link preview</span
+		>
+		<div class="toggleButton" title="Left saber color, will show for everyone.">
+			<input type="color" id="leftSaberColor" value="#bf2121" />
+			<label class="toggleButtonLabel"
+				><td><nobr>Left saber</nobr></td></label
+			>
+		</div>
+
+		<div class="toggleButton" title="Right saber color, will show for everyone.">
+			<input type="color" id="rightSaberColor" value="#335aff" />
+			<label class="toggleButtonLabel"
+				><td><nobr>Right saber</nobr></td></label
+			>
+		</div>
+		<div class="toggleButton" title="Red event color, will show only for you.">
+			<input type="color" id="redEventColor" value="#9c2121" />
+			<label class="toggleButtonLabel"
+				><td><nobr>Red lights</nobr></td></label
+			>
+		</div>
+
+		<div class="toggleButton" title="Blue event color, will show only for you.">
+			<input type="color" id="blueEventColor" value="#335aff" />
+			<label class="toggleButtonLabel"
+				><td><nobr>Blue lights</nobr></td></label
+			>
+		</div>
+	</div>
+	<div class="toggleButtons" style="display: flex; flex-direction: column; justify-content: space-between">
+		<div class="toggleButton" title="Red background event color, will show only for you.">
+			<input type="color" id="redBGColor" value="#9c2121" />
+			<label class="toggleButtonLabel"
+				><td><nobr>Red background</nobr></td></label
+			>
+		</div>
+
+		<div class="toggleButton" title="Blue background event color, will show only for you.">
+			<input type="color" id="blueBGColor" value="#335aff" />
+			<label class="toggleButtonLabel"
+				><td><nobr>Blue background</nobr></td></label
+			>
+		</div>
+		<div class="toggleButton" title="Walls color, will show only for you.">
+			<input type="color" id="wallsColor" value="#335aff" />
+			<label class="toggleButtonLabel"
+				><td><nobr>Walls</nobr></td></label
+			>
+		</div>
+		<div class="toggleButton" title="Bombs color, will show only for you.">
+			<input type="color" id="bombsColor" value="#335aff" />
+			<label class="toggleButtonLabel"
+				><td><nobr>Bombs</nobr></td></label
+			>
+		</div>
+		<div class="toggleButton" title="Background color, visible only without the platform.">
+			<input type="color" id="backgroundColor" value="#000000" />
+			<label class="toggleButtonLabel"
+				><td><nobr>Background</nobr></td></label
+			>
+		</div>
+	</div>
+	<div class="toggleButtons" style="display: flex; flex-direction: column; justify-content: space-between">
+		<button class="resetButton" id="resetColors">Reset colors</button>
+	</div>
+</div>
+</div>
+			<div class="settings-tab-pane tab-pane"><div class="toggleButton" title="How wide sabers would be compared to normal.">
+	<label>
+		<div class="toggleButtonContainer">
+			<label class="toggleButtonLabel" style="margin-left: 5px"
+				><td><nobr>Saber width:</nobr></td></label
+			>
+			<label id="saberWidthLabel" class="toggleButtonLabel" style="margin-left: 28px">100</label>
+		</div>
+		<input id="saberWidth" class="settingRange" type="range" min="0" max="200" step="1" value="100" />
+	</label>
+</div>
+
+<div class="toggleButton" title="Custom z offset (visual only).">
+	<label>
+		<div class="toggleButtonContainer">
+			<label class="toggleButtonLabel" style="margin-left: 5px"
+				><td><nobr>Saber z offset:</nobr></td></label
+			>
+			<label id="saberOffsetLabel" class="toggleButtonLabel" style="margin-left: 40px">0</label>
+		</div>
+		<input id="saberOffset" class="settingRange" type="range" min="-0.5" max="0.5" step="0.05" value="0" />
+	</label>
+</div>
+
+<div
+	class="toggleButton"
+	title="Averages head and saber movements over this time window, looking as far ahead as behind so they don't lag. Visual only, hitboxes stay exact. Large values soften fast swings.">
+	<label>
+		<div class="toggleButtonContainer">
+			<label class="toggleButtonLabel" style="margin-left: 5px"
+				><td><nobr>Movement smoothing:</nobr></td></label
+			>
+			<label id="movementSmoothingLabel" class="toggleButtonLabel" style="margin-left: 78px">0</label>
+		</div>
+		<input id="movementSmoothing" class="settingRange" type="range" min="0" max="200" step="5" value="0" />
+	</label>
+</div>
+
+<div class="toggleButton" title="How saber trails will appear">
+	<label>
+		<div class="toggleButtonContainer">
+			<label class="toggleButtonLabel" style="margin-left: 5px"
+				><td><nobr>Trail type:</nobr></td></label
+			>
+		</div>
+		<select name="trails" class="settingButton" style="margin-left: 5px; margin-bottom: 5px; font-size: 0.7em" id="trailType">
+			<option value="bright" selected>Bright</option>
+			<option value="dim">Dim</option>
+			<option value="timeDependence">Time dependence</option>
+			<option value="slim">Slim</option>
+			<option value="none">None</option>
+		</select>
+	</label>
+</div>
+
+<div class="toggleButton" title="Color of the good TD part for time dependency trail.">
+	<input type="color" id="goodTdColor" value="#00FF00" />
+	<label class="toggleButtonLabel"
+		><td><nobr>Good TD color</nobr></td></label
+	>
+</div>
+
+<div class="toggleButton" title="Color of the bad TD part for time dependency trail.">
+	<input type="color" id="badTdColor" value="#FF0000" />
+	<label class="toggleButtonLabel"
+		><td><nobr>Bad TD color</nobr></td></label
+	>
+</div>
+
+<div class="toggleButton" title="Trail length">
+	<label>
+		<div class="toggleButtonContainer">
+			<label class="toggleButtonLabel" style="margin-left: 5px"
+				><td><nobr>Trail length: </nobr></td></label
+			>
+			<label id="trailLengthLabel" class="toggleButtonLabel" style="margin-left: 28px">20.0</label>
+		</div>
+		<input id="trailLength" class="settingRange" type="range" min="0.0" max="100.0" step="1.0" value="20.0" />
+	</label>
+</div>
+
+<div class="toggleButton" title="Show saber axes.">
+	<label class="switch">
+		<input type="checkbox" id="showSaberAxes" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel">
+		<td>
+			<nobr>Show Axes</nobr>
+		</td>
+	</label>
+</div>
+</div>
+			<div class="settings-tab-pane tab-pane"><script>
+	function changePlaybackTab(index) {
+		let buttons = Array.from(document.getElementsByClassName('playback-tab-button'));
+		let panes = Array.from(document.getElementsByClassName('playback-tab-pane'));
+
+		buttons.forEach((button, buttonIndex) => {
+			if (buttonIndex === index) {
+				button.classList.add('active');
+				panes[buttonIndex].classList.add('active');
+			} else {
+				button.classList.remove('active');
+				panes[buttonIndex].classList.remove('active');
+			}
+		});
+	}
+</script>
+
+<div class="playback-tab-container">
+	<div class="playback-tab-buttons">
+		<button class="playback-tab-button active" onclick="changePlaybackTab(0)">General</button>
+		<button class="playback-tab-button" onclick="changePlaybackTab(1)">Mistakes<br />slow-mo</button>
+		<button class="playback-tab-button" onclick="changePlaybackTab(2)">Random replay</button>
+	</div>
+	<div class="playback-tab-content">
+		<div class="playback-tab-pane active">
+			<div class="toggleButton" title="Start the replay on the tab load">
+				<label class="switch">
+					<input type="checkbox" id="autoplayOnLoad" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel"
+					><td><nobr>Autoplay on load</nobr></td></label
+				>
+			</div>
+
+			<div id="autoplayWarning" style="display: none">
+				<span> Please allow autoplay in your browser permissions settings. (refresh page after permissions change to update) </span>
+				<img id="firefoxAutoplayWarning" src="assets/img/firefoxautoplay.jpg" style="display: none; height: 90px" />
+			</div>
+
+			<div class="toggleButton" style="border-bottom: 1px solid white; margin-bottom: 4px" title="Pause player when tab loses focus">
+				<label class="switch">
+					<input type="checkbox" id="pauseOnUnfocus" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel"
+					><td><nobr>Pause on focus lose</nobr></td></label
+				>
+			</div>
+
+			<div class="toggleButton" style="border-bottom: 1px solid white; margin-bottom: 4px" title="Auto restart replay on finish">
+				<label class="switch">
+					<input type="checkbox" id="loopReplays" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel"
+					><td><nobr>Loop</nobr></td></label
+				>
+			</div>
+
+			<div class="toggleButton" id="pitchCompensationContainer" title="Compensate song pitch on speed changes (0.5-2x)">
+				<label class="switch">
+					<input type="checkbox" id="pitchCompensation" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel"
+					><td><nobr>Pitch compensation</nobr></td></label
+				>
+			</div>
+
+			<div class="toggleButton" id="pitchCompensationTresholdContainer" style="border-bottom: 1px solid white; margin-bottom: 4px" title="On what speed disable pitch compensation (0.07-0.5)">
+				<label>
+					<div class="toggleButtonContainer">
+						<label class="toggleButtonLabel" style="margin-left: 5px"
+							><td><nobr>Pitch compensation treshold:</nobr></td></label
+						>
+						<label id="pitchCompensationTresholdLabel" class="toggleButtonLabel" style="margin-left: 127px">0.1</label>
+					</div>
+					<input id="pitchCompensationTreshold" class="settingRange" type="range" min="0.07" max="0.5" step="0.01" value="0.1" />
+				</label>
+			</div>
+
+			<div class="toggleButton" style="border-bottom: 1px solid white; margin-bottom: 4px" title="Download the whole replay and song before playback starts instead of streaming them">
+				<label class="switch">
+					<input type="checkbox" id="downloadFilesFirst" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel"
+					><td><nobr>Download files first</nobr></td></label
+				>
+			</div>
+
+			<div class="toggleButton" title="Automatically skip start of replay with no elements">
+				<label class="switch">
+					<input type="checkbox" id="autoSkipIntro" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel"
+					><td><nobr>Auto Skip Intro</nobr></td></label
+				>
+			</div>
+
+			<div class="toggleButton" title="Automatically skip end of replay with no elements">
+				<label class="switch">
+					<input type="checkbox" id="autoSkipOutro" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel"
+					><td><nobr>Auto Skip Outro</nobr></td></label
+				>
+			</div>
+		</div>
+
+		<div class="playback-tab-pane">
+			<div class="toggleButton" tile="Automatically change speed around missed notes">
+				<label class="switch">
+					<input type="checkbox" id="autoSpeedControls" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel"
+					><td><nobr>Change speed around mistakes</nobr></td></label
+				>
+			</div>
+			<div class="toggleButton" title="Speed multiplier around misses">
+				<label>
+					<div class="toggleButtonContainer">
+						<label class="toggleButtonLabel" style="margin-left: 5px"
+							><td><nobr>Speed multiplier:</nobr></td></label
+						>
+						<label id="speedSlowLabel" class="toggleButtonLabel" style="margin-left: 50px">0.2</label>
+					</div>
+					<input id="speedSlow" class="settingRange" type="range" min="0.01" max="2" step="0.01" value="0.2" />
+				</label>
+			</div>
+			<div class="toggleButton" title="Offset seconds for slow-mode-beginning">
+				<label>
+					<div class="toggleButtonContainer">
+						<label class="toggleButtonLabel" style="margin-left: 5px"
+							><td><nobr>Offset seconds before mistakes:</nobr></td></label
+						>
+						<label id="offsetSlowBeginningLabel" class="toggleButtonLabel" style="margin-left: 127px">-0.3</label>
+					</div>
+					<input id="offsetSlowBeginning" class="settingRange" type="range" min="-1" max="1" step="0.01" value="-0.3" />
+				</label>
+			</div>
+			<div class="toggleButton" title="Offset seconds for slow-mode-ending">
+				<label>
+					<div class="toggleButtonContainer">
+						<label class="toggleButtonLabel" style="margin-left: 5px"
+							><td><nobr>Offset seconds after mistakes:</nobr></td></label
+						>
+						<label id="offsetSlowEndingLabel" class="toggleButtonLabel" style="margin-left: 127px">0</label>
+					</div>
+					<input id="offsetSlowEnding" class="settingRange" type="range" min="-1" max="1" step="0.01" value="0" />
+				</label>
+			</div>
+			<div class="toggleButton" title="Slow-mode on misses">
+				<label class="switch">
+					<input type="checkbox" id="slowOnMiss" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel">
+					<td>
+						<nobr>Slow-mode on misses</nobr>
+					</td>
+				</label>
+			</div>
+			<div class="toggleButton" title="Slow-mode on bad cuts">
+				<label class="switch">
+					<input type="checkbox" id="slowOnBadCut" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel">
+					<td>
+						<nobr>Slow-mode on bad cuts</nobr>
+					</td>
+				</label>
+			</div>
+			<div class="toggleButton" title="Slow-mode on bombs">
+				<label class="switch">
+					<input type="checkbox" id="slowOnBomb" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel">
+					<td>
+						<nobr>Slow-mode on bombs</nobr>
+					</td>
+				</label>
+			</div>
+		</div>
+
+		<div class="playback-tab-pane">
+			<div class="toggleButton" title="Automatically play a random replay at the end">
+				<label class="switch">
+					<input type="checkbox" id="autoplayRandomScore" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel"
+					><td><nobr>Random replay</nobr></td></label
+				>
+			</div>
+
+			<div class="toggleButton" title="Select source for random replays (friends/me require being logged in on the main website)">
+				<label style="display: flex">
+					<div class="toggleButtonContainer">
+						<label class="toggleButtonLabel" style="margin-left: 5px; top: 0; width: unset"
+							><td><nobr>Random replay source:</nobr></td></label
+						>
+					</div>
+					<select id="randomScoreSource" class="settingButton" style="margin-left: 5px; margin-bottom: 5px; font-size: 0.7em">
+						<option value="all">All</option>
+						<option value="friends">Friends</option>
+						<option value="me">Me</option>
+					</select>
+				</label>
+			</div>
+
+			<div
+				class="toggleButton"
+				style="border-bottom: 1px solid white; margin-bottom: 4px"
+				title="Play random replays from the replayer page with no params (to view files)">
+				<label class="switch">
+					<input type="checkbox" id="randomScoreEmptyPlayer" />
+					<span class="slider round"></span>
+				</label>
+				<label class="toggleButtonLabel"
+					><td><nobr>Random replay in empty player</nobr></td></label
+				>
+			</div>
+		</div>
+	</div>
+</div>
+</div>
+			<div class="settings-tab-pane tab-pane"><div class="localMapsButtons">
+    <button id="selectCustomLevelsFolder" class="settingButton" title="Select Beat Saber CustomLevels folder for automatic local map lookup.">
+        <i class="fas fa-folder-open"></i> Select folder with local maps
+    </button>
+    <button id="clearCustomLevelsFolder" class="settingButton" title="Forget saved CustomLevels folder.">
+        <i class="fas fa-xmark"></i> Clear selection 
+    </button>
+    <p id="customLevelsFolderStatus">No CustomLevels folder selected.</p>
+</div></div>
+			<div class="settings-tab-pane tab-pane"><div id="HeartBeatQuest" class="toggleButton" style="display: none" title="Show heartrate recorded by HeartBeat mod on Quest">
+	<label class="switch">
+		<input type="checkbox" id="showHeartrate" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel"
+		><td><nobr>Show Heartrate (HeartBeat mod)</nobr></td></label
+	>
+</div>
+<div id="EyeTracking" style="display: none">
+	<div class="toggleButton" title="Show where the player was looking, recorded by BeatLeader on headsets with eye tracking">
+		<label class="switch">
+			<input type="checkbox" id="showEyeTracking" />
+			<span class="slider round"></span>
+		</label>
+		<label class="toggleButtonLabel"
+			><td><nobr>Show Eye Tracking</nobr></td></label
+		>
+	</div>
+	<div
+		class="toggleButton"
+		title="Averages the gaze over this time window to calm tracker jitter, saccades get slower. 0 shows every sample.">
+		<label>
+			<div class="toggleButtonContainer">
+				<label class="toggleButtonLabel" style="margin-left: 5px"
+					><td><nobr>Eye tracking smoothing:</nobr></td></label
+				>
+				<label id="eyeTrackingSmoothingLabel" class="toggleButtonLabel" style="margin-left: 87px">40</label>
+			</div>
+			<input id="eyeTrackingSmoothing" class="settingRange" type="range" min="0" max="100" step="5" value="40" />
+		</label>
+	</div>
+</div>
+<div id="reesabers:tricks-replay" class="toggleButton" style="display: none" title="Show sabers tricks recorded by ReeSabers mod">
+	<label class="switch">
+		<input type="checkbox" id="showTreecks" />
+		<span class="slider round"></span>
+	</label>
+	<label class="toggleButtonLabel"
+		><td><nobr>Show Treecks (ReeSabers mod)</nobr></td></label
+	>
+</div>
+</div>
+		</div>
+	</div>
+</div>
+
+</div>
+
+<div id="randomReplay" style="display: none;">
+  <div id="randomReplayControls">
+  <img id="randomReplayImage">
+  <div id="randomReplayButtons">
+    <button id="randomReplayCancel" title="Cancel random replay playing"><i class="fas fa-xmark"></i></button>
+    <button id="randomReplayReroll" title="Reroll random selection"><i class="fas fa-rotate-right"></i></button>
+  </div>
+</div>
+  <div id="randomReplayInfo">
+    <a href="#" id="randomReplayNext"></a>
+    <span id="randomReplayPlayerName"></span>
+    <span id="randomReplaySongName"></span>
+  </div>
+</div>
+
+<div id="ctxMenu">
+  <div class="panel-menu" role="menu" style="height: 40px;">
+    <div id="copyURL" class="menuitem" role="menuitemcheckbox" aria-checked="false" tabindex="0">
+      <div class="menuitem-icon">
+        <svg fill="none" height="24" width="24">
+          <path transform="scale(0.6) translate(0, 6)" d="M5.85 18.0c0.0-2.56 2.08-4.65 4.65-4.65h6.0V10.5H10.5c-4.14 .0-7.5 3.36-7.5 7.5s3.36 7.5 7.5 7.5h6.0v-2.85H10.5c-2.56 .0-4.65-2.08-4.65-4.65zM12.0 19.5h12.0v-3.0H12.0v3.0zm13.5-9.0h-6.0v2.85h6.0c2.56 .0 4.65 2.08 4.65 4.65s-2.08 4.65-4.65 4.65h-6.0V25.5h6.0c4.14 .0 7.5-3.36 7.5-7.5s-3.36-7.5-7.5-7.5z" fill="#fff"></path>
+        </svg>
+      </div>
+      <div class="menuitem-label">Copy URL</div>
+      <div class="menuitem-content"><div class="menuitem-toggle-checkbox"></div></div>
+    </div>
+    <div id="copyURLtime" class="menuitem" role="menuitemcheckbox" aria-checked="false" tabindex="0">
+      <div class="menuitem-icon">
+        <svg fill="none" height="24" width="24">
+          <path transform="scale(0.6) translate(0, 6)" d="M5.85 18.0c0.0-2.56 2.08-4.65 4.65-4.65h6.0V10.5H10.5c-4.14 .0-7.5 3.36-7.5 7.5s3.36 7.5 7.5 7.5h6.0v-2.85H10.5c-2.56 .0-4.65-2.08-4.65-4.65zM12.0 19.5h12.0v-3.0H12.0v3.0zm13.5-9.0h-6.0v2.85h6.0c2.56 .0 4.65 2.08 4.65 4.65s-2.08 4.65-4.65 4.65h-6.0V25.5h6.0c4.14 .0 7.5-3.36 7.5-7.5s-3.36-7.5-7.5-7.5z" fill="#fff"></path>
+        </svg>
+      </div>
+      <div class="menuitem-label">Copy URL with time and speed</div>
+      <div class="menuitem-content"><div class="menuitem-toggle-checkbox"></div></div>
+    </div>
+    <div id="copyURLcamera" class="menuitem" role="menuitemcheckbox" aria-checked="false" tabindex="0">
+      <div class="menuitem-icon">
+        <svg fill="none" height="24" width="24">
+          <path transform="scale(0.6) translate(0, 6)" d="M5.85 18.0c0.0-2.56 2.08-4.65 4.65-4.65h6.0V10.5H10.5c-4.14 .0-7.5 3.36-7.5 7.5s3.36 7.5 7.5 7.5h6.0v-2.85H10.5c-2.56 .0-4.65-2.08-4.65-4.65zM12.0 19.5h12.0v-3.0H12.0v3.0zm13.5-9.0h-6.0v2.85h6.0c2.56 .0 4.65 2.08 4.65 4.65s-2.08 4.65-4.65 4.65h-6.0V25.5h6.0c4.14 .0 7.5-3.36 7.5-7.5s-3.36-7.5-7.5-7.5z" fill="#fff"></path>
+        </svg>
+      </div>
+      <div class="menuitem-label">Copy URL with time, speed, JD and camera</div>
+      <div class="menuitem-content"><div class="menuitem-toggle-checkbox"></div></div>
+    </div>
+    <div id="addToPlaylist" class="menuitem" role="menuitem" tabindex="0" style="display: none">
+      <div class="menuitem-icon"><i class="fas fa-list-ul"></i></div>
+      <div class="menuitem-label">Add to playlist</div>
+      <div class="menuitem-content"></div>
+    </div>
+    <!-- <div id="showInspector" class="menuitem" role="menuitemcheckbox" aria-checked="false" tabindex="0">
+      <div class="menuitem-icon">
+        <svg fill="none" height="36" width="36">
+          <path clip-rule="evenodd" d="M20 10V8H17.19C16.74 7.22 16.12 6.54 15.37 6.04L17 4.41L15.59 3L13.42 5.17C13.39 5.16 13.37 5.16 13.34 5.16C13.18 5.12 13.02 5.1 12.85 5.07C12.79 5.06 12.74 5.05 12.68 5.04C12.46 5.02 12.23 5 12 5C11.51 5 11.03 5.07 10.58 5.18L10.6 5.17L8.41 3L7 4.41L8.62 6.04H8.63C7.88 6.54 7.26 7.22 6.81 8H4V10H6.09C6.03 10.33 6 10.66 6 11V12H4V14H6V15C6 15.34 6.04 15.67 6.09 16H4V18H6.81C7.85 19.79 9.78 21 12 21C14.22 21 16.15 19.79 17.19 18H20V16H17.91C17.96 15.67 18 15.34 18 15V14H20V12H18V11C18 10.66 17.96 10.33 17.91 10H20ZM16 15C16 17.21 14.21 19 12 19C9.79 19 8 17.21 8 15V11C8 8.79 9.79 7 12 7C14.21 7 16 8.79 16 11V15ZM10 14H14V16H10V14ZM10 10H14V12H10V10Z" fill="white" fill-rule="evenodd"></path>
+        </svg>
+      </div>
+      <div class="menuitem-label">Show inspector</div>
+      <div class="menuitem-content"><div class="menuitem-toggle-checkbox"></div></div>
+    </div> -->
+  </div>
+</div>
+
+<a id="songLink" href="">
+  <span id="songInfoOverlay">
+    <img id="songImage">
+    <span id="songInfo">
+      <p id="songName"></p>
+      <p id="songSubName"></p>
+      <span id="difficultyLabel">
+        <p id="songDifficulty"></p>
+        <p id="songMode"></p>
+        <p id="songCustomDifficulty"></p>
+      </span>
+      <p id="modifiers"></p>
+      <p id="outdatedMap" title="The map was updated and differs from the one the play was made on">DIFFERENT MAP VERSION</p>
+    </span>
+  </span>
+</a>
+
+<a id="playerLink" href="">
+  <span id="playerInfoOverlay">
+    <img id="playerAvatar">
+    <span id="playerInfo">
+      <p id="playerName"></p>
+      <img id="playerCountry">
+    </span>
+  </span>
+</a>
+
+<button class="povswitch" onmousedown="event.preventDefault();" title="First person view (shift+f)"></button>
+
+<a id="orthographicBackFullscreen" class="orthographicFullscreen" style="right: 0.5%; bottom: 25%; display: none;" title="Show fullscreen this camera">
+  <svg class="enterFullscreen" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px">
+    <g><path d="M7 3H2v5h2V5h3V3zM18 8V3h-5v2h3v3h2zM13 17v-2h3v-3h2v5h-5zM4 12H2v5h5v-2H4v-3z"></path></g>
+  </svg>
+  <svg class="exitFullscreen" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px">
+    <g><path d="M8 8V3H6v3H2v2h6zM12 8h6V6h-4V3h-2v5zM12 17v-5h6v2h-4v3h-2zM8 12H2v2h4v3h2v-5z"></path></g>
+  </svg>
+</a>
+
+<a id="orthographicRightFullscreen" class="orthographicFullscreen" style="right: 0.5%; top: 25%; display: none;" title="Show fullscreen this camera">
+  <svg class="enterFullscreen" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px">
+    <g><path d="M7 3H2v5h2V5h3V3zM18 8V3h-5v2h3v3h2zM13 17v-2h3v-3h2v5h-5zM4 12H2v5h5v-2H4v-3z"></path></g>
+  </svg>
+  <svg class="exitFullscreen" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px">
+    <g><path d="M8 8V3H6v3H2v2h6zM12 8h6V6h-4V3h-2v5zM12 17v-5h6v2h-4v3h-2zM8 12H2v2h4v3h2v-5z"></path></g>
+  </svg>
+</a>
+
+<a id="orthographicTopFullscreen" class="orthographicFullscreen" style="left: 0.5%; bottom: 25%; display: none;" title="Show fullscreen this camera">
+  <svg class="enterFullscreen" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px">
+    <g><path d="M7 3H2v5h2V5h3V3zM18 8V3h-5v2h3v3h2zM13 17v-2h3v-3h2v5h-5zM4 12H2v5h5v-2H4v-3z"></path></g>
+  </svg>
+  <svg class="exitFullscreen" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px">
+    <g><path d="M8 8V3H6v3H2v2h6zM12 8h6V6h-4V3h-2v5zM12 17v-5h6v2h-4v3h-2zM8 12H2v2h4v3h2v-5z"></path></g>
+  </svg>
+</a>
+
+<a id="orthographicMainFullscreen" class="orthographicFullscreen" style="left: 0.5%; top: 25%; display: none;" title="Show fullscreen this camera">
+  <svg class="enterFullscreen" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px">
+    <g><path d="M7 3H2v5h2V5h3V3zM18 8V3h-5v2h3v3h2zM13 17v-2h3v-3h2v5h-5zM4 12H2v5h5v-2H4v-3z"></path></g>
+  </svg>
+  <svg class="exitFullscreen" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px">
+    <g><path d="M8 8V3H6v3H2v2h6zM12 8h6V6h-4V3h-2v5zM12 17v-5h6v2h-4v3h-2zM8 12H2v2h4v3h2v-5z"></path></g>
+  </svg>
+</a>
+
+<a href="https://discord.gg/2RG5YVqtG6" target="_blank" style="display: none;" id="discord-corner" title="Join our discord!">
+  <svg color="#151513" fill="transparent" width="80" height="80" viewBox="0 0 250 250" class="discord-link" style="transform: rotate(0deg); position: absolute; top: 0; border: 0; right: 0;"><g>
+    <path d="M0,0 L250,250 L250,0 Z" fill="#7289da" ></path></g> <g class="discord-corner">
+      <svg color="#151513" width="120" height="120" viewBox="0 0 48 48" class="discord-logo-container">
+        <rect width="100%" height="100%" ></rect> <defs><g><defs>
+          <path id="discord-def-face" fill="#FEFFFF" d="M40,12C40,12,35.415,8.412,30,8L29.512,8.976C34.408,10.174,36.654,11.891,39,14C34.955,11.935,30.961,10,24,10S13.045,11.935,9,14C11.346,11.891,14.018,9.985,18.488,8.976L18,8C12.319,8.537,8,12,8,12S2.879,19.425,2,34C7.162,39.953,15,40,15,40L16.639,37.815C13.857,36.848,10.715,35.121,8,32C11.238,34.45,16.125,37,24,37S36.762,34.45,40,32C37.285,35.121,34.143,36.848,31.361,37.815L33,40C33,40,40.838,39.953,46,34C45.121,19.425,40,12,40,12Z"></path> <g id="discord-def-face-eyes"><path id="discord-def-face-left-eye" fill="currentfill" d="M17.5,30C15.567,30,14,28.209,14,26C14,23.791,15.567,22,17.5,22S21,23.791,21,26C21,28.209,19.433,30,17.5,30Z"></path> <path id="discord-def-face-right-eye" fill="currentfill" d="M30.5,30C28.567,30,27,28.209,27,26C27,23.791,28.567,22,30.5,22S34,23.791,34,26C34,28.209,32.433,30,30.5,30Z"></path></g></defs> <g id="discordFaceID66"><use href="#discord-def-face"></use> <g id="discord-logo-eyes" fill="#7289da"><mask id="mask-right-eye-wink"><ellipse fill="#F2F2E9" ry="15" rx="15" cy="39.7" cx="35"></ellipse> <ellipse fill="#000000" ry="15" rx="15" cy="40.5" cx="34"></ellipse></mask> <mask id="mask-eyes-angry"><rect height="48" width="48" y="0" x="0" fill="#F2F2E9"></rect> <rect transform="rotate(45 24,14.5)" height="24" width="24" y="2.5" x="12" fill="#000000"></rect></mask> <g class="discord-eyes"><use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#discord-def-face-eyes"></use></g></g></g> <mask id="mask-outer-layer"><a href="https://awesome.discord.io/join"><<rect width="100%" height="100%" fill="#F2F2E9"></rect> <circle r="42%" cx="50%" cy="50%" fill="#000000"></circle></mask> <mask id="mask-middle-layer"><rect width="100%" height="100%" fill="#000000"></rect> <circle r="43%" cx="50%" cy="50%" fill="#F2F2E9"></circle> <circle r="32%" cx="50%" cy="50%" fill="#000000"></circle></mask> <mask id="mask-inner-layer"><rect width="100%" height="100%" fill="#000000">
+            <a href="https://awesome.discord.io/join"></rect> <circle r="32%" cx="50%" cy="50%" fill="#F2F2E9"></circle></mask></g></defs> <g class="discord-logo softshake-animation"><use class="discord-original" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#discordFaceID66"></use></g>
+            </svg></g>
+          </svg>
+
+</a>
+<a href="https://patreon.com/beatleader" target="_blank" style="display: none;" id="patreon-corner" title="Support us on patreon!">
+  <svg color="#151513" fill="transparent" width="80" height="80" viewBox="0 0 250 250" class="patreon-link" style="transform: rotate(0deg); position: absolute; top: 0; border: 0; right: 0;"><g>
+    <path d="M0,0 L250,250 L250,0 Z" fill="#FF424D" ></path></g> 
+    <g class="patreon-logo">
+    <g xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" inkscape:groupmode="layer" inkscape:label="ink_ext_XXXXXX" transform="matrix(1.3333333,0,0,-1.3333333,0,767.70667)">
+      <g xmlns="http://www.w3.org/2000/svg" id="g12" transform="scale(0.012)">
+        <path d="m 3844.89,5757.79 c -1190.76,0 -2159.54,-969.65 -2159.54,-2161.59 0,-1188.33 968.78,-2155.12 2159.54,-2155.12 1187.08,0 2152.82,966.79 2152.82,2155.12 0,1191.94 -965.74,2161.59 -2152.82,2161.59" style="fill:#141518;fill-opacity:1;fill-rule:evenodd;stroke:none" id="path14"/>
+        <path d="M 0,0 H 1054.41 V 5757.81 H 0 V 0" style="fill:#141518;fill-opacity:1;fill-rule:evenodd;stroke:none" id="path16"/>
+      </g>
+    </g>
+  </g>
+  </svg>
+
+</a>
+<style type='text/css'>* { font-family: 'Avenir', Helvetica, Arial, sans-serif; } .discord-logo { transform: scale(0.7); transform-origin: 24px 24px; } .discord-corner { transform: rotate(45deg); transform-origin: 90px 200px; }.discord-logo.softshake-animation .discord-original { transform-origin: 24px 24px; } .discord-logo-container:hover .softshake-animation .discord-original, .animated .softshake-animation .discord-original { animation: softshake 2000ms linear forwards; } @keyframes softshake { 0%,66%,100% {transform:rotate( 0deg)} 3% {transform:rotate(-18.0deg)} 6% {transform:rotate( 14.4deg)} 9% {transform:rotate(-11.5deg)} 12% {transform:rotate( 9.21deg)} 15% {transform:rotate(-7.37deg)} 18% {transform:rotate( 5.89deg)} 21% {transform:rotate(-4.71deg)} 24% {transform:rotate( 3.77deg)} 27% {transform:rotate(-3.02deg)} 30% {transform:rotate( 2.41deg)} 33% {transform:rotate(-1.93deg)} 36% {transform:rotate( 1.54deg)} 39% {transform:rotate(-1.23deg)} 42% {transform:rotate( 0.99deg)} 45% {transform:rotate(-0.79deg)} 48% {transform:rotate( 0.63deg)} 51% {transform:rotate(-0.50deg)} 54% {transform:rotate( 0.40deg)} 57% {transform:rotate(-0.32deg)} 60% {transform:rotate( 0.25deg)} 63% {transform:rotate(-0.20deg)} }</style>
+
+		<div id="playlistPanel">
+  <button id="playlistToggle" title="Hide playlist"><i class="fas fa-chevron-right"></i></button>
+  <div id="playlistContent">
+    <div id="playlistHeader">
+      <label id="playlistCoverContainer">
+        <img id="playlistCover" alt="">
+        <span id="playlistCoverEdit" title="Change cover"><i class="fas fa-image"></i></span>
+        <input id="playlistCoverInput" type="file" accept=".jpg,.jpeg,.png,.gif" disabled>
+      </label>
+      <div id="playlistInfo">
+        <a id="playlistTitle" target="_blank"></a>
+        <a id="playlistOwner" target="_blank">
+          <img id="playlistOwnerAvatar" alt="">
+          <span id="playlistOwnerName"></span>
+        </a>
+        <div id="playlistBadges">
+          <button id="playlistVisibility" class="playlistBadge" disabled></button>
+          <span id="playlistRole" class="playlistBadge"><i class="fas fa-user-pen"></i> You can edit</span>
+        </div>
+      </div>
+      <div id="playlistHeaderButtons">
+        <button id="playlistEditInfo" class="playlistIconButton" title="Edit title and description"><i class="fas fa-pen"></i></button>
+        <button id="playlistCopy" class="playlistIconButton" title="Copy to your playlists"><i class="fas fa-copy"></i></button>
+      </div>
+    </div>
+    <p id="playlistDescription"></p>
+    <form id="playlistInfoForm">
+      <input id="playlistTitleInput" class="playlistField" maxlength="200" placeholder="Title" required>
+      <textarea id="playlistDescriptionInput" class="playlistField" maxlength="2000" rows="3" placeholder="Description"></textarea>
+      <div class="playlistFormButtons">
+        <button type="submit" class="playlistIconButton" title="Save"><i class="fas fa-check"></i></button>
+        <button type="button" id="playlistInfoCancel" class="playlistIconButton" title="Cancel"><i class="fas fa-xmark"></i></button>
+      </div>
+    </form>
+    <div id="playlistNav">
+      <button id="playlistPrevious" class="playlistIconButton" title="Previous replay (Shift+P)"><i class="fas fa-backward-step"></i></button>
+      <span id="playlistPosition"></span>
+      <button id="playlistNext" class="playlistIconButton" title="Next replay (Shift+N)"><i class="fas fa-forward-step"></i></button>
+      <span id="playlistCountdown">
+        <span id="playlistCountdownText"></span>
+        <button id="playlistCountdownCancel" class="playlistIconButton" title="Cancel"><i class="fas fa-xmark"></i></button>
+      </span>
+      <label class="playlistToggleLabel" title="Play the next replay when one ends">
+        <span class="toggleButtonLabel">Autoplay</span>
+        <span class="switch">
+          <input type="checkbox" id="playlistAutoplay">
+          <span class="slider round"></span>
+        </span>
+      </label>
+    </div>
+    <div id="playlistMapOptions">
+      <select id="playlistPick" class="settingButton" title="Which score to watch on each map">
+        <option value="nomods">Top score without modifiers</option>
+        <option value="top">Top score</option>
+        <option value="player">My score</option>
+      </select>
+      <label class="playlistToggleLabel" title="Watch every difficulty of maps added without picked difficulties">
+        <span class="toggleButtonLabel">All difficulties</span>
+        <span class="switch">
+          <input type="checkbox" id="playlistAllDifficulties">
+          <span class="slider round"></span>
+        </span>
+      </label>
+    </div>
+    <div id="playlistVote"></div>
+    <p id="playlistStatus"></p>
+    <div id="playlistItems"></div>
+  </div>
+</div>
+
+<div id="playlistPicker">
+  <div id="playlistPickerDialog" role="dialog" aria-label="Add to playlist">
+    <div id="playlistPickerHead">
+      <b>Add to playlist</b>
+      <button id="playlistPickerClose" class="playlistIconButton" title="Close (Esc)"><i class="fas fa-xmark"></i></button>
+    </div>
+    <textarea id="playlistPickerNote" class="playlistField" rows="2" maxlength="500"></textarea>
+    <small id="playlistPickerNoteHint"></small>
+    <p id="playlistPickerStatus"></p>
+    <div id="playlistPickerList"></div>
+    <form id="playlistPickerCreate">
+      <input id="playlistPickerTitle" class="playlistField" maxlength="200" placeholder="Title" value="Favorite replays" required>
+      <button type="submit" class="playlistButton">Create</button>
+    </form>
+    <button id="playlistPickerNew" class="playlistMore"><i class="fas fa-plus"></i> New replay playlist</button>
+  </div>
+</div>
+
+		<a-scene
+			settings
+			bind__pixelRatio="settings.pixelRatio"
+			precision="mediump"
+			mixin="bgColorAnimation tunnelColorAnimation leftLaserColorAnimation rightLaserColorAnimation textGlowColorAnimation floorColorAnimation"
+			bind__beat-generator="difficulty: challenge.difficulty; mode: challenge.mode; isPlaying: isPlaying || isPaused; beatSpeed: challenge.beatSpeed; noEffects: settings.noEffects"
+			bind__song="audio: challenge.audio; difficulty: challenge.difficulty; mode: challenge.mode; isPaused: isPaused || replay.isLoading; isFinished: isFinished; isPlaying: isPlaying; isBeatsPreloaded: challenge.isBeatsPreloaded; isReplayLoading: replay.isLoading; pitchCompensation: settings.pitchCompensation"
+			beat-hit-sound
+			bind__song-controls="difficulty: challenge.difficulty; mode: challenge.mode; isSafari: isSafari; isPlaying: isPlaying; songName: challenge.songName; songSubName: challenge.author; songImage: challenge.image; showControls: showControls; leaderboardId: challenge.leaderboardId; songId: challenge.id; autoplayOnLoad: settings.autoplayOnLoad"
+			bind__zip-loader="difficulty: challenge.difficulty; id: challenge.id; mode: challenge.mode"
+			bind__replay-loader="difficulty: challenge.difficulty; mode: challenge.mode"
+			bind__intro-skip="difficulty: challenge.difficulty"
+			bind__fps-counter="enabled: settings.showFps"
+			bind__heartrate-counter="enabled: settings.showHeartrate"
+			hotkey-notification
+			hotkey-help
+			hack
+			
+			inspector="url: https://cdn.jsdelivr.net/gh/aframevr/aframe-inspector@master/dist/aframe-inspector.min.js"
+			
+			iframe-url
+			loading-screen="backgroundColor: #000;"
+			pool__beat-arrow-blue="mixin: arrowBlueBeat; size: 5; container: #beatContainer; dynamic: true"
+			pool__beat-arrow-red="mixin: arrowRedBeat; size: 5; container: #beatContainer; dynamic: true"
+			pool__beat-dot-blue="mixin: dotBlueBeat; size: 5; container: #beatContainer; dynamic: true"
+			pool__beat-dot-red="mixin: dotRedBeat; size: 5; container: #beatContainer; dynamic: true"
+			pool__beat-sliderhead-blue="mixin: blueHead; size: 5; container: #beatContainer; dynamic: true"
+			pool__beat-sliderhead-red="mixin: redHead; size: 5; container: #beatContainer; dynamic: true"
+			pool__beat-sliderchain-blue="mixin: blueChain; size: 5; container: #beatContainer; dynamic: true"
+			pool__beat-sliderchain-red="mixin: redChain; size: 5; container: #beatContainer; dynamic: true"
+			pool__beat-mine="mixin: mine; size: 5; container: #beatContainer; dynamic: true"
+			pool__beatscoreok="mixin: beatScoreOk; size: 50; container: #beatContainer; dynamic: true"
+			pool__beatscorewrong="mixin: beatScoreWrong; size: 10; container: #beatContainer; dynamic: true"
+			pool__beatscoremiss="mixin: beatScoreMiss; size: 10; container: #beatContainer; dynamic: true"
+			pool__wall="mixin: wall; size: 5; container: #beatContainer; dynamic: true"
+			pool__slider-blue="mixin: slider; size: 5; container: #beatContainer; dynamic: true"
+			pool__slider-red="mixin: slider; size: 5; container: #beatContainer; dynamic: true"
+			proxy-event__cleargame="event: gamemenurestart; as: cleargame; to: a-scene"
+			proxy-event__pausegame="event: pausegame; as: textglowoff; to: a-scene"
+			proxy-event__resumegame="event: gamemenuresume; as: textglownormal; to: a-scene"
+			stage-colors="color: blue"
+			stats-param
+			user-gesture
+			replay-loader
+			bind__pauser="enabled: isPlaying; pauseOnUnfocus: settings.pauseOnUnfocus"
+			replay-player
+			replay-info-ui
+			camera-mover
+			fps-counter
+			heartrate-counter
+			intro-skip
+			random-replay
+			playlist
+			playlist-picker
+			colors
+			render-order="background, additive, middle, hud, walls, splines, headset">
+			<a-assets timeout="100000"> <a-asset-item id="arrowObj" src="assets/models/arrow.obj"></a-asset-item>
+<a-asset-item id="dotObj" src="assets/models/dot.obj"></a-asset-item>
+<a-asset-item id="backglowObj" src="assets/models/backglow.obj"></a-asset-item>
+<a-asset-item id="beatObj" src="assets/models/beat.obj"></a-asset-item>
+<a-asset-item id="sliderheadObj" src="assets/models/sliderhead.obj"></a-asset-item>
+<a-asset-item id="sliderchainObj" src="assets/models/sliderchain.obj"></a-asset-item>
+<a-asset-item id="questObj" src="assets/models/quest.obj"></a-asset-item>
+<a-asset-item id="laserObj" src="assets/models/laser/laser.obj"></a-asset-item>
+<a-asset-item id="mineObj" src="assets/models/mine.obj"></a-asset-item>
+<a-asset-item id="mineBrokenObj" src="assets/models/minebroken.obj"></a-asset-item>
+<a-asset-item id="stageNormalObj" src="assets/models/stagenormal.obj"></a-asset-item>
+<a-asset-item id="stageAdditiveObj" src="assets/models/stageadditive.obj"></a-asset-item>
+<a-asset-item id="leftLaserObj" src="assets/models/leftlaser.obj"></a-asset-item>
+<a-asset-item id="rightLaserObj" src="assets/models/rightlaser.obj"></a-asset-item>
+<a-asset-item id="saberGlowObj" src="assets/models/saberglow.obj"></a-asset-item>
+
+<img id="cursorMeshImg" src="assets/models/laser/laser.png" />
+<img id="envmapTexture" src="assets/img/envmap.jpg" />
+<img id="mineTexture" src="assets/img/mineenviro-red.jpg" />
+<img id="neonImg" src="assets/img/neon.png" />
+<img id="sliceImg" src="assets/img/slice.png" />
+<img id="slicebtnImg" src="assets/img/slicebtn.png" />
+<img id="floorEnvImg" src="assets/img/floorenv.jpg" />
+<img id="floorNormalsImg" src="assets/img/floornormals.png" />
+<img id="glowImg" src="assets/img/glow.png" />
+<img id="wrongImg" src="assets/img/wrong.png" />
+<img id="missImg" src="assets/img/miss.png" />
+<img id="favicon" src="assets/img/favicon-196x196.png" />
+
+<a-mixin
+	id="slice"
+	slice9="color: #050505; transparent: true; opacity: 0.9; src: #sliceImg; left: 50; right: 52; top: 50; bottom: 52; padding: 0.18"></a-mixin>
+<a-mixin id="font" text="font: assets/fonts/Teko-Bold.json; shader: msdf; letterSpacing: 1"></a-mixin>
+
+<a-mixin id="beat" visible="false"></a-mixin>
+<a-mixin id="beatBlock"></a-mixin>
+<a-mixin id="beatSign"></a-mixin>
+<a-mixin id="arrowBlueBeat" mixin="beat" beat="color: blue; type: arrow"></a-mixin>
+<a-mixin id="arrowRedBeat" mixin="beat" beat="color: red; type: arrow"></a-mixin>
+<a-mixin id="dotBlueBeat" mixin="beat" beat="color: blue; type: dot"></a-mixin>
+<a-mixin id="dotRedBeat" mixin="beat" beat="color: red; type: dot"></a-mixin>
+<a-mixin id="redHead" mixin="beat" beat="color: red; type: sliderhead"></a-mixin>
+<a-mixin id="blueHead" mixin="beat" beat="color: blue; type: sliderhead"></a-mixin>
+<a-mixin id="redChain" mixin="beat" beat="color: red; type: sliderchain"></a-mixin>
+<a-mixin id="blueChain" mixin="beat" beat="color: blue; type: sliderchain"></a-mixin>
+<a-mixin id="mine" mixin="beat" beat="type: mine"></a-mixin>
+
+<a-mixin
+	id="beatScore"
+	render-order="hud"
+	material="shader: flat; transparent: true; depthWrite: false;"
+	mixin="font"
+	text="opacity: 0; wrapCount: 19; color: #FFF; width: 1.5"
+	animation__opacityin="property: components.text.material.uniforms.opacity.value; from: .5; to: 1; dur: 500"
+	animation__opacityout="property: components.text.material.uniforms.opacity.value; from: 1; to: 0; dur: 500"
+	animation__motionz="property: object3D.position.z; to: -6; dur: 500; easing: linear"
+	animation__motionx="property: object3D.position.x; to: -6; dur: 500; easing: linear"
+	animation__motiony="property: object3D.position.y; to: 0.1; dur: 500; easing: easeOutQuart"></a-mixin>
+
+<a-mixin id="beatScoreOk" score-beat="type: ok" mixin="beatScore"></a-mixin>
+
+<a-mixin
+	id="beatWrong"
+	render-order="hud"
+	material="shader: flat; transparent: true; depthWrite: false"
+	mixin="font"
+	text="opacity: 0; value: X; wrapCount: 15; color: #FF0000; width: 1.5"
+	animation__motionz="property: object3D.position.z; to: -8; easing: easeOutQuart; dur: 4000"
+	animation__motionx="property: object3D.position.x; to: -8; easing: easeOutQuart; dur: 4000"
+	animation__alpha="property: components.text.material.uniforms.opacity.value; from: 1; to: 0; easing: easeOutQuart; dur: 4000"></a-mixin>
+
+<a-mixin
+	id="beatMiss"
+	render-order="hud"
+	material="shader: flat; transparent: true; depthWrite: false"
+	mixin="font"
+	text="opacity: 0; value: MISS; wrapCount: 15; color: #FF0000; width: 1.5"
+	animation__motionz="property: object3D.position.z; to: -8; easing: easeOutQuart; dur: 4000"
+	animation__motionx="property: object3D.position.x; to: -8; easing: easeOutQuart; dur: 4000"
+	animation__alpha="property: components.text.material.uniforms.opacity.value; from: 1; to: 0; easing: easeOutQuart; dur: 4000"></a-mixin>
+
+<a-mixin id="beatScoreWrong" score-beat="type: wrong" mixin="beatWrong"></a-mixin>
+
+<a-mixin id="beatScoreMiss" score-beat="type: miss" mixin="beatMiss"></a-mixin>
+
+<a-mixin
+	id="beatGlow"
+	geometry="primitive: plane; width: 0.7; height: 0.7"
+	material="shader: flat; fog: false; blending: additive; depthWrite: false; depthTest: false; transparent: true; src: #glowImg; opacity: 1"
+	animation__opacity="property: components.material.material.opacity; from: 0.9; to: 0; dur: 300; easing: linear; startEvents: explode"
+	animation__scale="property: scale; from: 0.5 0.5 1; to: 1.5 1.5 1; dur: 300; easing: easeOutQuad; startEvents: explode"></a-mixin>
+
+<a-mixin
+	id="wall"
+	render-order="walls"
+	geometry
+	material="shader: wallShader; transparent: true; depthWrite: false; side: double; flatShading: true;"
+	position="0 0 1000"
+	wall></a-mixin>
+
+<a-mixin id="slider" render-order="splines" slider></a-mixin>
+
+<a-mixin
+	id="bigMenuButton"
+	mixin="slice"
+	slice9="src: #slicebtnImg; color: #CCC; width: 1; right:  52;  bottom:  47; left: 77; top: 73; height: 0.22; padding: 0.1"
+	animation__mouseenter1="property: components.slice9.material.color; type: color; from: #CCC; to: #FFF; startEvents: mouseenter; pauseEvents: mouseleave; dur: 150"
+	animation__mouseleave1="property: components.slice9.material.color; type: color; from: #FFF; to: #CCC; startEvents: mouseleave; pauseEvents: mouseenter; dur: 150"
+	animation__mouseenter2="property: scale; from: 1 1 1; to: 1.04 1.04 1.04; startEvents: mouseenter; pauseEvents: mouseleave; dur: 80"
+	animation__mouseleave2="property: scale; to: 1 1 1; from: 1.04 1.04 1.04; startEvents: mouseleave; pauseEvents: mouseenter; dur: 80"></a-mixin>
+ </a-assets>
+
+			<a-entity id="beatObjTemplate" obj-model="obj: #beatObj" visible="false"></a-entity>
+			<a-entity id="sliderheadObjTemplate" obj-model="obj: #sliderheadObj" visible="false"></a-entity>
+			<a-entity id="sliderchainObjTemplate" obj-model="obj: #sliderchainObj" visible="false"></a-entity>
+			<a-entity id="arrowRedObjTemplate" obj-model="obj: #arrowObj" visible="false"></a-entity>
+			<a-entity id="arrowBlueObjTemplate" obj-model="obj: #arrowObj" visible="false"></a-entity>
+			<a-entity id="dotRedObjTemplate" obj-model="obj: #dotObj" visible="false"></a-entity>
+			<a-entity id="dotBlueObjTemplate" obj-model="obj: #dotObj" visible="false"></a-entity>
+			<a-entity id="mineObjTemplate" obj-model="obj: #mineObj" visible="false"></a-entity>
+
+			<a-entity id="beatContainer"></a-entity>
+
+			<a-entity
+				id="audioAnalyser"
+				audioanalyser="fftSize: 64; enableBeatDetection: true; enableLevels: false; enableWaveform: false; beatDetectionThrottle: 5000; unique: true"
+				bind__audioanalyser="beatDetectionThrottle: menuActive && 5000 || 1000; isSafari: isSafari; pitchCompensation: settings.pitchCompensation; pitchCompensationTreshold: settings.pitchCompensationTreshold; downloadFilesFirst: settings.downloadFilesFirst"></a-entity>
+
+			<a-entity id="stage">
+	<a-entity
+		id="audioColumns"
+		bind__visible="settings.showAudioColumns"
+		audio-columns="analyser: #audioAnalyser; height: 28; mirror: 18; scale: 9; thickness: 0.6; separation: 0.55"
+		position="0 -19 5"></a-entity>
+
+	<a-entity
+		id="twister"
+		position="0 0 -35"
+		rotation="90 0 0"
+		bind__visible="settings.showTwister"
+		bind__twister="enabled: isPlaying; visible: settings.showTwister"></a-entity>
+
+	<a-entity
+		id="substage"
+		animation__rotationY="property: object3D.rotation.y; from: 0; to: 0; dur: 600; easing: easeInOutQuad; startEvents: spawnRotationStart"
+		position="0 -1 0">
+		<a-entity
+			bind__visible="settings.showPlatform"
+			render-order="background"
+			id="stageObj"
+			obj-model="obj: #stageNormalObj"
+			materials="name: stageNormal"></a-entity>
+
+		<!-- Lasers left. -->
+		<a-entity
+			id="leftStageLasers"
+			render-order="middle"
+			bind__visible="settings.showLasers"
+			stage-lasers="side: left"
+			bind__stage-lasers="rotating: isPlaying && !settings.noEffects">
+			<a-entity obj-model="obj: #leftLaserObj" materials="name: stageAdditive" position="-5 2 -40" scale="1 5 1"></a-entity>
+			<a-entity obj-model="obj: #leftLaserObj" materials="name: stageAdditive" position="-5 2 -44" scale="1 5 1"></a-entity>
+			<a-entity obj-model="obj: #leftLaserObj" materials="name: stageAdditive" position="-5 2 -48" scale="1 5 1"></a-entity>
+			<a-entity obj-model="obj: #leftLaserObj" materials="name: stageAdditive" position="-5 2 -52" scale="1 5 1"></a-entity>
+			<a-entity obj-model="obj: #leftLaserObj" materials="name: stageAdditive" position="-5 2 -56" scale="1 5 1"></a-entity>
+		</a-entity>
+
+		<!-- Lasers right. -->
+		<a-entity
+			id="rightStageLasers"
+			render-order="middle"
+			bind__visible="settings.showLasers"
+			stage-lasers="side: right"
+			bind__stage-lasers="rotating: isPlaying && !settings.noEffects">
+			<a-entity obj-model="obj: #rightLaserObj" materials="name: stageAdditive" position="5 2 -40" scale="1 5 1"></a-entity>
+			<a-entity obj-model="obj: #rightLaserObj" materials="name: stageAdditive" position="5 2 -44" scale="1 5 1"></a-entity>
+			<a-entity obj-model="obj: #rightLaserObj" materials="name: stageAdditive" position="5 2 -48" scale="1 5 1"></a-entity>
+			<a-entity obj-model="obj: #rightLaserObj" materials="name: stageAdditive" position="5 2 -52" scale="1 5 1"></a-entity>
+			<a-entity obj-model="obj: #rightLaserObj" materials="name: stageAdditive" position="5 2 -56" scale="1 5 1"></a-entity>
+		</a-entity>
+
+		<a-entity
+			bind__visible="settings.showPlatform"
+			render-order="additive"
+			id="stageadditiveobj"
+			obj-model="obj: #stageAdditiveObj"
+			materials="name: stageAdditive"></a-entity>
+	</a-entity>
+	<a-entity
+		id="lightFixture"
+		bind__visible="settings.showLight"
+		animation__rotationY="property: object3D.rotation.y; from: 0; to: 0; dur: 600; easing: easeInOutQuad; startEvents: spawnRotationStart">
+		<a-entity light="type: point; intensity: 10" position="-8 4 2"> </a-entity>
+		<a-entity light="type: point; intensity: 10" position="8 4 2"> </a-entity>
+	</a-entity>
+
+	<a-entity
+		id="floor"
+		data-saber-particles
+		bind__visible="settings.showFloor"
+		geometry="primitive: plane; width: 3; height: 2"
+		rotation="-90 0 0"
+		material="shader: floorShader; normalMap: #floorNormalsImg; envMap: #floorEnvImg; hitLeft: -999 0 0; hitRight: -999 0 0"
+		raycastable-game></a-entity>
+</a-entity>
+ <a-mixin
+	id="gameMenuButton"
+	render-order="hud"
+	mixin="bigMenuButton"
+	animation__mouseenter="property: components.slice9.material.color; type: color; from: #CCC; to: #FAFAFA; startEvents: mouseenter; pauseEvents: mouseleave; dur: 150"
+	animation__mouseleave="property: components.slice9.material.color; type: color; from: #FAFAFA; to: #CCC; startEvents: mouseleave; pauseEvents: mouseenter; dur: 150"
+	slice9="width: 1; height: 0.27;"></a-mixin>
+
+<a-mixin
+	render-order="hud"
+	id="gameMenuButtonText"
+	mixin="font"
+	position="0 -0.08 0.01"
+	text="align: center; wrapCount: 17; color: #FFF"></a-mixin>
+
+<!-- Titles. -->
+<a-entity id="inGameMenuTitles" render-order="hud" position="0 3 -2.3">
+	<a-entity mixin="gameMenuButtonText" text="value: PAUSED; color: #FAFAFA; width: 4" bind__visible="isPaused && !isFinished && !(challenge.isLoading || replay.isLoading || isPlaying || (!hasReceivedUserGesture && localReplay) || isSongBufferProcessing || challenge.hasLoadError || replay.hasError)"></a-entity>
+	<a-entity mixin="gameMenuButtonText" text="value: THE END; color: #FAFAFA; width: 4" bind__visible="isFinished"></a-entity>
+</a-entity>
+
+<a-entity id="gameMenu" render-order="hud" bind__visible="isFinished" position="0 1.1 -2">
+	<a-entity
+		id="restartButton"
+		render-order="hud"
+		mixin="gameMenuButton"
+		bind__visible-raycastable="isFinished"
+		proxy-event="event: click; to: a-scene; as: gamemenurestart">
+		<a-entity mixin="gameMenuButtonText" text="value: RESTART SONG"></a-entity>
+	</a-entity>
+</a-entity>
+ <a-mixin
+	render-order="hud"
+	bind__visible="settings.showHud"
+	id="scoreText"
+	mixin="font"
+	text="color: #FFF; letterSpacing: -2; align: center"></a-mixin>
+
+<a-entity
+	id="scoreContainer"
+	animation__rotationY="property: object3D.rotation.y; from: 0; to: 0; dur: 600; easing: easeInOutQuad; startEvents: spawnRotationStart"
+	bind__score-texts="isSongLoading: isSongLoading"
+	bind__visible="isPlaying || isPaused">
+	<a-entity id="scoreTextContainer" position="1.8 0.3 -4">
+		<a-entity id="score" mixin="scoreText" bind__text="value: score.scoreDescription" text="width: 4; color: #FAFAFA"> </a-entity>
+	</a-entity>
+
+	<a-entity id="fpsTextContainer" position="1.8 2.0 -4">
+		<a-entity id="fps" mixin="scoreText" bind__visible="settings.showFps" text="width: 4; color: #FAFAFA"> </a-entity>
+	</a-entity>
+
+	<a-entity id="heartrateTextContainer" position="1.8 2.5 -4">
+		<a-entity id="heartrate" mixin="scoreText" bind__visible="settings.showHeartrate" text="width: 4; color: #FF0000"> </a-entity>
+	</a-entity>
+
+	<a-entity
+		id="misses"
+		mixin="scoreText"
+		bind__text="value: 'Misses\n' + score.misses"
+		text="width: 1; lineHeight: 40"
+		position="-1.8 2.0 -4"
+		bind__visible="score.misses > 0 && settings.showHud"
+		scale="5 5 5">
+	</a-entity>
+
+	<a-entity
+		id="combo"
+		mixin="scoreText"
+		bind__text="value: 'COMBO\n' + score.combo"
+		text="width: 1; lineHeight: 40"
+		position="-1.8 1.2 -4"
+		scale="5 5 5">
+	</a-entity>
+
+	<a-entity
+		id="accuracy"
+		mixin="scoreText"
+		bind__text="value: score.accuracy"
+		text="width: 1; lineHeight: 40"
+		position="-1.8 0.3 -4"
+		scale="5 5 5">
+	</a-entity>
+
+	<a-entity
+		id="fcAccuracy"
+		mixin="scoreText"
+		bind__text="value: 'FC ' + score.fcAccuracy"
+		text="width: 1; lineHeight: 40"
+		position="-1.8 0 -4"
+		bind__visible="score.misses > 0 && settings.showHud"
+		scale="3 3 3">
+	</a-entity>
+
+	<a-entity
+		id="energyBar"
+		render-order="hud"
+		bind__visible="settings.showHud"
+		bind__energy-bar="enabled: isPlaying && challenge.isBeatsPreloaded; energy: score.energy"
+		geometry="primitive: plane; width: 1.5; height: 0.05"
+		material="shader: energy; progress: 0; transparent: true; depthWrite: false; color: #ABABAB"
+		position="0 -0.2 -4"></a-entity>
+
+	<a-entity render-order="hud" position="1.8 1.2 -4">
+		<a-entity id="multiplier" mixin="scoreText" bind__text="value: score.multiplier + 'x'" text="width: 1" scale="5 5 5"> </a-entity>
+
+		<a-entity
+			render-order="hud"
+			id="multiplierRing"
+			bind__visible="settings.showHud"
+			bind__multiplier-ring="combo: score.combo; multiplier: score.multiplier; visible: settings.showHud"
+			geometry="primitive: plane; width: 0.5; height: 0.5"
+			material="shader: ring; transparent: true; depthWrite: false; color: #88A; radiusInner: 0.7; progress: 0"
+			position="0 0.17 0"></a-entity>
+	</a-entity>
+</a-entity>
+ <a-entity
+	id="loadingSongInfoContainer"
+	render-order="hud"
+	bind__visible="challenge.isLoading || replay.isLoading || !hasReceivedUserGesture || challenge.hasLoadError || replay.hasError || localReplay"
+	position="0 1.5 -1">
+	<a-entity id="loadingSongInfo">
+		<a-entity
+			id="loadingText"
+			mixin="font"
+			bind__text="value: isSongBufferProcessing && 'Processing audio...' || challenge.isLoading && 'Downloading song...' || replay.isLoading && 'Downloading replay...'"
+			bind__visible="challenge.isLoading || replay.isLoading || isSongBufferProcessing"
+			text="align: center; color: #FAFAFA; wrapCount: 16; width: 0.65"
+			position="0 0.2 0.001"></a-entity>
+
+		<a-entity
+			id="loadingErrorText"
+			mixin="font"
+			bind__text="value: challenge.hasLoadError && challenge.loadErrorText || replay.errorText"
+			bind__visible="challenge.hasLoadError || replay.hasError"
+			text="align: center; color: #FAFAFA; wrapCount: 16; width: 0.65"
+			position="0 -0.18 0.001"></a-entity>
+
+		<a-entity
+			id="challengeLoadingIndicator"
+			bind__visible="challenge.isLoading || isSongBufferProcessing"
+			geometry="primitive: plane; height: 0.2; width: 0.2"
+			material="shader: ring; color: #FAFAFA; radiusInner: 0.2; radiusOuter: 0.9; progress: 0; transparent: true; depthWrite: false"
+			position="0 -0.3 0.002"
+			visible="false">
+		</a-entity>
+
+		<a-entity
+			id="songProcessingIndicator"
+			bind__animation__spin="enabled: isSongBufferProcessing"
+			bind__visible="isSongBufferProcessing"
+			animation__spin="property: object3D.rotation.z; from: 0; to: -360; easing: linear; dur: 1000; loop: true"
+			geometry="primitive: plane; height: 0.4; width: 0.4"
+			material="shader: ring; color: #ABABAB; radiusInner: 0.2; radiusOuter: 0.4; transparent: true; progress: 0.2; depthWrite: false"
+			position="0 -0.3 0.002"
+			visible="false">
+		</a-entity>
+
+		<a-entity
+			id="loadingText"
+			mixin="font"
+			bind__text="value: replay.hasError && 'Try another file' || 'BeatSaber replay viewer'"
+			bind__visible="localReplay && !replay.hasError"
+			text="align: center; color: #FAFAFA; wrapCount: 18; width: 0.65"
+			position="0 -0.1 0.001"></a-entity>
+
+		<a-entity
+			id="loadingGestureButton"
+			bind__visible="!challenge.isLoading && !replay.isLoading && !isPlaying && (!hasReceivedUserGesture || localReplay) && !isSongBufferProcessing && !challenge.hasLoadError && !replay.hasError"
+			position="0 -0.31923 0.01">
+			<a-entity
+				id="loadingGestureText"
+				mixin="font"
+				text="align: center; color: #FAFAFA; wrapCount: 15; value: CLICK ANYWHERE TO PLAY"
+				bind__visible="!localReplay"
+				position="0 0.5 0">
+			</a-entity>
+			<a-entity
+				id="loadingGestureText2"
+				mixin="font"
+				text="align: center; color: #FAFAFA; wrapCount: 15; value: DROP YOUR REPLAY HERE"
+				bind__visible="localReplay"
+				position="0 1 0">
+			</a-entity>
+
+			<a-entity
+				id="loadingGestureText3"
+				mixin="font"
+				text="align: center; color: #FAFAFA; wrapCount: 40; value: Click anywhere for the open dialog"
+				bind__visible="localReplay"
+				position="0 0 2">
+			</a-entity>
+		</a-entity>
+	</a-entity>
+</a-entity>
+
+<a-entity
+	mixin="beat"
+	bind__beat="animating: challenge.isLoading || replay.isLoading; visible: challenge.isLoading || replay.isLoading || !hasReceivedUserGesture || challenge.hasLoadError || replay.hasError"
+	beat="color: blue; type: arrow; loadingCube: true"
+	position="1.0 1.5 -1.0"
+	bind__visible="challenge.isLoading || replay.isLoading || !hasReceivedUserGesture || challenge.hasLoadError || replay.hasError || localReplay"></a-entity>
+
+<a-entity
+	mixin="beat"
+	bind__beat="animating: challenge.isLoading || replay.isLoading; 
+              visible: challenge.isLoading || replay.isLoading || !hasReceivedUserGesture || challenge.hasLoadError || replay.hasError"
+	beat="color: red; type: arrow; loadingCube: true"
+	position="-1.0 1.5 -1.0"
+	bind__visible="challenge.isLoading || replay.isLoading || !hasReceivedUserGesture || challenge.hasLoadError || replay.hasError || localReplay"></a-entity>
+
+
+			<a-entity id="glowContainer"></a-entity>
+
+			<a-entity
+				render-order="wall"
+				id="mineParticles"
+				particleplayer="src: assets/models/mineparticles.json; pscale: 0.5; interpolate: true; scale: 1.4; loop: false; on: explode; img: #sparkImg; count: 20%; animateScale: true; initialScale: 3 1 1; finalScale: 0.2 0.2 1"></a-entity>
+
+			<a-entity id="controllerRig" proxy-event="event: recentered; to: #headRig; captureBubbles: true; as: recenter">
+				 
+				<a-entity
+					id="leftHand"
+					render-order="wall"
+					class="saber"
+					bind__trail="trailType: settings.trailType; lifetime: settings.trailLength; hiddenSaber: hiddenSaber; goodTdColor: settings.goodTdColor; badTdColor: settings.badTdColor"
+					bind__cut-plane="enabled: isPlaying"
+					saber-controls="hand: left"
+					bind__saber-controls="hiddenSaber: hiddenSaber"
+					trail="color: #bf2121; hand: left"
+					cut-plane="hand: left">
+					<a-entity class="saberContainer" rotation="90 0 0">
+						<a-entity
+							class="bladeContainer"
+							animation="property: scale; from: 0 0 0; to: 1 1 1; dur: 750; easing: linear; startEvents: drawblade"
+							scale="0.001 0.001 0.001">
+							<a-entity
+								class="blade bladeleft"
+								geometry="primitive: box; height: 1.0; depth: 0.02; width: 0.02"
+								material="shader: flat; color: #fff"
+								scale="1 1 1"
+								bind__scale="saberScale"
+								position="0 -0.5 0"></a-entity>
+							<a-entity
+								render-order="wall"
+								class="saberglow"
+								obj-model="obj: #saberGlowObj"
+								material="shader: flat; color: #bf2121; blending: additive; opacity: 0.08; depthWrite: false"
+								scale="1 1 1"
+								bind__scale="saberGlowScale"
+								position="0 -0.5 0"></a-entity>
+						</a-entity>
+						<a-entity
+							class="saberHandle"
+							geometry="primitive: cylinder; radius: 0.02; height: 0.15;"
+							scale="1 1 1"
+							bind__scale="saberScale"
+							material="shader: flat; color: #bf2121"
+							position="0 0.08 0">
+							<a-entity
+								class="highlightTop"
+								geometry="primitive: cylinder; radius: 0.02; height: 0.01;"
+								material="shader: flat; color: #FFFFFF"
+								position="0 -0.08 0"></a-entity>
+							<a-entity
+								class="highlightBottom"
+								geometry="primitive: cylinder; radius: 0.02; height: 0.01;"
+								material="shader: flat; color: #FFFFFF"
+								position="0 0.08 0.0"></a-entity>
+						</a-entity>
+
+						<a-entity class="axisContainer" rotation="0 -90 0" bind__visible="settings.showSaberAxes">
+							<a-entity
+								class="xSaberAxis"
+								geometry="primitive: cylinder; radius: 0.003; height: 0.2;"
+								material="shader: flat; color: #FF0000"
+								position="0.0 0.0 0.1"
+								rotation="90 0 0"></a-entity>
+							<a-entity
+								class="xSaberAxisCone"
+								geometry="primitive: cone; radius-top: 0.0; radius-bottom: 0.01; height: 0.03"
+								material="shader: flat; color: #FF0000"
+								position="0.0 0.0 0.2"
+								rotation="90 0 0"></a-entity>
+						</a-entity>
+
+						<a-entity class="axisContainer" rotation="0 0 90" bind__visible="settings.showSaberAxes">
+							<a-entity
+								class="ySaberAxis"
+								geometry="primitive: cylinder; radius: 0.003; height: 0.2;"
+								material="shader: flat; color: #00FF00"
+								position="0.0 0.0 0.1"
+								rotation="90 0 0"></a-entity>
+							<a-entity
+								class="ySaberAxisCone"
+								geometry="primitive: cone; radius-top: 0.0; radius-bottom: 0.01; height: 0.03;"
+								material="shader: flat; color: #00FF00"
+								position="0.0 0.0 0.2"
+								rotation="90 0 0"></a-entity>
+						</a-entity>
+					</a-entity>
+				</a-entity>
+
+				<!-- <a-entity
+            id="leftCursorMesh"
+            mixin="cursorMesh"
+            bind__cursor-mesh="active: leftRaycasterActive && !isPlaying"
+            cursor-mesh="cursorEl: #leftHand"
+            material="color: pink"
+            scale="1.3 1.3 1.3"></a-entity> -->
+				 
+				<a-entity
+					id="rightHand"
+					render-order="wall"
+					class="saber"
+					bind__trail="trailType: settings.trailType; lifetime: settings.trailLength; hiddenSaber: hiddenSaber; goodTdColor: settings.goodTdColor; badTdColor: settings.badTdColor"
+					bind__cut-plane="enabled: isPlaying"
+					saber-controls="hand: right"
+					bind__saber-controls="hiddenSaber: hiddenSaber"
+					trail="color: #335aff; hand: right"
+					cut-plane="hand: right">
+					<a-entity class="saberContainer" rotation="90 0 0">
+						<a-entity
+							class="bladeContainer"
+							animation="property: scale; from: 0 0 0; to: 1 1 1; dur: 750; easing: linear; startEvents: drawblade"
+							scale="0.001 0.001 0.001">
+							<a-entity
+								class="blade bladeright"
+								geometry="primitive: box; height: 1.0; depth: 0.02; width: 0.02"
+								material="shader: flat; color: #fff"
+								scale="1 1 1"
+								bind__scale="saberScale"
+								position="0 -0.5 0"></a-entity>
+							<a-entity
+								render-order="wall"
+								class="saberglow"
+								obj-model="obj: #saberGlowObj"
+								material="shader: flat; color: #335aff; blending: additive; opacity: 0.08; depthWrite: false"
+								scale="1 1 1"
+								bind__scale="saberGlowScale"
+								position="0 -0.5 0"></a-entity>
+						</a-entity>
+						<a-entity
+							class="saberHandle"
+							geometry="primitive: cylinder; radius: 0.02; height: 0.15;"
+							scale="1 1 1"
+							bind__scale="saberScale"
+							material="shader: flat; color: #335aff"
+							position="0 0.08 0">
+							<a-entity
+								class="highlightTop"
+								geometry="primitive: cylinder; radius: 0.02; height: 0.01;"
+								material="shader: flat; color: #FFFFFF"
+								position="0 -0.08 0"></a-entity>
+							<a-entity
+								class="highlightBottom"
+								geometry="primitive: cylinder; radius: 0.02; height: 0.01;"
+								material="shader: flat; color: #FFFFFF"
+								position="0 0.08 0.0"></a-entity>
+						</a-entity>
+
+						<a-entity class="axisContainer" rotation="0 -90 0" bind__visible="settings.showSaberAxes">
+							<a-entity
+								class="xSaberAxis"
+								geometry="primitive: cylinder; radius: 0.003; height: 0.2;"
+								material="shader: flat; color: #FF0000"
+								position="0.0 0.0 0.1"
+								rotation="90 0 0"></a-entity>
+							<a-entity
+								class="xSaberAxisCone"
+								geometry="primitive: cone; radius-top: 0.0; radius-bottom: 0.01; height: 0.03"
+								material="shader: flat; color: #FF0000"
+								position="0.0 0.0 0.2"
+								rotation="90 0 0"></a-entity>
+						</a-entity>
+
+						<a-entity class="axisContainer" rotation="0 0 90" bind__visible="settings.showSaberAxes">
+							<a-entity
+								class="ySaberAxis"
+								geometry="primitive: cylinder; radius: 0.003; height: 0.2;"
+								material="shader: flat; color: #00FF00"
+								position="0.0 0.0 0.1"
+								rotation="90 0 0"></a-entity>
+							<a-entity
+								class="ySaberAxisCone"
+								geometry="primitive: cone; radius-top: 0.0; radius-bottom: 0.01; height: 0.03;"
+								material="shader: flat; color: #00FF00"
+								position="0.0 0.0 0.2"
+								rotation="90 0 0"></a-entity>
+						</a-entity>
+					</a-entity>
+				</a-entity>
+
+				<!-- <a-entity
+            id="rightCursorMesh"
+            mixin="cursorMesh"
+            bind__cursor-mesh="active: rightRaycasterActive && !isPlaying"
+            cursor-mesh="cursorEl: #rightHand"
+            material="color: cyan"
+            scale="1.3 1.3 1.3"></a-entity> -->
+				
+			</a-entity>
+			<!-- <a-mixin
+        id="cursorMesh"
+        material="shader: flat; transparent: true; src: #cursorMeshImg; depthTest: false"
+        ></a-mixin> -->
+
+			<!-- Player. -->
+			<a-entity id="defaultRig" class="floatingCamera">
+				<a-entity id="mainCamera" class="mainCamera" position="0 1.75 2.0" camera="active: true" look-controls wasd-controls> </a-entity>
+			</a-entity>
+			<a-entity id="headRig" class="headCamera">
+				<a-entity
+					id="povCamera"
+					class="povCamera"
+					rotation="0 0 -1"
+					camera="fov: 60; active: false"
+					bind__camera="fov: settings.fov"
+					bind__aabb-collider="enabled: isPlaying"
+					aabb-collider="objects: [data-collidable-head]; interval: 50; collideNonVisible: false"
+					proxy-event__wallhitstart="event: hitstart; to: a-scene; as: wallhitstart"
+					proxy-event__wallhitend="event: hitend; to: a-scene; as: wallhitend">
+				</a-entity>
+			</a-entity>
+			<a-entity
+				id="head"
+				class="headset"
+				obj-model="obj: #questObj"
+				bind__visible="hasReceivedUserGesture && settings.headsetOpacity > 0 && !pov"
+				bind__material="transparent: settings.headsetOpacity &lt; 100; opacity: settings.headsetOpacity / 100"
+				render-order="headset"
+				position="0 1.7 0.0">
+				<a-entity
+					class="coord-center"
+					geometry="primitive: sphere; radius: 0.003;"
+					material="shader: flat; color: #FFFFFF"
+					position="0.0 0.0 0.0"
+					rotation="0 0 0"></a-entity>
+
+				<a-entity class="axisContainer" rotation="0 90 0" bind__visible="settings.showSaberAxes">
+					<a-entity
+						class="xSaberAxis"
+						geometry="primitive: cylinder; radius: 0.003; height: 0.2;"
+						material="shader: flat; color: #FF0000"
+						position="0.0 0.0 0.1"
+						rotation="90 0 0"></a-entity>
+					<a-entity
+						class="xSaberAxisCone"
+						geometry="primitive: cone; radius-top: 0.0; radius-bottom: 0.01; height: 0.03"
+						material="shader: flat; color: #FF0000"
+						position="0.0 0.0 0.2"
+						rotation="90 0 0"></a-entity>
+				</a-entity>
+
+				<a-entity class="axisContainer" rotation="-90 0 0" bind__visible="settings.showSaberAxes">
+					<a-entity
+						class="ySaberAxis"
+						geometry="primitive: cylinder; radius: 0.003; height: 0.2;"
+						material="shader: flat; color: #00FF00"
+						position="0.0 0.0 0.1"
+						rotation="90 0 0"></a-entity>
+					<a-entity
+						class="ySaberAxisCone"
+						geometry="primitive: cone; radius-top: 0.0; radius-bottom: 0.01; height: 0.03;"
+						material="shader: flat; color: #00FF00"
+						position="0.0 0.0 0.2"
+						rotation="90 0 0"></a-entity>
+				</a-entity>
+
+				<a-entity class="axisContainer" rotation="180 0 0" bind__visible="settings.showSaberAxes">
+					<a-entity
+						class="zSaberAxis"
+						geometry="primitive: cylinder; radius: 0.003; height: 0.2;"
+						material="shader: flat; color: #0000FF"
+						position="0.0 0.0 0.1"
+						rotation="90 0 0"></a-entity>
+					<a-entity
+						class="zSaberAxisCone"
+						geometry="primitive: cone; radius-top: 0.0; radius-bottom: 0.01; height: 0.03;"
+						material="shader: flat; color: #0000FF"
+						position="0.0 0.0 0.2"
+						rotation="90 0 0"></a-entity>
+				</a-entity>
+			</a-entity>
+			<a-entity id="eyeTracking" eye-tracking render-order="headset"></a-entity>
+
+			<a-entity
+				id="orthographicBack"
+				class="orthographicBack"
+				position="0 1.4 4.0"
+				orthographic-camera="viewportPosition: 2; far: 25; aspect: 1.333"
+				bind__orthographic-camera="active: settings.orthographicBackEnabled; far: settings.orthographicBackFar; frustum: settings.orthographicBackFrustum">
+			</a-entity>
+			<a-entity
+				id="orthographicRight"
+				class="orthographicRight"
+				position="2.0 1.4 0.0"
+				rotation="0 90 0"
+				orthographic-camera="viewportPosition: 1; far: 10; aspect: 1.333"
+				bind__orthographic-camera="active: settings.orthographicRightEnabled; far: settings.orthographicRightFar; frustum: settings.orthographicRightFrustum">
+			</a-entity>
+			<a-entity
+				id="orthographicTop"
+				class="orthographicTop"
+				position="0.0 4.0 0.0"
+				rotation="-90 0 0"
+				orthographic-camera="viewportPosition: 3; far: 10; aspect: 1.333"
+				bind__orthographic-camera="active: settings.orthographicTopEnabled; far: settings.orthographicTopFar; frustum: settings.orthographicTopFrustum">
+			</a-entity>
+		</a-scene>
+
+		<audio id="dummyAudio" autoplay>
+			<source src="assets/sounds/silence.mp3" type="audio/mpeg" />
+		</audio>
+
+		<span id="iframeUrl"></span>
+	</body>
+</html>

@@ -579,6 +579,63 @@ helbaさん自作のUnityスクリプト`NLMEnvExport.cs`で抽出した実メ�
   環境変数 `NLM_AUTOMODDER_ZIP` に配布の zip（隣に manifest.json）を入れると本物でも動かす）、`tests/e2e_misc/test_automodder.py`（応答は偽物・
   `tests/_lib/automodder_helpers.py`）、visual の `mapcheck_am`・`mapcheck_am_result`、英語の点検（`automodder_helpers.am_tour`）。
 
+## REPLAY の窓（BeatLeader のリプレイを見る・2026-11-22）
+
+- 利用者と決めた形: 左上の窓の3つ目（MEDIA → PREVIEW → REPLAY → MEDIA・Tab と見出しの［TAB］・`setPvMode`/`PV_MODES`）。見出しは3つを同じ順に並べ、
+  今の物（`.mlMain`）だけ大きい字で紫の枠、ほかの2つ（`.mlItem`）は押すとその画面へ（`setPvModeLabel`・2026-11-22 利用者「3つ切り替わることが分からない」）。
+  見出しが約 80px 広がった＝MEDIA の見出しの行は 900px から1段（tests/e2e_nle/test_media_library_ui.py の幅の決まりも直した）。窓の中で「一覧」⇄「再生」。
+  一覧は**今の曲の、NLM から書き出した版のリプレイだけ**（ほかの曲・全部の履歴は作らない）。遊んだ版の譜面の控えが無い物は灰色で「再生できません」と出すだけ
+  （BeatSaver から取らない・リプレイの記録から組み立てない）。ズームは窓の上のホイールだけ・窓の上の端の右寄りに「🔍 ホイールでズーム」を重ねる（下の端は BL の再生バーと重なる）（［−］［＋］・窓いっぱいは作らない）。
+  JD はそろえない（リプレイは遊んだ時の JD）。元は Auto Note Plotter（nlm-automap・同じ作者・GPLv3）の「リプレイ」（その仕様書の 26 節に経緯）。
+- 見せる物は **BL のリプレイアプリ**（BeatSaber-Web-Replays・MIT）の組み立て済みの写し `replay-viewer/blreplay/`（**手を入れない**。直しは `tools/blreplay_fetch.py`
+  の PATCHES だけ・写し直しも同じ道具・`--check` で指紋（MANIFEST.json）を確かめる・出典は SOURCE.md）と、NLM の伝言の受け手 `replay-viewer/bridge.js`。
+  `.gitattributes` で行の終わりを変えない・`.gitignore` の `build/`・`*.mp3` の例外あり。nlm.spec の datas に `replay-viewer/` が要る（無いと組み立てが止まる＝わざと）。
+- 裏側: `bsor.py`（.bsor＝Open Replay Format を読む・一覧はフレームを読み飛ばす）・`replays.py`（`ReplayStore`・viewer）・serve.py の `/__replay/*`（POST: status・resetFolder・
+  list・open・events・keep・keepEgg）・app.py の `replay_pick_folder`（ダイアログで選んだ物だけ記録＝MEDIA と同じ約束。JS から場所を渡す口は作らない）。
+  - リプレイのフォルダ: 環境変数 `NLM_REPLAYS`（テスト用・あれば自動の検出をしない）→ `config/replays.json` の dir（選んだ場所）→ 自動（MEDIA のライブラリのフォルダから
+    `…/SharedContent/SharedMaps/CustomLevels`→`…/BSInstances/*/UserData/BeatLeader/Replays`、`<X>/Beat Saber_Data/CustomLevels`→`<X>/UserData/BeatLeader/Replays`・Steam の既定）。読むだけ。
+  - 「この曲」: 書き出しの控えの `nlm.json` の曲名・マッパー（大文字小文字・前後の空白を問わない）が今の曲と同じ控えの hash に入るリプレイ＝再生できる（音の控えもある時だけ）。
+    .bsor の頭の曲名・マッパーが同じで hash が控えに無い物＝灰色。id はサーバーが付ける（JS からパスは受けない）。一覧の数は `config/replays_cache.json`。
+  - **書き出しの控え**（DATA_DIR の `replays/maps/<hash>/`・音は `replays/eggs/<sha1>.egg`）: 書き出すたびに `js/replay/replay-keep.js` が書いた Info.dat・難易度の .dat・カバー・song.egg を
+    **書き出し先から読み直して**送る（hash を書いた物とバイトまで同じにするため）。音は後から送った方が勝つ（無音追加だけ変えると hash が同じで音だけ違う）。REPLAY を出した時も、
+    つながった書き出し先の控えがまだ無ければ1回控える（この機能より前に書き出した版を拾う）。消す仕組みはまだ無い。
+- **viewer＝BL のリプレイアプリを別のオリジンで出す**（本体の画面・合言葉に触れさせない）: `http://localhost:<本体の番号＋20>`（使われていれば OS が選ぶ）。同じ番号で `::1` と
+  `127.0.0.1` の両方で待つ（localhost が ::1 に先につながっても待たない）。本体（127.0.0.1）と別のサイト＝別の描く流れ（描く速さのため・ANP で 127.0.0.1 の別の番号だと遅かった）。
+  ANP は [::1] を使ったが、NLM の editor.html の CSP（`frame-src http://localhost:* http://127.0.0.1:*`）には [::1] を書けないので localhost にした。出すのは GET だけ
+  （`/blreplay/…`・`/bridge.js`・使い捨ての鍵の `/blr/<鍵>/<名前>`＝その1件の .bsor と map.zip）。index.html を出す時だけ `</body>` の前に bridge.js の script を足す。
+  `frame-ancestors`＝本体の画面だけ・Host の確かめ・Range に答える（BL のアプリは .bsor を少しずつ読む）・途中で切られた接続の例外は黙る（`handle_error`）。
+- 伝言（`nlm:'blr'`・相手の窓とオリジンを確かめる・送る先も決める）: NLM→窓 hello・seek(t)・play・pause、窓→NLM hi・ready(dur)・time(t,playing,speed,at)・zoom(level)・key。
+  **窓の中を押した後は入力が窓へ行く**ので、bridge.js が Tab と Ctrl の組み合わせだけ `ev:'key'` で渡し、editor-app.js の `rpKeyFromViewer` が Tab＝窓の切り替え（入力を NLM へ戻す）・
+  Ctrl＝本物の keydown と同じ道へ流す（Space・矢印は BL のアプリが受ける＝同期で NLM も付いてくる）。
+- 同期（ANP と同じ決まり・`js/replay/replay-pane.js` と editor-app.js の `rp…`）: 時計はリプレイ側の1つ。**リプレイの秒＝NLM の `beatToTimeTM(拍)`**（無音追加・Music の配置は egg に
+  焼き込むので足し引き無し）。つないでいる間は `_tick` の頭で `rpFollow` が cur を合わせ、NLM の側で cur が変わったら（どの経路でも）リプレイへ seek（0.12 秒に1回まで・最後は必ず）。
+  `play()`/`pause()` はリプレイの再生・停止を送るだけ。**再生の経路（曲の音・通過音・メトロノーム）を足したら、`rpLink` の間は鳴らさないこと。** 途中でやめた・失敗のリプレイは
+  記録の終わり（endSec）で止める。REPLAY から離れる・一覧へ戻る・新規／開くで止めて外す。同期のオン・オフは `bsnm_rpSync`。
+- ホイールのズーム（bridge.js）: 3D の canvas の上だけ。標準の視点はマウスの画素を通る光線に沿ってカメラを動かす（その画素の物は動かない・1〜8 倍・1 倍で元の位置へ）、
+  目線（FPV）は three.js の view で視野を狭める。BL のアプリの版を上げた時に見直す所は bridge.js の冒頭。
+- **点数を重ねる**（見出しの［点数］・`bsnm_rpMarks`＝キーが無い＝オン）: リプレイを開いた時に `/__replay/events` を1回読み、計算は `js/replay/replay-marks.js`（DOM を使わない）、
+  描くのは editor-app.js の `rpMarks…`・`drawReplayMarks`・`rpRing…`。出すのは再生の画面の間で、今の難易度がリプレイと同じ・Standard の時だけ（凡例の行に理由と段ごとの数・合わない数）。
+  点の段と色は **BL のリプレイアプリと同じ**（本家 src/components/beat.js の `colorAndScaleForScore`・`HSVConfig.judgments`・2026-11-22 利用者の決定）: 点数÷満点×115 が
+  115 以上＝白 #FFFFFF・113 以上＝紫 #8500FF・110 以上＝青 #00A3FF・106 以上＝緑 #00FF00・100 以上＝黄 #FFFF00・それ未満＝ピンク #FF0038（満点はノーツの種類ごと＝チェーンの頭は 85・
+  後ろは 20・チェーンの色は後ろも含めた悪い方）。点の色に無い色でバッド＝橙 #FF8000・ミス＝赤 #FF0000・ボム＝マゼンタ #FF00D0、NLE の壁の印は灰色 #C8CCD6。
+  BL のアプリの写しを上げたら unit_js の `test_tiers_match_bl_viewer` が写しの judgments と突き合わせる（違えば `CUT_TIERS`・`RP_COL` を直す）。
+  NLE: 拍番号の帯の下の方にミス✕・バッド◆・ボム●・壁▬（合うノーツの無い出来事は薄く・押すとその拍へ）。**審査の指摘の ▼ と両方ある時だけ2段**（▼ が上）＝
+  **数字の帯に印を足す時はこの2段の高さに気を付けること**。3D: 合った物に段の色の輪（切った物は細い＝幅 0.03・ミス・バッド・ボムは太い＝0.13。ミスはさらにノーツの表と裏の前に黒い縁の赤い大きな ✕＝赤いノーツの上でも形で分かる・
+  点滅しない。材質は変えない・LIGHTING では出さない）・マウスの下のノーツのツールチップに点。
+  合わせ方: 出来事の秒を `timeToBeatTM` で拍にし拍の順に二分探索（ノーツ＝±0.01 拍・列・段・色、ボム＝拍・列・段・1つの出来事は1つの物にだけ・チェーンは頭が合った時に後ろもまとめる）。
+  合わせ直すのは難易度・物の数が変わった時と 0.4 秒ごと（物を置く・消す経路を足しても付いていく）。**描画の途中で物ごとに全部の出来事をなめない**（出来事 4 万・ノーツ 1 万で 1 回 100ms 未満）。
+- WebView2 で確かめたこと（2026-11-22・app.py をソースから起こし本物の入力）: localhost の窓が CSP を通って開く・NLM の ▶ の本物のクリックだけでリプレイの音（WebAudio）が
+  動き出し同期する（iframe の allow は窓のオリジンだけの `autoplay` で足りる）・ズーム。BL のアプリは **.dat に `basicBeatmapEvents` 等の項目が無いと途中で止まり曲を読まない**
+  （NLM の書き出しには必ずある。テストの合成の譜面 `tests/_lib/replay_fixture.py` もそろえた）。プレイヤーの名前・アイコン（api.beatleader.com）は localhost からは CORS で失敗する（再生には関係なし）。
+- **BL のリプレイアプリは、最初の BPM の変化が拍 0 に無いと、その前の拍まで変化の後の BPM で秒にする**（build の timeConvertor・2026-11-22 にチュートリアルの撮影で発見）。
+  NLM はテンポパートを拍 0 無しで書き出す（ゲームは最初の変化までを Info.dat の BPM で数える＝正しい）ので、テンポパートのある譜面でノーツの時刻がずれて出なかった。
+  写しには手を入れず、viewer へ渡す map.zip を作る時だけ、v3 の `bpmEvents` に拍 0 の物が無ければ拍 0 に Info.dat の BPM を足す（`replays._viewer_dat`。hash は控えの元の
+  ファイルで数えるので関係ない＝この版より前に書き出した控えも直る）。確かめは `test_replay_real.py::test_replay_real_tempo_not_from_zero`（窓の iframe に CDP でつないで
+  `beat-generator` の `_notes[]._songTime` を読む）と unit_py の `test_map_zip_tempo_from_zero`。**書き出しの形を変えた時・写しを上げた時は、この2つを見直す。**
+- テスト: `tests/unit_py/test_replays.py`・`test_blreplay.py`（裏側・写しの指紋・bridge.js）、`tests/e2e_misc/test_replay.py`（応答と窓は偽物＝`tests/_lib/replay_helpers.py`・
+  偽の窓は localhost の小さなページ）、`tests/e2e_misc/test_replay_real.py`（本物の裏側・本物の BL のアプリ・bridge.js）、`tests/e2e_misc/test_replay_marks.py`・`tests/unit_js/test_replay_marks.py`（点数を重ねる）。テストのサーバーは `NLM_REPLAYS`＝一時フォルダ（`ed.replays_dir`・
+  利用者の本物を読まない）。合成のリプレイ・控えは `tests/_lib/replay_fixture.py`（使い方は冒頭）。
+
 ## 本体の自動更新（2026-10-02）
 
 - `app_update.py`（確認・ダウンロード・照合・展開・差し替え）＋`serve.py`の`/__update/*`（POST）＋`js/update/update-dialog.js`。

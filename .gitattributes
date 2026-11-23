@@ -1,0 +1,2 @@
+# BL のリプレイアプリの写し（tools/blreplay_fetch.py・MANIFEST.json の指紋とバイトまで同じに＝行の終わりを変えない）
+replay-viewer/blreplay/** -text

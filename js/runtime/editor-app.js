@@ -47,6 +47,9 @@ import { installSongAnalysis } from '../analysis/song-analysis.js';   // 曲の�
 import { anaClipsDialog } from '../analysis/ana-clips.js';            // 解析からクリップを作る確認の画面（作るのは anaMakeClips）
 import { installReviewPanel } from '../review/review-panel.js';        // 審査の指摘（「拍 - 文」の .txt・Discord の本文）の一覧・読み込み・書き出し（2026-10-27）
 import { pickTargets as rvPickTargets, srcTpOk } from '../review/review-data.js';   // 指摘の拍に当たる物を探す・元の譜面のテンポ（C3）の形の確かめ
+import { installReplayPane } from '../replay/replay-pane.js';           // 左上の窓の REPLAY（遊んだリプレイを BL のリプレイアプリで見る・再生位置の同期・2026-11-22）
+import { prepEvents, matchObjects, marksRange, RP_COL, TIERS as RP_TIERS } from '../replay/replay-marks.js';   // REPLAY の「点を重ねる」（NLE の印・3D の輪の色・2026-11-22）
+import { keepFromDir as replayKeepDir } from '../replay/replay-keep.js'; // 書き出しの控え（遊んだ時の譜面で再生するため。serve.py の /__replay/keep）
 
 /**
  * Editor runtime — original closure (behavior-preserving).
@@ -218,6 +221,7 @@ async function loadLang(){
   try{ if(typeof renderLibList==='function') renderLibList(); }catch(_){}   // MEDIAの「アセット」など
   try{ libView.relabel(); libFilter.relabel(); libView.refresh(); libOnline.relabel(); }catch(_){}   // MEDIAの詳細表示の見出し・件数・出どころ・★の計算の帯・環境設定の状態（起動の途中で呼ばれた時はまだ無い）
   try{ if(reviewPanel) reviewPanel.relabel(); }catch(_){}   // 審査の指摘の一覧（開いていれば）
+  try{ if(replayPane) replayPane.relabel(); }catch(_){}   // REPLAY の一覧・知らせ
 }
 // ---- ペインモード（Tabで切替。マウスの乗っているペインが対象） ----
 let curTab='tabFolder', pvMode='media', nodeMode='edit', nodeColMode='nle', hoverPane='main';   // 起動時はMEDIAを先に表示（ヘルバ様指示）
@@ -226,20 +230,38 @@ async function setModeLabel(id,icon,txt,nextTxt){ const el=document.getElementBy
   el.innerHTML=(await tbIcon(icon))+`<span class="mlMain">${txt.toUpperCase()}</span>`
     +`<span class="mlNext" title="${tip}">${await tbIcon('cycle_tab')}<span>${nextTxt.toUpperCase()}</span></span>`;
 }
+/** 左上の窓の見出し（2026-11-22 利用者「Tab で3つ切り替わることが分からない・3つ並べて今の所に枠を」）:
+ * 今の画面のアイコン → ［TAB］（押すと次へ＝.mlNext） → MEDIA・PREVIEW・REPLAY をいつも同じ順に並べ、今の物（.mlMain）だけ大きい字で紫の枠に入れる。
+ * ほかの2つ（.mlItem）は小さい灰色の字で、押すとその画面へ直接移る。幅は MEDIA・REPLAY の見出しの部品が測って横に詰める（lib-layout.js・replay-pane.js） */
+let _pvLabelSeq=0;
+async function setPvModeLabel(m){ const el=document.getElementById('pvModeLabel'); if(!el) return; const my=++_pvLabelSeq;
+  const nm={media:t('mode.media','Media'),preview:t('mode.preview','Preview'),replay:t('mode.replay','Replay')};
+  const go=k=>escHtml(tf('ui.mlNext','クリックで {mode} へ切り替え',{mode:nm[k].toUpperCase()}));
+  let h=(await tbIcon({media:'folder',preview:'eye',replay:'replay'}[m]))+`<span class="mlNext mlTab" title="${go(pvNext(m))}">${await tbIcon('cycle_tab')}</span><span class="mlSet">`;
+  for(const k of PV_MODES){ const s=escHtml(nm[k].toUpperCase());
+    h+=k===m?`<span class="mlMain mlCur" data-mode="${k}">${s}</span>`:`<span class="mlItem" data-mode="${k}" title="${go(k)}">${s}</span>`; }
+  if(my===_pvLabelSeq) el.innerHTML=h+'</span>';   // 続けて切り替えた時に、前の分（アイコンを待っている間）で上書きしない
+}
 // 「[TAB] 次の画面名」はクリックでも切り替える（Tabキーと同じ＝浮いているメニューを閉じてから切り替え・2026-10-12）。
-// ラベル全体はクリックを下の3D/NLEへ通す（pointer-events:none）が、.mlNext だけは受ける。下の配置・範囲選択などを始めないよう伝播を止める
+// ラベル全体はクリックを下の3D/NLEへ通す（pointer-events:none）が、.mlNext（と左上の窓の .mlItem）だけは受ける。下の配置・範囲選択などを始めないよう伝播を止める
 { const onNext=(id,fn)=>{ const el=document.getElementById(id); if(!el) return;
-    el.addEventListener('pointerdown',e=>{ if(e.target.closest('.mlNext')) e.stopPropagation(); });
-    el.addEventListener('click',e=>{ if(!e.target.closest('.mlNext')) return; e.stopPropagation(); closeFloatUI(); fn(); }); };
-  onNext('pvModeLabel',()=>setPvMode(pvMode==='preview'?'media':'preview'));
+    el.addEventListener('pointerdown',e=>{ if(e.target.closest('.mlNext,.mlItem')) e.stopPropagation(); });
+    el.addEventListener('click',e=>{ const it=e.target.closest('.mlNext,.mlItem'); if(!it) return; e.stopPropagation(); closeFloatUI(); fn(it); }); };
+  onNext('pvModeLabel',it=>setPvMode(it.dataset.mode||pvNext(pvMode)));
   onNext('nodeColModeLabel',()=>setNodeColMode(nodeColMode==='nle'?'info':'nle'));
   onNext('mainModeLabel',()=>setLightMode(!lightMode)); }
-function setPvMode(m){ pvMode=m; curTab=(m==='preview')?'bodyPv':'tabFolder';
+// 左上の窓: MEDIA → PREVIEW → REPLAY → MEDIA（Tab・見出しの「[TAB] 次」のクリック。REPLAY は 2026-11-22・js/replay/replay-pane.js）。
+// REPLAY の間は PREVIEW の3D（pv4）を描かない（毎フレームの描画は curTab==='bodyPv' の時だけ）。REPLAY から離れるとリプレイを止めて外す
+const PV_MODES=['media','preview','replay'];
+function pvNext(m){ return PV_MODES[(PV_MODES.indexOf(m)+1)%PV_MODES.length]; }
+function setPvMode(m){ if(!PV_MODES.includes(m)) m='media';
+  const was=pvMode; pvMode=m; curTab=m==='preview'?'bodyPv':m==='replay'?'bodyRp':'tabFolder';
   document.getElementById('bodyPv').classList.toggle('on',m==='preview');
-  document.getElementById('tabFolder').classList.toggle('on',m!=='preview');
-  const pv=t('mode.preview','Preview'), md=t('mode.media','Media');
-  setModeLabel('pvModeLabel',(m==='preview')?'eye':'folder',(m==='preview')?pv:md,(m==='preview')?md:pv);
-  if(m!=='preview') renderMetaList();
+  document.getElementById('tabFolder').classList.toggle('on',m==='media');
+  { const rp=document.getElementById('bodyRp'); if(rp) rp.classList.toggle('on',m==='replay'); }
+  setPvModeLabel(m);
+  if(m==='media') renderMetaList();
+  if(replayPane){ if(m==='replay'&&was!=='replay') replayPane.show(); else if(m!=='replay') replayPane.hide(); }
 }
 function setNodeMode(m){ nodeMode='edit';   // INFOモードは廃止（ノード側で編集）
   document.getElementById('infoPanel').style.display='none';
@@ -2855,7 +2877,9 @@ function drawLayers(curV){
     ndg.fillStyle='#c9c9c9'; ndg.fillText(nm,x+8,mkT+MKRH/2+0.5);
     _mkRects.push({i:mi2,x:x+6,y:mkT+1,w:tw+6,h:MKRH-2});
   }
-  drawReviewMarks(bx);   // 審査の指摘の印（数字の帯の下の方・今の難易度の分・2026-10-27）
+  { const rvMs=reviewPanel?reviewPanel.marks(curDiffDn()):[], rpP=rpMarksOn()?rpMarksPrep():null;
+    drawReviewMarks(bx,rvMs,!!(rpP&&rpP.m.length));   // 審査の指摘の印（数字の帯の下の方・今の難易度の分・2026-10-27）。REPLAY の点の印がある時は上の段
+    drawReplayMarks(bx,_W,rpP,rvMs.length>0); }      // REPLAY の点の印（ミス・バッド・ボム・壁・2026-11-22）。審査の指摘の印がある時は下の段
   // MEDIAドラッグ中のゴーストクリップ（ホバー中のレーン種で中身が変わる。曲に現在の難易度が無ければ「？」）
   if(_dragMedia&&_mediaGhostNd){
     const gla=laneAtY(_mediaGhostNd.sy), glk=gla.lk;
@@ -3762,6 +3786,7 @@ ndcv.addEventListener('pointerdown', e=>{
   if(sy<LRULER-MKRH){                            // 数字ルーラー（マーカー帯より上）=シーク（Premiere/DaVinciと同じ。ドラッグでスクラブ）
     if(e.button!==0) return;
     { const rv=reviewMarkAt(sx,sy); if(rv){ if(reviewPanel) reviewPanel.focus(rv.id); return; } }   // 審査の指摘の印＝一覧のその項目へ（シークしない）
+    { const rm=replayMarksAt(sx,sy); if(rm){ rpMarkSeek(rm[0].beat); return; } }   // REPLAY の点の印＝その位置へ（スナップしない＝出来事の拍そのもの）
     if(playing) pause();
     tlFrozen=tlWindow(cur); layerSeek=true;
     cur=Math.max(0,snapV(lXToBeat(sx))); offset=beatToTimeTM(cur);
@@ -3794,8 +3819,9 @@ ndcv.addEventListener('pointermove', e=>{
   _ndMouseY=sy;   // L/M/Sショートカット用にマウスyを記録
   { _ndEoHover=sx<LGUT&&_eoBtns.some(r2=>sx>=r2.x&&sx<=r2.x+r2.w&&sy>=r2.y&&sy<=r2.y+r2.h);   // 単独編集の帯の上（指のカーソル）
     const rv=sy<LRULER-MKRH-TPRH?reviewMarkAt(sx,sy):null; _ndRvHover=!!rv;   // 審査の指摘の印の上（指のカーソル・文の頭をツールチップに）
+    const rm=!rv&&sy<LRULER-MKRH-TPRH?replayMarksAt(sx,sy):null; if(rm) _ndRvHover=true;   // REPLAY の点の印の上（時刻・種類をツールチップに）
     const tip=_ndEoHover   // 単独編集の帯の説明（キャンバスに描いた部品なので title で出す）
-      ?t('nle.editOnlyTip','このレーンだけを編集 — 3Dの編集はこのレーンだけに入ります。他のレーンは編集できません'):rv&&reviewPanel?reviewPanel.tipOf(rv.id):'';
+      ?t('nle.editOnlyTip','このレーンだけを編集 — 3Dの編集はこのレーンだけに入ります。他のレーンは編集できません'):rv&&reviewPanel?reviewPanel.tipOf(rv.id):rm?rpMarksTip(rm):'';
     if(ndcv.title!==tip){ if(tip) ndcv.title=tip; else ndcv.removeAttribute('title'); } }
   if(layerPaste){ tlHoverBeat=(sx>=LGUT&&sy>=LRULER)?Math.max(0,snapV(lXToBeat(sx))):null; if(tlHoverBeat!=null) updateLayerPaste(tlHoverBeat); return; }   // ゴースト追従
   if(markerDrag){ const nb=Math.max(0,snapV(lXToBeat(sx)));   // マーカードラッグ中は拍だけ更新
@@ -5072,7 +5098,7 @@ let vwB=null;       // null=ヘッド追従（従来どおり世界がスクロ�
 let vwPlayD=null;   // 再生中のヘッド画面位置（cur-vwB、再生開始時に確定）。再生中のみビューがヘッドと等速スクロール（±20拍キープ）
 // 原則: 停止中にシステムがビュー/カメラを動かすことは絶対にない（動かすのは使用者のみ）。旧・描画窓スライド＋カメラ補償は構造欠陥のため全廃
 function viewBeat(){ if(vwB!=null) return vwB;   // レイテンシ補正はミリ秒オーダーの微小量なので、現在地点のBPM(bpmAtBeat)で近似して十分（テンポパートを跨いでも実用上ズレない）
-  return playing? cur-(((actx.outputLatency||actx.baseLatency||0)+avOffset/1000)*bpmAtBeat(cur)/60) : cur; }
+  return (playing&&!rpLink)? cur-(((actx.outputLatency||actx.baseLatency||0)+avOffset/1000)*bpmAtBeat(cur)/60) : cur; }   // REPLAY とつないでいる間はリプレイの絵が基準＝NLM の音の遅れは引かない
 function seekEase(target,dur){ target=Math.max(0,target); if(playing) pause();
   vwB=null;   // 3Dは世界スクロールでヘッド追従へ
   tlViewB0=null; tlB0=Math.max(0,target-tlSpan*0.5);   // NLE窓を常にヘッド中心へ飛ばす（手動パンも解除＝再生バー/ショートカットで必ず再生ヘッドへ飛ぶ。ヘルバ様指定）
@@ -5358,16 +5384,24 @@ var songGain=actx.createGain(); songGain.connect(gain);   // 曲の音量補正�
 const analyser=actx.createAnalyser(); analyser.fftSize=1024; masterGain.connect(analyser);
 const vmData=new Float32Array(analyser.fftSize);
 let audioBuf=null,srcNs=[],playing=false,startedAt=0,offset=0,playStartB=0;
-function aTime(){ return playing? offset+(actx.currentTime-startedAt): offset; }
-function play(){ if(!audioBuf)return;
-  stopPrevPlay();   // 試聴中なら止める（本編再生と排他）
-  if(curAnim){ cur=curAnim.to; curAnim=null; }   // イージング中に再生したら着地点から
+function aTime(){ if(rpLink) return beatToTimeTM(cur);   // REPLAY とつないでいる間は時刻の元はリプレイ（rpFollow が cur を合わせる）
+  return playing? offset+(actx.currentTime-startedAt): offset; }
+// 再生を始めた時の3Dのビューの決め方（自分の音で鳴らす時と、つないだリプレイが再生を始めた時の共通）
+function playViewStart(){
   if(camMode==='edit'&&vwB==null) vwB=viewBeat();   // 編集モードは再生開始時にビューアンカーを固定＝以後ヘッドだけが動きカメラ/ビューは非連動（2026-07-14改）
   // 再生中はvwBがヘッドに等速追走（両モード共通）: 画面上のヘッド位置は保ったまま世界がスクロールし、常に±24拍を描画キープ
   if(vwB!=null){ let d0=cur-vwB;
     if(d0>16){ vwB=cur-16; d0=16; }                            // ヘッドが窓端の外なら必要最小限だけ窓を寄せる（リピート直後等）
     else if(d0<-16){ vwB=Math.max(0,cur+16); d0=cur-vwB; }
     vwPlayD=d0; } else vwPlayD=null;
+  prevPlayBeat=cur; playStartB=cur; }
+function play(){
+  if(rpLink){ stopPrevPlay(); if(curAnim){ cur=curAnim.to; curAnim=null; }   // つないだリプレイを再生する（NLM の曲の音は鳴らさない）
+    rpFlushSeek(); rpLink.play(); playViewStart(); playing=true; document.getElementById('play').textContent='⏸'; return; }
+  if(!audioBuf)return;
+  stopPrevPlay();   // 試聴中なら止める（本編再生と排他）
+  if(curAnim){ cur=curAnim.to; curAnim=null; }   // イージング中に再生したら着地点から
+  playViewStart();
   if(!sigConnected('audio')){ showErr('音源の配線が切断されています（ノードエディタで接続してください）'); return; }
   stopS(); startedAt=actx.currentTime;
   offset=beatToTimeTM(cur); prevPlayBeat=cur; playStartB=cur;   // 遅延補正のクランプ基準（開始拍より後ろへは描画しない）
@@ -5421,7 +5455,40 @@ function audioPosAtBeat(beat,raw){ if(!audioBuf) return null;
   for(const sg of msegs()){ const rel=tt-beatToTimeTM(sg.beat);
     if(rel>=0&&rel<sg.dur){ const p=off0+sg.off+rel; return (p>=0&&p<audioBuf.duration)?(raw?p:Math.round(p*100)/100):null; } }
   return null; }
-function pause(){ offset=aTime(); stopS(); playing=false; vwPlayD=null; document.getElementById('play').textContent='▶'; }
+function pause(){ if(rpLink){ rpLink.pause(); offset=beatToTimeTM(cur); playing=false; vwPlayD=null; document.getElementById('play').textContent='▶'; return; }   // つないだリプレイを止める
+  offset=aTime(); stopS(); playing=false; vwPlayD=null; document.getElementById('play').textContent='▶'; }
+// ---- REPLAY の窓とつないだ同期（2026-11-22・画面と伝言は js/replay/replay-pane.js・ANP の player.setLink／follow と同じ決まり） ----
+// 時計はリプレイ側の1つ: つないでいる間は毎フレームの頭（_tick）で rpFollow がリプレイの時刻（L.state()）へ cur を合わせ、NLM の側で位置を
+// 動かした（ルーラー・←→・Home・ホイール・マーカー・譜面チェックの拍…＝どの経路でも cur が変わる）のを rpCurSet との違いで見つけてリプレイへ送る。
+// ▶・Space は play()／pause() がリプレイの再生・停止を送る。NLM の曲の音・3D の切る音（blip）・メトロノーム・曲末の繰り返しは鳴らさない／しない。
+// 時刻: リプレイの秒＝書き出した song.egg の秒＝beatToTimeTM(拍)（無音追加・Music の配置は egg に焼き込む＝足し引き無し）
+var rpLink=null;    // つないだリプレイ {play(),pause(),seek(秒),state()→{t,playing,hold}}。var＝作る前に aTime 等から参照されても TDZ で落ちない
+var rpCurSet=null;  // 最後に合わせた cur（null＝つないだ直後。これと違えば NLM の側で動かした）
+function rpSetLink(L){
+  if(L){ if(rpLink===L) return; if(playing&&!rpLink) pause(); stopPrevPlay(); rpLink=L; rpCurSet=null; }   // つなぐ＝NLM の音を止める
+  else { if(!rpLink) return; rpLink=null; rpCurSet=null; playing=false; vwPlayD=null; offset=beatToTimeTM(cur);   // 外す＝今の位置から NLM の音で続けられる（再生はしない）
+    document.getElementById('play').textContent='▶'; }
+}
+/** リプレイの窓の中で押したキー（bridge.js が Tab と Ctrl の組み合わせだけ渡す）。窓の中を押した後は入力が窓へ行き、NLM のキーが効かなくなるため。
+ * Tab＝左上の窓の切り替え（窓の上にマウスがある＝pv の窓）。切り替えたら入力を NLM へ戻す（隠れた窓に残さない）。
+ * Ctrl の組み合わせ＝NLM の本物の keydown と同じ道（保存・取り消し…・割り当ての変更にも付いてくる） */
+function rpKeyFromViewer(k){
+  const fr=document.activeElement; const back=()=>{ if(fr&&fr.tagName==='IFRAME'){ try{ fr.blur(); }catch(_){} } };
+  if(k.key==='Tab'&&!k.ctrl&&!k.alt){ if(k.repeat) return; hoverPane='pv'; closeFloatUI(); setPvMode(pvNext(pvMode)); back(); return; }
+  if(!k.ctrl) return;
+  dispatchEvent(new KeyboardEvent('keydown',{key:k.key,code:k.code,ctrlKey:true,shiftKey:k.shift,altKey:k.alt,repeat:k.repeat,bubbles:true,cancelable:true}));
+}
+function rpFlushSeek(){ if(rpLink&&rpCurSet!=null&&Math.abs(cur-rpCurSet)>1e-9){ rpLink.seek(beatToTimeTM(cur)); rpCurSet=cur; } }
+function rpFollow(){
+  rpFlushSeek();   // NLM の側で位置を動かした → リプレイへ（0.12 秒に1回まで・最後の位置は必ず＝replay-pane.js）
+  const s=rpLink.state();
+  if(s.playing!==playing){ if(s.playing) playViewStart(); else vwPlayD=null;   // リプレイの側で再生・停止した
+    playing=s.playing; document.getElementById('play').textContent=playing?'⏸':'▶'; }
+  if(!s.hold&&s.t!=null&&isFinite(s.t)){ const b=Math.max(0,timeToBeatTM(Math.max(0,s.t)));   // 送った位置へ着くまで（hold）は NLM の位置のまま
+    if(Math.abs(b-cur)>1e-6){ cur=b; offset=beatToTimeTM(cur); curAnim=null;
+      if(!playing){ const w=tlWindow(cur); if(cur<w.b0||cur>w.b0+w.span) tlFollow(cur); } } }   // 止めたままリプレイで動かした＝NLE の窓の外ならそこを見せる
+  rpCurSet=cur;
+}
 document.getElementById('vol').addEventListener('input',e=>{   // 右のフェーダー=マスター
   volCfg.m=+e.target.value; localStorage.setItem('bsnm_vol',JSON.stringify(volCfg));
   const el=document.getElementById('volM'), lv=document.getElementById('volMVal');
@@ -6771,6 +6838,7 @@ async function bulkLoadSongData(item){
     if(newSong) anaAfterLoad(); }   // 閉じてから「曲を解析しますか？」（他の画面が出ている間は待つため）
 }
 function resetAllState(){   // 新規/開く/最近使った の直前に全状態を初期化＝前ファイルの残留（特にフラット配列と_flatDirty）が新ファイルのクリップへ混入するのを防止（ヘルバ様報告のデータ混在バグ対策）
+  if(replayPane) replayPane.reset();                                   // REPLAY の窓も閉じる（リプレイを止めて外す＝NLM の再生は自分の音へ戻る）
   if(playing) pause();
   stopPrevPlay();
   notes=[]; bombs=[]; walls=[]; arcs=[]; chains=[]; lightEvents=[];   // フラット（譜面データ）を必ずクリア
@@ -7551,6 +7619,20 @@ if(NLM_DEV) window._dbgApp=Object.freeze({
   analysis:()=>songAna?songAna.dbg():null,
   /** 審査の指摘（tests/e2e_misc/test_review.py 用）: 一覧が開いているか・項目（済み・返事・NLM の拍）・拍の無い行・読み込んだ物・選んでいる項目・一覧に出ている行・最後の知らせ・飛んだ結果 */
   review:()=>reviewPanel?reviewPanel.dbg():null,
+  /** REPLAY の窓（tests/e2e_misc/test_replay.py 用）: 出しているか・一覧と再生のどちらか・一覧の行・開いているリプレイ・窓の状態（none/loading/ready/linked）・
+   * 最後に届いたリプレイの時刻・送った位置を待っているか・endSec で止める秒・ズーム・知らせの文。nlm＝NLM の側の再生位置（秒）・再生中か・つないでいるか */
+  replay:()=>replayPane?{...replayPane.dbg(),pvMode,nlm:{sec:beatToTimeTM(cur),beat:cur,playing,linked:!!rpLink,srcs:srcNs.length}}:null,
+  /** REPLAY の「点を重ねる」（tests/e2e_misc/test_replay_marks.py 用）: 渡されているか・出しているか（同じ難易度）・NLE の印（最後の描画の時点・ページ座標px）・
+   * 3D の輪（最後のフレームで見えている物＝物の種類・拍・列・段・色・段・色の値）・合わない出来事の数・3D のツールチップ */
+  rpMarks:()=>{ const r=ndcv.getBoundingClientRect(), on=rpMarksOn(), M=on?rpMarksMatch():null;
+    return structuredClone({has:!!rpMk,on,diff:rpMk?rpMk.diff:null,mode:rpMk?rpMk.mode:null,events:rpMk?rpMk.ev.notes.length+rpMk.ev.walls.length:0,
+      marks:_rpRects.map(q=>({kind:q.kind,beat:q.beat,t:q.t,dim:q.dim,n:q.n,x:r.left+q.x,y:r.top+q.y,w:q.w,h:q.h})),
+      rings:rpRingPool.filter(g=>g.visible).map(g=>({...g.userData.rp,mat:'#'+g.material.color.getHexString(),thick:g.geometry===(_rpRingGeo&&_rpRingGeo.thick),
+        width:+(g.geometry.parameters.outerRadius-g.geometry.parameters.innerRadius).toFixed(3),outer:g.geometry.parameters.outerRadius,order:g.renderOrder,rainbow:g.geometry===(_rpRingGeo&&_rpRingGeo.rainbow),bands:g.geometry.parameters.bands||0})),
+      specOrder:specBand.renderOrder,
+      crosses:rpCrossPool.filter(g=>g.visible).map(g=>({...g.userData.rp,mat:'#'+_rpCross.mat.color.getHexString(),parts:g.children.length,
+        dz:g.children.map(c=>+c.position.z.toFixed(3))})),
+      unNotes:M?M.unNotes:0,unBombs:M?M.unBombs:0,tip3:_rpTip3,info:rpMarksInfo()}); },
   /** 3Dの選択（ノーツ類の種類・拍と、ライトの選択の数）。審査の指摘で飛んだ時の確かめ用 */
   selObjs:()=>({objs:[...selection].map(o=>({kind:o.kind,beat:o.beat??o.b})),lights:lightSelection.size}),
   /** タイムラインの審査の指摘の印（最後の描画の時点）: 項目の id とページ座標px の矩形 */
@@ -7817,22 +7899,23 @@ reviewPanel=installReviewPanel({t,tf,dispDiff,stat,
 /** タイムライン（NLE の数字の帯の下の方）の審査の指摘の印。今の難易度の分だけ。重さの色・済みは薄く・選んでいる指摘は縦の線（範囲は帯） */
 const _rvRects=[];   // 印の当たり判定（最後の描画の時点・キャンバスの px）
 const RV_SEV_COL={X:'#ff5a6a','?':'#f0a03c',S:'#5aa8ff',N:'#a0a6b0','':'#f2c94c'};
-function drawReviewMarks(bx){
+function drawReviewMarks(bx,ms,up){
   _rvRects.length=0;
-  const ms=reviewPanel?reviewPanel.marks(curDiffDn()):[]; if(!ms.length) return;
-  const bot=LRULER-MKRH-TPRH;   // 数字の帯の下端（数字は上の方に描いてある）
+  if(!ms||!ms.length) return;
+  // 数字の帯の下端（数字は上の方に描いてある）。REPLAY の点の印がある時（up）は上の段へ少し小さく（下の段を REPLAY の印に空ける＝重なっても両方読める）
+  const bot=LRULER-MKRH-TPRH-(up?5:0), hw=up?3.5:4, th=up?7:8, tb=up?1.5:1, hy=up?8:10, hh=up?6.5:10;   // hy・hh＝当たり判定の上端（bot から）と高さ（up の時は下の段の REPLAY の印と重ならない）
   ndg.save(); ndg.beginPath(); ndg.rect(LGUT,0,ndW-LGUT,ndH); ndg.clip();
   const curM=[];
   for(const m of ms){ const col=RV_SEV_COL[m.sev||'']||RV_SEV_COL[''];
     ndg.globalAlpha=m.done?0.35:1; ndg.fillStyle=col;
     for(const s of m.spots){ const xa=bx(s.a);
       if(s.b!=null){ const xb=Math.max(bx(s.b),xa+3); if(xb<LGUT-4||xa>ndW+4) continue;
-        ndg.beginPath(); ndg.roundRect(xa,bot-6,xb-xa,4,2); ndg.fill();
-        ndg.beginPath(); ndg.moveTo(xa,bot-9); ndg.lineTo(xa,bot-1); ndg.lineWidth=1.5; ndg.strokeStyle=col; ndg.stroke();
-        _rvRects.push({id:m.id,x:xa-3,y:bot-10,w:xb-xa+6,h:10}); }
+        ndg.beginPath(); if(up) ndg.roundRect(xa,bot-5.5,xb-xa,3.5,1.75); else ndg.roundRect(xa,bot-6,xb-xa,4,2); ndg.fill();
+        ndg.beginPath(); ndg.moveTo(xa,bot-(up?7.5:9)); ndg.lineTo(xa,bot-tb); ndg.lineWidth=1.5; ndg.strokeStyle=col; ndg.stroke();
+        _rvRects.push({id:m.id,x:xa-3,y:bot-hy,w:xb-xa+6,h:hh}); }
       else { if(xa<LGUT-5||xa>ndW+5) continue;
-        ndg.beginPath(); ndg.moveTo(xa-4,bot-8); ndg.lineTo(xa+4,bot-8); ndg.lineTo(xa,bot-1); ndg.closePath(); ndg.fill();
-        _rvRects.push({id:m.id,x:xa-5,y:bot-10,w:10,h:10}); } }
+        ndg.beginPath(); ndg.moveTo(xa-hw,bot-th); ndg.lineTo(xa+hw,bot-th); ndg.lineTo(xa,bot-tb); ndg.closePath(); ndg.fill();
+        _rvRects.push({id:m.id,x:xa-5,y:bot-hy,w:10,h:hh}); } }
     if(m.cur) curM.push(m); }
   ndg.globalAlpha=1;
   for(const m of curM){ const col=RV_SEV_COL[m.sev||'']||RV_SEV_COL[''];   // 選んでいる指摘: レーンの上にも位置を出す（範囲は薄い帯）
@@ -8137,6 +8220,7 @@ async function exportMap(forceEgg=false){
         const w=await fh.createWritable(); await w.write(text); await w.close(); }
       const listed=['Info.dat',...diffFiles.map(d=>d.name),coverName,eggWritten&&'song.egg'].filter(Boolean).join(' / ');
       showOk(tf('msg.exportedFolder','書き出しました: 「{folder}」に {list}{warn}',{folder:destLabel,list:listed,warn:eggWarn+lostNote}));
+      replayKeepAfterExport(dest,eggWritten);   // 裏で書き出しの控え（REPLAY で遊んだ時の譜面のまま再生するため・失敗しても書き出しの結果は変えない）
     }catch(err){ showErr(tf('msg.exportFail','書き出し失敗: {err}',{err})); }
   } else {   // フォルダ未選択: 従来どおりダウンロード（Info.dat＋難易度のみ・song.egg等は不可）
     for(const [name,text] of files2){ const a=document.createElement('a');
@@ -8144,6 +8228,172 @@ async function exportMap(forceEgg=false){
     stat(t('m:ダウンロードとして書き出しました（出力フォルダ未選択のため）','ダウンロードとして書き出しました（出力フォルダ未選択のため）')+lostNote);
   }
 }
+// ---- REPLAY の窓（js/replay/replay-pane.js）と書き出しの控え（js/replay/replay-keep.js）の橋渡し（2026-11-22） ----
+// 控え: 書き出した Info.dat・難易度の .dat・カバーと song.egg を、書き出し先のフォルダから読み直してサーバーへ（遊んだ版の譜面で再生するため）。
+// 裏で行い、失敗しても書き出しの結果は変えない（console に残すだけ）。REPLAY を出した時は、書き出し先がつながっていて
+// 今の書き出し先をこの起動でまだ控えていなければ1回（控えを始める前に書き出した譜面も、遊んだ版と同じなら再生できる）
+const _rpKept=new WeakMap();   // 書き出し先のハンドル → この起動で控えた出力フォルダ名
+function rpMarkKept(h,name){ if(!h) return; let s=_rpKept.get(h); if(!s){ s=new Set(); _rpKept.set(h,s); } s.add(name); }
+function rpOutFolder(){ return ((graphIO&&graphIO.out&&graphIO.out.folderName)||'').trim(); }
+function replayKeepAfterExport(dest,eggWritten){
+  const h=outDirHandle, name=rpOutFolder();
+  replayKeepDir(dest,{egg:eggWritten?'always':'none'})   // 書いた直後＝song.egg も送る（同じ hash で音だけ違う書き出しは後の方が勝つ）。書けなかった時は古い egg を送らない
+    .then(r=>{ if(r&&r.ok) rpMarkKept(h,name); else if(r&&r.error!=='no-api') console.warn('リプレイの控え（書き出しの後）:',r&&r.error); })
+    .catch(e=>console.warn('リプレイの控え（書き出しの後）:',e));
+}
+async function replayKeepNow(){
+  const h=outDirHandle, name=rpOutFolder();
+  if(!h||!name) return null;
+  const s=_rpKept.get(h); if(s&&s.has(name)) return null;
+  rpMarkKept(h,name);   // この起動で1回（失敗しても繰り返さない）
+  let dest; try{ dest=await h.getDirectoryHandle(name); }catch(_){ return null; }   // まだ書き出していない＝控える物が無い
+  const r=await replayKeepDir(dest,{egg:'need'});
+  if(!r.ok&&r.error!=='no-api'&&r.error!=='no-info') console.warn('リプレイの控え:',r.error);
+  return r;
+}
+/** 今の曲（書き出す Info.dat の曲名・マッパー）＝REPLAY の一覧の「この曲」 */
+function replaySong(){ try{ applyInfoChain(); }catch(_){} const b=infoJson||infoBase||{};
+  return {name:String(b._songName||'').trim(),mapper:String(b._levelAuthorName||'').trim()}; }
+/** リプレイを開く時に NLM の難易度をそのリプレイの難易度へ（Standard の時だけ）→ {kind:'same'|'switched'|'mode'|'none'} */
+function rpMatchDiff(diff,mode){
+  if(mode&&mode!=='Standard') return {kind:'mode'};
+  if(!OUT_DIFFS.includes(diff)||!diffOptOf(diff)) return {kind:'none'};
+  if(diffIsCurrent(diff)) return {kind:'same'};
+  switchDiffByIndex(OUT_DIFFS.indexOf(diff));
+  stat(tf('rp.diffSwitched','リプレイに合わせて難易度を {diff} にしました',{diff:dispDiff(diff)}));
+  return {kind:'switched'};
+}
+// ---- REPLAY の「点を重ねる」（2026-11-22・計算は js/replay/replay-marks.js・切り替えと凡例は replay-pane.js） ----
+// リプレイを開いている間だけ（replay-pane.js の syncMarks → rpMarksSet。一覧へ戻した・別の画面へ・新規・開くで消える）:
+// NLE の拍番号の帯にミス・バッド・ボム・壁の印（drawReplayMarks・押すとその位置へ＝cur を動かすだけ＝同期中ならリプレイも付いてくる）、
+// 下の 3D の合ったノーツ・ボム・チェーンの頭に点の段の色の輪（tick の物の並び・rpRingPool）。今の難易度とリプレイの難易度が違う・Standard 以外は出さない。
+// 出来事の秒→拍は timeToBeatTM（BPM・テンポパートを変えたら作り直す）。合わせ（matchObjects）は難易度・物の数が変わった時と 0.4 秒ごと
+// （編集で動かしたノーツに付いていく）。描画は合わせた結果を引くだけ・NLE の印は見えている範囲だけ（物ごと・フレームごとに全部の出来事をなめない）
+var rpMk=null;   // {ev, diff, mode, id, prep, tsig, match, mkey, mAt}。var＝作る前に drawLayers・tick から参照されても TDZ で落ちない
+function rpMarksSet(m){
+  if(!m||!m.events){ rpMk=null; return; }
+  if(rpMk&&rpMk.id===m.id&&rpMk.ev===m.events){ rpMk.diff=m.diff; rpMk.mode=m.mode||'Standard'; return; }
+  rpMk={ev:m.events,diff:m.diff,mode:m.mode||'Standard',id:m.id,prep:null,tsig:'',match:null,mkey:'',mAt:0};
+}
+/** 出すか（リプレイを開いていて、今の難易度がリプレイの難易度＝Standard の時だけ） */
+function rpMarksOn(){ return !!rpMk&&rpMk.mode==='Standard'&&curDiffDn()===rpMk.diff; }
+function rpMarksPrep(){ const ts=BPM+'|'+tempoParts.map(p=>p.beat+':'+p.bpm).join(',');
+  if(!rpMk.prep||rpMk.tsig!==ts){ rpMk.prep=prepEvents(rpMk.ev,s=>timeToBeatTM(s)); rpMk.tsig=ts; rpMk.match=null; }
+  return rpMk.prep; }
+function rpMarksMatch(){ const p=rpMarksPrep(), now=performance.now();
+  const key=currentDiffName+'|'+notes.length+'|'+bombs.length+'|'+chains.length;
+  if(!rpMk.match||rpMk.mkey!==key||now-rpMk.mAt>400){ rpMk.match=matchObjects(p,{notes,bombs,chains}); rpMk.mkey=key; rpMk.mAt=now; }
+  return rpMk.match; }
+/** REPLAY の窓の凡例の行に出す物（replay-pane.js が 0.3 秒ごとに読む） */
+function rpMarksInfo(){
+  if(!rpMk) return null;
+  if(rpMk.mode!=='Standard') return {reason:'mode'};
+  const cd=curDiffDn();
+  if(cd!==rpMk.diff) return {reason:'diff',cur:cd?dispDiff(cd):'-',diff:dispDiff(rpMk.diff)};
+  const p=rpMarksPrep(), M=rpMarksMatch();
+  if(!p.counts){ p.counts=Object.fromEntries([...RP_TIERS,'wall'].map(k=>[k,0])); for(const e of p.n) p.counts[e.tier]++; p.counts.wall=p.walls; }   // 段ごとの数（全部の出来事・作り直すまで同じ）
+  return {reason:null,counts:{...p.counts},unNotes:M.unNotes,unBombs:M.unBombs,events:p.n.length+p.walls};
+}
+const fmtRpT=s=>{ s=Math.max(0,s||0); const m=Math.floor(s/60), r=s-m*60; return m+':'+r.toFixed(2).padStart(5,'0'); };
+const RP_KIND_JA={miss:'ミス（見逃し）',bad:'バッド（悪い切り方）',bomb:'ボムに当たった',wall:'壁に入った'};
+const rpKindText=k=>t('rp.mk.k.'+k,RP_KIND_JA[k]||k);
+/** NLE の拍番号の帯の印（数字の下・審査の指摘の ▼ と同じ帯）。形: ミス＝✕・バッド＝◆・ボム＝●・壁＝▬。今の譜面に合うノーツの無い出来事は薄く。
+ * 同じ位置（1px 以内）に違う種類がある時は横に並べる（同じ種類は重ねる＝数はツールチップ）。
+ * 審査の指摘の印がある時は2段（上＝▼・下＝この印）にして、重なっても両方読めるようにする（drawReviewMarks の up と compact） */
+var _rpRects=[];   // 印の当たり判定（最後の描画の時点・キャンバスの px）。var＝作る前に drawLayers から参照されても TDZ で落ちない
+function drawReplayGlyph(kind,x,cy,r){ const col=RP_COL[kind]||'#ffffff';
+  if(kind==='miss'){ ndg.lineCap='round';   // ✕（下に暗い縁＝帯の数字や ▼ の上でも読める）
+    for(const lw of [3.4,1.7]){ ndg.lineWidth=lw; ndg.strokeStyle=lw>2?'#101014':col; ndg.beginPath();
+      ndg.moveTo(x-r,cy-r); ndg.lineTo(x+r,cy+r); ndg.moveTo(x+r,cy-r); ndg.lineTo(x-r,cy+r); ndg.stroke(); }
+    ndg.lineCap='butt'; }
+  else if(kind==='bad'){ ndg.beginPath(); ndg.moveTo(x,cy-r-0.6); ndg.lineTo(x+r+0.6,cy); ndg.lineTo(x,cy+r+0.6); ndg.lineTo(x-r-0.6,cy); ndg.closePath();
+    ndg.fillStyle=col; ndg.fill(); ndg.lineWidth=1; ndg.strokeStyle='#101014'; ndg.stroke(); }   // ◆
+  else if(kind==='bomb'){ ndg.beginPath(); ndg.arc(x,cy,r,0,Math.PI*2); ndg.fillStyle=col; ndg.fill(); ndg.lineWidth=1; ndg.strokeStyle='#101014'; ndg.stroke(); }   // ●
+  else { ndg.fillStyle='#101014'; ndg.fillRect(x-r-0.5,cy-r*0.55-0.5,r*2+1,r*1.1+1); ndg.fillStyle=col; ndg.fillRect(x-r,cy-r*0.55,r*2,r*1.1); } }   // ▬
+function drawReplayMarks(bx,W,p,compact){
+  _rpRects.length=0;
+  if(!p||!p.m.length) return;
+  const bot=LRULER-MKRH-TPRH, cy=compact?bot-3.2:bot-5, r=compact?2.7:3.4, step=r*2+2;
+  const used=rpMarksMatch().used, KO=['miss','bad','bomb','wall'];
+  const [i0,i1]=marksRange(p,W.b0-0.5,W.b0+W.span+0.5);
+  ndg.save(); ndg.beginPath(); ndg.rect(LGUT,0,ndW-LGUT,bot); ndg.clip();
+  for(let i=i0;i<i1;){ const x=bx(p.m[i].beat), g=new Map();   // 同じ位置の印をまとめる（種類 → 出来事）
+    let j=i; for(;j<i1&&bx(p.m[j].beat)-x<1;j++){ const mk=p.m[j]; if(!g.has(mk.kind)) g.set(mk.kind,[]);
+      g.get(mk.kind).push({k:j,kind:mk.kind,beat:mk.beat,t:mk.t,dim:mk.ni>=0&&!used[mk.ni]}); }
+    i=j;
+    if(x<LGUT-12||x>ndW+12) continue;
+    const kinds=KO.filter(k=>g.has(k));
+    kinds.forEach((k,n)=>{ const evs=g.get(k), gx=x+(n-(kinds.length-1)/2)*step, dim=evs.every(e=>e.dim);
+      ndg.globalAlpha=dim?0.42:1; drawReplayGlyph(k,gx,cy,r);
+      _rpRects.push({kind:k,beat:evs[0].beat,t:evs[0].t,dim,n:evs.length,evs,x:gx-r-1.5,y:cy-r-(compact?0.6:1.5),w:r*2+3,h:r*2+(compact?1.2:3)}); }); }   // 2段の時は上の段（▼）の当たり判定と重ならない
+  ndg.globalAlpha=1; ndg.restore();
+}
+/** マウスの下の印（重なっていれば全部・近い順）。無ければ null */
+function replayMarksAt(sx,sy){ const hits=_rpRects.filter(q=>sx>=q.x&&sx<=q.x+q.w&&sy>=q.y&&sy<=q.y+q.h);
+  if(!hits.length) return null;
+  hits.sort((a,b)=>Math.abs(a.x+a.w/2-sx)-Math.abs(b.x+b.w/2-sx)); return hits; }
+/** 印のツールチップ: 出来事ごとに時刻（曲の秒）・拍・種類（合わない物はそう書く）。6 件まで */
+function rpMarksTip(hits){ const lines=[], evs=[], seen=new Set();
+  for(const q of hits) for(const e of q.evs) if(!seen.has(e.k)){ seen.add(e.k); evs.push(e); }
+  evs.sort((a,b)=>a.beat-b.beat);
+  for(const e of evs.slice(0,6)) lines.push(tf('rp.mk.tipLine','{time}（{beat} 拍）{kind}',{time:fmtRpT(e.t),beat:Math.round(e.beat*1000)/1000,kind:rpKindText(e.kind)})
+    +(e.dim?t('rp.mk.tipNo','（今の譜面に合うノーツがありません）'):''));
+  if(evs.length>6) lines.push(tf('rp.mk.tipMore','ほか {n} 件',{n:evs.length-6}));
+  lines.push(t('rp.mk.tipClick','クリックでこの位置へ'));
+  return lines.join('\n'); }
+/** 印を押した＝その位置へ（同期中は cur を動かせば rpFollow がリプレイへ送る）。3D はヘッドへ寄せる（輪を見せる） */
+function rpMarkSeek(b){ if(playing) pause(); cur=Math.max(0,b); offset=beatToTimeTM(cur); curAnim=null; vwB=null; try{ camToHead(); }catch(_){} }
+/** 3D の輪（点の段の色・合った物ごと）。切った物は細い輪（幅 0.03・外の半径は前と同じ 0.40＝2026-11-22 に半分の細さへ）、ミス・バッド・ボムは太い輪。
+ * ミスはさらにノーツに大きな ✕（赤・黒い縁＝赤いノーツの上でも形で分かる。ノーツの表と裏の両方の面の前に置く）。材質は変えない・物の当たり判定は無し（クリックは下の物へ） */
+var RP_RING_MAX=1500, rpRingPool=[], rpCrossPool=[], _rpRingGeo=null, _rpRingMat=null, _rpCross=null;   // var＝作る前に tick の物の並びから参照されても TDZ で落ちない
+// 115 の輪だけ虹色（2026-11-22 利用者「BL のリプレイは 115 を虹色にするので」・BL の Highlight 115s はノーツの箱を塗るが、NLM は輪だけ＝箱は変えない）。
+// 色の境目をはっきり切った6色の帯（同日の利用者「グラデーションは分かりづらい・パッと切ったデジタルな虹に」）: 色ごとに別の輪の欠片を作って合わせる
+// ＝境目の頂点を分け合わない＝にじまない。輪の上から時計回りに 赤・橙・黄・緑・青・紫。材質は頂点の色を使う白（t115 の色 #ffffff は凡例・診断用）
+const RP_RAINBOW=['#ff2a2a','#ff9a1f','#ffe81f','#33e04a','#2aa8ff','#a64dff'];
+function rpRainbowRing(inner,outer){ const n=RP_RAINBOW.length, seg=2*Math.PI/n, col=new THREE.Color();
+  const parts=RP_RAINBOW.map((hex,i)=>{ const g=new THREE.RingGeometry(inner,outer,12,1,Math.PI/2-(i+1)*seg,seg);
+    col.set(hex); const k=g.attributes.position.count, c=new Float32Array(k*3);
+    for(let j=0;j<k;j++){ c[j*3]=col.r; c[j*3+1]=col.g; c[j*3+2]=col.b; }
+    g.setAttribute('color',new THREE.BufferAttribute(c,3)); return g; });
+  const m=mergeGeometries(parts); m.parameters={innerRadius:inner,outerRadius:outer,bands:n}; return m; }   // parameters＝診断（太さ・外の半径）用
+function rpRingMat(tier){ if(!_rpRingMat){ _rpRingMat={};
+    for(const k of RP_TIERS) _rpRingMat[k]=new THREE.MeshBasicMaterial({color:new THREE.Color(RP_COL[k]),vertexColors:k==='t115',transparent:true,opacity:0.95,side:THREE.DoubleSide,depthWrite:false}); }
+  return _rpRingMat[tier]||_rpRingMat.t115; }
+function rpRingAt(i){ if(!_rpRingGeo) _rpRingGeo={thin:new THREE.RingGeometry(0.37,0.40,40),rainbow:rpRainbowRing(0.37,0.40),thick:new THREE.RingGeometry(0.33,0.46,40)};
+  // 描く順番 8＝3D のスペクトログラムの帯（specBand・5）とノーツの箱（6・7）より後。輪は半透明で奥行きを書かないので、前だと後から描く半透明の帯に
+  // 上塗りされて、帯の重なる所だけ輪が暗くなった（2026-11-22 利用者の報告）。不透明の ✕ は奥行きで守られる
+  while(rpRingPool.length<=i){ const g=new THREE.Mesh(_rpRingGeo.thin,rpRingMat('t115')); g.raycast=()=>{}; g.visible=false; g.renderOrder=8;
+    scene.add(g); tagHelper(g); rpRingPool.push(g); }
+  return rpRingPool[i]; }
+/** ミスの ✕（2本の帯を ±45° に重ねた形）。黒い縁を少し大きく後ろに、赤を前に。ノーツの表（-z）と裏（+z）の両方 */
+function rpCrossAt(i){
+  if(!_rpCross){ const bar=(len,w)=>mergeGeometries([1,-1].map(a=>new THREE.PlaneGeometry(len,w).rotateZ(a*Math.PI/4)));
+    _rpCross={geo:bar(0.80,0.085),edge:bar(0.88,0.16),
+      mat:new THREE.MeshBasicMaterial({color:new THREE.Color(RP_COL.miss),side:THREE.DoubleSide}),
+      edgeMat:new THREE.MeshBasicMaterial({color:0x08080a,side:THREE.DoubleSide})}; }
+  while(rpCrossPool.length<=i){ const g=new THREE.Group();
+    for(const s of [-1,1]){ const e=new THREE.Mesh(_rpCross.edge,_rpCross.edgeMat), x=new THREE.Mesh(_rpCross.geo,_rpCross.mat);
+      e.position.z=s*0.072; x.position.z=s*0.082; e.renderOrder=4; x.renderOrder=5; g.add(e,x); }   // ノーツの面（±0.059）の少し前
+    g.traverse(c=>{ c.raycast=()=>{}; }); g.visible=false; scene.add(g); tagHelper(g); rpCrossPool.push(g); }
+  return rpCrossPool[i]; }
+function rpRingPlace(ri,o,m,r){ const g=rpRingAt(ri), bad=r.tier==='bad'||r.tier==='miss'||r.tier==='bomb';
+  g.visible=true; g.material=rpRingMat(r.tier); g.geometry=bad?_rpRingGeo.thick:r.tier==='t115'?_rpRingGeo.rainbow:_rpRingGeo.thin;
+  if(o.kind==='chain'){ const [px,py]=cellPos(o.x,o.y); g.position.set(px,py,m.group.position.z); } else g.position.copy(m.group.position);
+  g.userData.rp={kind:o.kind,beat:o.kind==='chain'?o.b:o.beat,x:o.x,y:o.y,c:o.c??null,tier:r.tier,col:RP_COL[r.tier]}; }
+function rpCrossPlace(xi,ring){ const g=rpCrossAt(xi); g.visible=true; g.position.copy(ring.position); g.userData.rp={...ring.userData.rp}; }
+/** 3D のマウスの下の物の点（ツールチップ。updateHoverBox から） */
+var _rpTip3='';   // 今出している 3D のツールチップ（var＝作る前に updateHoverBox から参照されても落ちない）
+function rpTip3D(o){ let s='';
+  if(o&&rpMarksOn()){ const r=rpMarksMatch().map.get(o);
+    if(r){ const e=r.ev, what=e.type!=='good'?rpKindText(e.type)   // 頭の出来事（チェーンの色は後ろも含めた悪い方＝下に書き足す）
+        :tf('rp.mk.score','{score} 点（満点 {max}）',{score:e.score??'-',max:e.max??'-'});
+      s=tf('rp.mk.tip3','リプレイ {time}: {what}',{time:fmtRpT(e.t),what})
+        +(r.links?tf('rp.mk.tip3Chain','（チェーンの後ろ {n} 個も含めた悪い方の色）',{n:r.links}):''); } }
+  if(s!==_rpTip3){ _rpTip3=s; if(s) cv.title=s; else cv.removeAttribute('title'); } }
+var replayPane=null;   // var＝作る前に setPvMode・resetAllState・loadLang・_tick から参照されても TDZ で落ちない（作る前は null）
+replayPane=installReplayPane({t,tf,song:replaySong,nlmTime:()=>beatToTimeTM(cur),setLink:rpSetLink,matchDiff:rpMatchDiff,
+  curDiff:()=>{ const d=curDiffDn(); return d?dispDiff(d):''; }, diffColor:diffColOf, keepNow:replayKeepNow, onKey:rpKeyFromViewer,
+  setMarks:rpMarksSet, marksInfo:rpMarksInfo});
 document.getElementById('saveBtn').addEventListener('click',()=>saveProject(false));
 document.getElementById('saveAsBtn').addEventListener('click',()=>saveProject(true));
 document.getElementById('openProjBtn').addEventListener('click',openProjectFile);
@@ -9054,8 +9304,8 @@ function chipBB(kind){
 // マウス直下のノーツ/ライトを黄色枠で囲う。ドラッグ中や3D外は出さない（枠がチラついて邪魔になるため）
 function updateHoverBox(){
   hoverBox.visible=false;
-  if(hoverPane!=='main'||box||orbitDrag||panDrag||handleDrag||wallDrag||lightMove||pasteFollow) return;
-  if(lightMode){
+  if(hoverPane!=='main'||box||orbitDrag||panDrag||handleDrag||wallDrag||lightMove||pasteFollow){ if(_rpTip3) rpTip3D(null); return; }
+  if(lightMode){ if(_rpTip3) rpTip3D(null);
     const ev=lightUnder(null);   // 直近のマウス位置(pointer)でチップを拾う
     if(!ev) return;
     const li=laneIdxByType[ev.et]; if(li===undefined) return;
@@ -9068,6 +9318,7 @@ function updateHoverBox(){
     hoverBox.visible=true; return;
   }
   const o=objUnder(null);
+  if(rpMk||_rpTip3) rpTip3D(o);   // REPLAY の点を重ねている間: マウスの下のノーツの点（時刻・点・ミス等）をツールチップに
   if(!o) return;
   const m=meshes.find(x=>x.obj===o); if(!m||!m.group.visible) return;
   fitBoxTo(hoverBox,o,m);   // 選択枠と同じ密着計算
@@ -10047,7 +10298,7 @@ addEventListener('keydown', e=>{
     if(e.key==='Tab'){ e.preventDefault(); if(!e.repeat) setNodeColMode(nodeColMode==='nle'?'info':'nle'); return; }   // Tab=NLE⇄INFO切替（他ペインと同じ流儀）
     return;
   }
-  if(e.key==='Tab'&&hoverPane==='pv'){ e.preventDefault(); setPvMode(pvMode==='preview'?'media':'preview'); return; }   // Tab=MEDIA⇄PREVIEW（pvペイン。ペイン切替はTab固定）
+  if(e.key==='Tab'&&hoverPane==='pv'){ e.preventDefault(); setPvMode(pvNext(pvMode)); return; }   // Tab=MEDIA→PREVIEW→REPLAY→MEDIA（pvペイン。ペイン切替はTab固定）
   if(hoverPane!=='node'&&hoverPane!=='pv'&&hit(e,'lightMode')){ e.preventDefault(); setLightMode(!lightMode); return; }   // NOTES⇄LIGHTING切替（既定Tab・再割当対応・Phase2）
   { const _sa=hit(e,'saveAs'), _sv=hit(e,'save'); if(_sa||_sv){ e.preventDefault(); saveProject(_sa); return; } }   // 保存 / 名前を付けて保存
   if(hit(e,'open')){ e.preventDefault(); openProjectFile(); return; }
@@ -10873,7 +11124,8 @@ function tick(){   // 1フレームの例外で描画ループごと死なない
     requestAnimationFrame(tick); }   // 本体末尾のRAF登録に到達していないので自前で継続
 }
 function _tick(){
-  if(playing){ cur=timeToBeatTM(aTime());
+  if(rpLink) rpFollow();   // REPLAY とつないでいる間: リプレイの時刻へ（NLM の曲の音・通過音・メトロノーム・曲末の繰り返しは無し）
+  else if(playing){ cur=timeToBeatTM(aTime());
     if(cur>prevPlayBeat){ let hit=false;
       for(const n of notes){ if(n.beat>prevPlayBeat&&n.beat<=cur&&layerVisible('n',n._tr||0)){ hit=true; break; } }   // ミュート/ソロ対象外のレーンは通過音を鳴らさない
       if(!hit) for(const c4 of chains){ if(c4.b>prevPlayBeat&&c4.b<=cur&&layerVisible('n',c4._tr||0)){ hit=true; break; } }   // チェーンは頭ノーツ通過で鳴る（ヘルバ様指摘: 無音だった）
@@ -10892,8 +11144,8 @@ function _tick(){
       cur=curAnim.from+(curAnim.to-curAnim.from)*(1-Math.pow(1-p,3));   // ease-out
       offset=beatToTimeTM(cur); curAnim.last=cur; if(p>=1) curAnim=null; } }
   // 音声出力レイテンシ補正 + 手動AVオフセット: 再生中は「耳に届いている時刻」に映像を合わせる
-  const latB=playing?(((actx.outputLatency||actx.baseLatency||0)+avOffset/1000)*bpmAtBeat(cur)/60):0;   // 微小量の近似でOK（viewBeatと同じ理由）
-  const curV=playing?Math.max(playStartB,cur-latB):cur;   // 補正は開始拍を下回らない（再生開始時に一瞬後退して見えるのを防止）
+  const latB=(playing&&!rpLink)?(((actx.outputLatency||actx.baseLatency||0)+avOffset/1000)*bpmAtBeat(cur)/60):0;   // 微小量の近似でOK（viewBeatと同じ理由）。REPLAY とつないでいる間は0
+  const curV=(playing&&!rpLink)?Math.max(playStartB,cur-latB):cur;   // 補正は開始拍を下回らない（再生開始時に一瞬後退して見えるのを防止）。REPLAY とつないでいる間はリプレイの側で前へ戻すこともある＝開始拍で止めない
   // 3Dビューの原則（2026-07-14改）: 配置モード=再生中はビューがヘッドに追走＝世界がスクロール（vwB=nullの定点機構）。編集モード=カメラと再生ヘッドは非連動＝ビューは固定しヘッドだけが動く（ヘルバ様指定）
   if(vwB!=null&&playing&&camMode!=='edit'){ if(vwPlayD==null) vwPlayD=cur-vwB;
     vwB=Math.max(0,curV-vwPlayD); }             // 編集モードはvwB固定＝ヘッド非追従（配置モードはvwB=nullで別機構により追従）
@@ -10943,6 +11195,7 @@ function _tick(){
   swingPendingFlush();   // 選択中に向き/色を変えたノーツが選択から外れたら判定
   if(swingWarnSet.size&&performance.now()-_swingRecheckAt>300) swingWarnRecheck();   // 赤枠のノーツを直したら消す（定期再判定）
   ensureSwingPool(swingWarnSet.size); let wi=0;
+  const rpMap=(!lightMode&&rpMarksOn())?rpMarksMatch().map:null; let ri=0, xi=0;   // REPLAY の点を重ねている間: 合った物の輪（点の段の色）・ミスの ✕
   for(const m of meshes){ const o=m.obj;
     let head, tail;
     if(o.kind==='note'||o.kind==='bomb'){ head=o.beat; tail=o.beat; m.group.position.z=(o.beat-viewB)*ZPB;
@@ -10982,8 +11235,11 @@ function _tick(){
       const wb=swingPool[wi++]; wb.visible=true;
       wb.position.copy(m.group.position);
       wb.rotation.z=(o.d>=4&&o.d<=7)?Math.PI/4:0;
-      wb.scale.set(1.5,1.5,NOTE_THIN+0.3); } }
+      wb.scale.set(1.5,1.5,NOTE_THIN+0.3); }
+    if(rpMap&&m.group.visible&&ri<RP_RING_MAX&&(o.kind==='note'||o.kind==='bomb'||o.kind==='chain')){ const r=rpMap.get(o); if(r){ rpRingPlace(ri,o,m,r); if(r.tier==='miss') rpCrossPlace(xi++,rpRingPool[ri]); ri++; } } }
   for(;wi<swingPool.length;wi++) swingPool[wi].visible=false;
+  for(let i=ri;i<rpRingPool.length;i++) rpRingPool[i].visible=false;
+  for(let i=xi;i<rpCrossPool.length;i++) rpCrossPool[i].visible=false;
   // 段階式壁の寸法矢印は、上のループで壁の group.z が (o.beat-viewB) へ更新された「後」に位置を取り直す。
   // pointermove時だけの更新では、viewB が動いたフレームで矢印だけ前の位置に取り残される（ヘルバ様報告「一瞬変な場所に←が出る」2026-07-18）
   if(wallStage) updateWallDimArrows();
@@ -11102,6 +11358,7 @@ function _tick(){
   drawPRoll(curV);
   if(nodeColMode!=='info'&&songAna) songAna.draw(curV);   // 曲の解析の帯（スペクトログラムの箱の上の段。結果がある時・解析中だけ出る）
   if(curTab==='bodyPv') pv4Frame();   // pv4エンジン（現行プレビュー）
+  else if(curTab==='bodyRp'&&replayPane) replayPane.frame();   // REPLAY（曲名・マッパーが変わったら一覧を読み直す。pv4 は描かない）
   document.getElementById('time').textContent=`${fmt(beatToTimeTM(cur))} / ${fmt(songDur)} ・ beat ${cur.toFixed(2)} ・ ♪ ${notes.length}${selection.size?` ・ ${tf('ui.selN','選択{n}',{n:selection.size})}`:''}`;
   // 診断HUD: FPS / フレーム時間 / 音声レイテンシ
   perfFrames++; const nowMs=performance.now();
@@ -11694,7 +11951,7 @@ applyVolumes();
 // UI文字サイズ（80〜150%、localStorage保存。Canvas描画以外のUIに適用）
 let uiScale=parseFloat(localStorage.getItem('bsnm_uiscale')||'1');
 function applyUiScale(){
-  ['#menubar','#maintb','.modeLabel','#modeKeys','#nodeKeys','#statChip','#infoPanel','#pvVis','#settingsBox','#tabFolder']
+  ['#menubar','#maintb','.modeLabel','#modeKeys','#nodeKeys','#statChip','#infoPanel','#pvVis','#settingsBox','#tabFolder','#bodyRp .rpZ']   // REPLAY はリプレイの窓（iframe）の外だけ
     .forEach(sel=>document.querySelectorAll(sel).forEach(el=>el.style.zoom=uiScale));   // #ctxmenu は除外（position:fixed＋zoomで右クリックメニューの位置がズレるため）
 }
 { const el=document.getElementById('uiSpd'), lv=document.getElementById('uiVal');

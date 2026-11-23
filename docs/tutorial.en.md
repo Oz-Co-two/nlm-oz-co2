@@ -6,7 +6,7 @@ This tutorial walks you step by step through loading a song, placing notes, expo
 
 > **Switching the UI to English**
 > NLM starts in Japanese. Click **環境設定** (Preferences — in the menu bar at the top left, between 審査 and ヘルプ),
-> choose **環境設定…** in the menu that opens, and set **言語 / Language** to **English** on the first tab. The screenshots in this tutorial show the English UI (v2.0.0-oz).
+> choose **環境設定…** in the menu that opens, and set **言語 / Language** to **English** on the first tab. The screenshots in this tutorial show the English UI (v2.2.0-oz).
 
 This tutorial covers only the basic flow. For the details of each panel, see the original
 [reference manual](https://helba.flashhub.net/nlm/manual/) (Japanese).
@@ -38,7 +38,7 @@ Faster workflows and the checks before publishing are covered in the [advanced t
 
 | No. | Name | What it is for |
 |---|---|---|
-| ① | **MEDIA / PREVIEW** | MEDIA lists songs and assets. Switch to PREVIEW for a preview that looks close to Beat Saber |
+| ① | **MEDIA / PREVIEW / REPLAY** | MEDIA lists songs and assets. Switch to PREVIEW for a preview that looks close to Beat Saber. REPLAY shows the replays of your plays in Beat Saber |
 | ② | **NLE / INFO** | NLE is a timeline where you arrange the map and the song along time. Switch to INFO to set the song name, the export folder and so on |
 | ③ | **NOTES / LIGHTING** | The 3D view. This is where you place notes and lights |
 | ④ | Toolbar | Choose what to place (note, bomb, wall), its color and direction |
@@ -46,6 +46,9 @@ Faster workflows and the checks before publishing are covered in the [advanced t
 
 The "TAB" next to the headings of ① to ③ means: **put the mouse over that area and press Tab to switch the view**
 (for example, Tab over ③ switches NOTES ⇄ LIGHTING). You can also click the "TAB" and the name next to it to switch.
+
+The heading of ① shows three names, **MEDIA, PREVIEW and REPLAY**, and the current one is shown large in a purple frame.
+Each Tab over ① switches MEDIA → PREVIEW → REPLAY → MEDIA. Click one of the other two names to switch to that view directly.
 
 The menu bar at the very top is arranged in the order you work.
 
@@ -303,7 +306,7 @@ A map can be played without lights. You can make the notes first and add lights 
 
 ## 7. Check it in the preview
 
-Put the mouse over the top-left area and press **Tab** to switch to **PREVIEW** (①).
+Put the mouse over the top-left area and press **Tab** to switch to **PREVIEW** (①; you can also click PREVIEW in the heading).
 You can check notes and lights in a view close to Beat Saber.
 
 ![Switched to PREVIEW](images/tutorial-en/12-preview.png)
@@ -311,6 +314,10 @@ You can check notes and lights in a view close to Beat Saber.
 Press **Space** (or the play button ②) to play / stop.
 The buttons at the top right of PREVIEW toggle the notes, lights and stage (the rightmost one brightens the stage so you can see its motion more easily).
 Choose the stage (environment) in the "Default" field at the top right of the NLE.
+
+Press Tab once more over the top-left area to switch to **REPLAY**. When you play your exported map in Beat Saber, the BeatLeader mod saves a record of the play (a replay).
+REPLAY plays that replay back together with NLM's playhead. You can also overlay where you missed and which notes scored low on the map in the NLE and the 3D view
+(see chapter 10 of the advanced tutorial, [Watching your replays (REPLAY)](tutorial-advanced.en.md#10-watching-your-replays-replay)).
 
 ---
 
@@ -382,7 +389,7 @@ If you moved the files, select them again with "Reconnect output folder / cover 
 ## 10. Where to go next
 
 Once you are used to the basics, try these features too. They are explained in the [advanced tutorial](tutorial-advanced.en.md)
-(faster workflows, making the most of the NLE, the MEDIA library, building several difficulties, analyzing the song, checks before publishing, measuring ★, responding to review notes, and more).
+(faster workflows, making the most of the NLE, the MEDIA library, building several difficulties, analyzing the song, checks before publishing, measuring ★, watching your replays, responding to review notes, and more).
 
 - **Clip editing in the NLE**: move, copy, split (C key) and join (Ctrl + G) clips to build repeated choruses and so on efficiently
 - **Linked clips**: link clips that should have the same content, such as repeated choruses, and editing the parent clip gives the other linked clips (children) the same content (children cannot be edited directly).
@@ -401,4 +408,7 @@ Once you are used to the basics, try these features too. They are explained in t
   Click a band to jump there, or place markers at the start of each part (see chapter 6 of the advanced tutorial, [Analyzing the song (tempo and structure)](tutorial-advanced.en.md#6-analyzing-the-song-tempo-and-structure)).
   Press **🧩 Create clips** at the left of the band to create empty NLE clips that follow the bands (repeats of the same part are linked automatically; see [Creating clips from the analysis](tutorial-advanced.en.md#creating-clips-from-the-analysis) in the advanced tutorial)
 - **Markers**: place a marker with Ctrl + E and jump between markers with Ctrl + [ / ]
-- **Review notes**: load ranking review notes in the "beat - text" form (.txt files or Discord messages) with **Review → Load review notes (.txt)…** in the menu, then click a row in the list to jump to that spot. Mark fixed notes as done, add replies, and export them in the same form (see chapter 10 of the advanced tutorial, [Responding to review notes](tutorial-advanced.en.md#10-responding-to-review-notes))
+- **REPLAY (watching your replays)**: after you play your exported map in Beat Saber, **REPLAY** in the top-left area lists the replays of that song (saved by the BeatLeader mod).
+  Play one back in the BL replay app, moving together with NLM's playhead. Turn on **Score** in the heading to overlay misses, bad cuts, bombs and walls on the NLE's beat-number strip,
+  and the score of each note as a colored ring on the notes in the 3D view (see chapter 10 of the advanced tutorial, [Watching your replays (REPLAY)](tutorial-advanced.en.md#10-watching-your-replays-replay))
+- **Review notes**: load ranking review notes in the "beat - text" form (.txt files or Discord messages) with **Review → Load review notes (.txt)…** in the menu, then click a row in the list to jump to that spot. Mark fixed notes as done, add replies, and export them in the same form (see chapter 11 of the advanced tutorial, [Responding to review notes](tutorial-advanced.en.md#11-responding-to-review-notes))

@@ -28,3 +28,11 @@ _backup_before_update_*/
 
 # GitHub のリリースに添付する物（LGPL の部品のソースなど。リリースのページに置くので履歴には入れない）
 /release-assets/
+
+# REPLAY の窓の書き出しの控えとリプレイの一覧の控え（開発中に python serve.py で使うとリポジトリの直下にできる。replays.py）
+/replays/
+/config/replays*.json
+
+# REPLAY の窓の BL のリプレイアプリの写し（replay-viewer/blreplay/・tools/blreplay_fetch.py）は全部入れる（上の build/・*.mp3 に当たる物がある）
+!replay-viewer/blreplay/build/
+!replay-viewer/blreplay/**/*.mp3

@@ -4,8 +4,10 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- CSP（2026-09-28）: 読み込んだファイル由来の文字列にスクリプトを仕込まれても実行させない二重の守り。
      インラインの<script>・onclick等のHTML属性ハンドラは禁止。下のimportmapだけはハッシュで許可しているので、
-     importmapの中身を変えたら sha256 を計算し直すこと（1行のまま。CLAUDE.md参照） -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-gyM8IlLg3c96u8jtdTOgQbXLfuEy0YdYltcVSXhsDxA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+     importmapの中身を変えたら sha256 を計算し直すこと（1行のまま。CLAUDE.md参照）。
+     frame-src は REPLAY の窓（BL のリプレイアプリ）だけ: serve.py が本体と別のオリジン（http://localhost:<番号>）で出す＝本体の画面・合言葉に触れない。
+     [::1] は CSP に書けないので名前は localhost（2026-11-22・js/replay/replay-pane.js） -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-gyM8IlLg3c96u8jtdTOgQbXLfuEy0YdYltcVSXhsDxA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src http://localhost:* http://127.0.0.1:*">
 <title>Non-Linear Mapper</title>
 <link rel="icon" href="icons/app_icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="css/base.css">
@@ -21,6 +23,7 @@
 <link rel="stylesheet" href="css/analysis.css">
 <link rel="stylesheet" href="css/review.css">
 <link rel="stylesheet" href="css/help.css">
+<link rel="stylesheet" href="css/replay.css">
 </head>
 <body>
 <div id="bootCover"></div>
@@ -139,6 +142,24 @@
             <button id="saveAsBtn"></button><button id="openProjBtn"></button></div>
           <div class="row" style="display:none"><div class="t" data-i18n="ui.sectionList">セクション一覧</div>
             <div class="metaList" id="metaList"></div></div>
+        </div>
+        <!-- REPLAY（2026-11-22）: 遊んだリプレイを BL のリプレイアプリで見る。中身と同期は js/replay/replay-pane.js。
+             見出しの行（#rpHead）は REPLAY [TAB] MEDIA の帯の右から（#rpHeadGap の幅は帯の幅を測って入れる）。一覧 ⇄ 再生 -->
+        <div class="pvbody" id="bodyRp">
+          <div id="rpHead" class="rpZ">
+            <span id="rpHeadGap"></span>
+            <span id="rpListHead" class="rpGrp"><span id="rpCount"></span><button id="rpReloadList" class="rpBtn" data-i18n-t="rp.reloadListT" title="一覧を読み直す（遊んだ直後など）">↻</button></span>
+            <span id="rpPlayHead" class="rpGrp" hidden><button id="rpBack" class="rpBtn" data-i18n-t="rp.backT" title="この曲のリプレイの一覧へ戻る（リプレイは止めます）"><span data-i18n="rp.back">≡ 一覧</span></button><button id="rpSync" class="rpBtn rpSync" data-i18n-t="rp.syncT" title="同期: リプレイの再生・停止・時刻の棒に NLM の再生位置（NLE・3D）が付いてくる。NLM の ▶・Space・ルーラー・←→ でリプレイも動く（音はリプレイの音）。もう一度押すと切る"><span class="rpDot"></span><span data-i18n="rp.sync">同期</span></button><button id="rpMarks" class="rpBtn rpMkBtn" data-i18n-t="rp.marksT" title="点数を重ねる: NLE の拍番号の帯にミス・バッド・ボム・壁の印（押すとその位置へ）、下の 3D のノーツに点数の色の輪（BL のリプレイアプリと同じ色: 115・113+・110+・106+・100+・99以下。バッド・ミス・ボムは太い輪・ミスは ✕ も重ねる）。リプレイと同じ難易度の時だけ。もう一度押すと消す"><span class="rpDot"></span><span data-i18n="rp.marks">点数</span></button><button id="rpReopen" class="rpBtn" data-i18n-t="rp.reopenT" title="このリプレイを開き直す（読み込めない時など）">↻</button></span>
+          </div>
+          <div id="rpSum" class="rpZ" hidden></div>
+          <div id="rpNote" class="rpZ" hidden></div>
+          <div id="rpMk" class="rpZ" hidden></div>
+          <div id="rpListView" class="rpZ">
+            <div id="rpEmpty" hidden></div>
+            <div id="rpList"></div>
+            <div id="rpFoot"><div id="rpDirs"></div><div class="rpFootBtns"><button id="rpPick" class="rpBtn" data-i18n-t="rp.pickT" title="リプレイのフォルダ（BeatLeader の Replays）を選ぶ" hidden><span data-i18n="rp.pick">変更…</span></button><button id="rpAuto" class="rpBtn" data-i18n-t="rp.autoT" title="選んだ場所をやめて、Beat Saber の曲のフォルダ（MEDIA のライブラリ）と Steam の既定の場所から探す" hidden><span data-i18n="rp.auto">自動に戻す</span></button></div></div>
+          </div>
+          <div id="rpPlayView" hidden><div id="rpFrameBox"><div id="rpZoom" hidden></div></div></div>
         </div>
       </div>
       <div id="splitV" class="splitv"></div>

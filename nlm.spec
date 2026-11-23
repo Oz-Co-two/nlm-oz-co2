@@ -21,6 +21,8 @@ datas = [
     ('native_paths.py', '.'),    # パスの字面の判定。app.py・media_library.py が import する
     ('song_details.py', '.'),    # 全曲データ（jsDelivr）。serve.py が import する
     ('beatsaver_api.py', '.'),   # BeatSaver への1曲の問い合わせ。serve.py が import する
+    ('replays.py', '.'),         # REPLAY の窓（リプレイの一覧・書き出しの控え・viewer）。serve.py が import する
+    ('bsor.py', '.'),            # BeatLeader のリプレイ（.bsor）を読む。replays.py が import する
     ('song_analysis/*.py', 'song_analysis'),   # 曲の解析（テンポ・構成）。serve.py が import する（librosa 等は解析を始めた時）
     ('js', 'js'),
     ('css', 'css'),
@@ -29,12 +31,16 @@ datas = [
     ('guide', 'guide'),          # 画面の中の案内の画像（解析が終わった時の案内。tools/make_guide_shots.py が撮る）
     ('lang', 'lang'),
     ('preview-v4', 'preview-v4'),
+    # REPLAY の窓の中身（BL のリプレイアプリの写し blreplay/ と伝言の受け手 bridge.js）。replays.py の viewer が出す。
+    # 無いと組み立てが止まる（PyInstaller が「見つからない」で止める）＝REPLAY の窓の無い exe を作らない
+    ('replay-viewer', 'replay-viewer'),
     ('config/settings.default.json', 'config'),   # 初期値のみ同梱。個人設定 settings.json はバンドルしない（配布版は初期状態で始まる）
     ('asset', 'asset'),
 ]
 
 # pywebview の Windows(WebView2) バックエンドと pythonnet を確実に取り込む
 hiddenimports = ['serve', 'rating_plugin', 'automodder_plugin', 'app_update', 'media_library', 'map_hash', 'native_paths', 'song_details', 'beatsaver_api',
+                 'replays', 'bsor',
                  'song_analysis', 'song_analysis.service', 'song_analysis.tempo', 'song_analysis.structure']
 # 曲の解析が使う librosa・numpy・scipy・scikit-learn・numba・llvmlite・soundfile・soxr は、song_analysis から見つかり、
 # pyinstaller-hooks-contrib のフック（librosa は lazy_loader が読む .pyi も・numba・llvmlite・sklearn・soundfile）で取り込まれる。

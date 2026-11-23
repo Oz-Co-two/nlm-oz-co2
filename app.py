@@ -385,9 +385,10 @@ def _auto_allow_file_rw(win, origin):
     win.events.loaded += on_loaded
 
 
-def _make_api(access, data_root, close_state, webview, library=None):
+def _make_api(access, data_root, close_state, webview, library=None, replays=None):
     """JS（window.pywebview.api）へ渡す窓口を作る。main() の外に置いて、単体テストから本物の入口を呼べるようにしてある
-    （webview は main() で import したもの。テストでは偽物を渡す）。library は serve.LIBRARY（MEDIA ライブラリ）"""
+    （webview は main() で import したもの。テストでは偽物を渡す）。library は serve.LIBRARY（MEDIA ライブラリ）、
+    replays は serve.REPLAYS（REPLAY の窓のリプレイのフォルダ）"""
     class Api:
         def set_dirty(self, on):
             close_state['dirty'] = bool(on)
@@ -481,6 +482,23 @@ def _make_api(access, data_root, close_state, webview, library=None):
                 return library.set_playdata(paths[0])   # → プレイ記録の状態
             except Exception as e:
                 return {'error': getattr(e, 'code', str(e))}
+
+        # ---- REPLAY の窓のリプレイのフォルダ（2026-11-22・replays.py）----
+        # MEDIA のライブラリと同じ考え: ここ（ネイティブのダイアログ）で選ばれたフォルダだけが config/replays.json に記録される
+        # （JS から場所を渡す口は無い）。読むだけ。取り消し＝None。→ /__replay/status と同じ形
+        def replay_pick_folder(self):
+            if replays is None:
+                return None
+            _, dirs = replays.folders()
+            start = next((d for d in dirs if _path_kind(d) == 'local' and os.path.isdir(d)), '')
+            kw = {'directory': start} if start else {}
+            paths = webview.windows[0].create_file_dialog(webview.FileDialog.FOLDER, **kw)
+            if not paths:
+                return None
+            try:
+                return replays.choose_dir(paths[0])
+            except Exception as e:
+                return {'ok': False, 'error': getattr(e, 'code', str(e))}
 
         @staticmethod
         def _child(base, name):   # 名前は1階層分のみ許可（'..'や区切り文字で外へ出さない）
@@ -629,7 +647,7 @@ def main():
     close_state = {'dirty': False, 'force': False}
     access = _NativeAccess(os.path.join(data_root, 'config', 'native_out_dirs.json'))
 
-    api = _make_api(access, data_root, close_state, webview, serve.LIBRARY)
+    api = _make_api(access, data_root, close_state, webview, serve.LIBRARY, serve.REPLAYS)
 
     url = serve.access_url(port)   # 合言葉（#k=…）付き。serve.py の SESSION_TOKEN の説明
     config_dir = os.path.join(data_root, 'config')
@@ -673,7 +691,11 @@ def main():
         webview.start()   # WebView2 (Edge Chromium) を使用。既定でメインスレッドをブロック。
     finally:
         try:
-            httpd.shutdown()
+            httpd.shutdown()   # REPLAY の窓の viewer（別の番号のサーバー）も一緒に止まる（serve._MainServer）
+        except Exception:
+            pass
+        try:
+            serve.stop_viewers()   # 念のため（止め損ねた viewer が残らないように）
         except Exception:
             pass
 
